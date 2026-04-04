@@ -1,0 +1,202 @@
+[
+  {
+    "id": "P001",
+    "name": "Wireless Earbuds Pro",
+    "category": "Electronics",
+    "price": 3268.25,
+    "stock": 5,
+    "cost": 2231.62
+  },
+  {
+    "id": "P002",
+    "name": "USB-C Hub 7-in-1",
+    "category": "Electronics",
+    "price": 3758.44,
+    "stock": 33,
+    "cost": 2271.02
+  },
+  {
+    "id": "P003",
+    "name": "Mechanical Keyboard",
+    "category": "Electronics",
+    "price": 1270.41,
+    "stock": 96,
+    "cost": 735.37
+  },
+  {
+    "id": "P004",
+    "name": "4K Webcam",
+    "category": "Electronics",
+    "price": 690.98,
+    "stock": 96,
+    "cost": 387.25
+  },
+  {
+    "id": "P005",
+    "name": "LED Desk Lamp",
+    "category": "Electronics",
+    "price": 4481.46,
+    "stock": 13,
+    "cost": 2909.32
+  },
+  {
+    "id": "P006",
+    "name": "Cotton Polo Shirt",
+    "category": "Clothing",
+    "price": 3033.36,
+    "stock": 6,
+    "cost": 2020.1
+  },
+  {
+    "id": "P007",
+    "name": "Running Shorts",
+    "category": "Clothing",
+    "price": 342.03,
+    "stock": 29,
+    "cost": 238.66
+  },
+  {
+    "id": "P008",
+    "name": "Yoga Pants",
+    "category": "Clothing",
+    "price": 1315.77,
+    "stock": 79,
+    "cost": 892.48
+  },
+  {
+    "id": "P009",
+    "name": "Formal Trousers",
+    "category": "Clothing",
+    "price": 326.37,
+    "stock": 27,
+    "cost": 221.92
+  },
+  {
+    "id": "P010",
+    "name": "Winter Jacket",
+    "category": "Clothing",
+    "price": 3635.89,
+    "stock": 91,
+    "cost": 2207.05
+  },
+  {
+    "id": "P011",
+    "name": "Python Crash Course",
+    "category": "Books",
+    "price": 2814.72,
+    "stock": 30,
+    "cost": 1739.53
+  },
+  {
+    "id": "P012",
+    "name": "Deep Learning Book",
+    "category": "Books",
+    "price": 2355.2,
+    "stock": 37,
+    "cost": 1590.03
+  },
+  {
+    "id": "P013",
+    "name": "Atomic Habits",
+    "category": "Books",
+    "price": 4084.27,
+    "stock": 2,
+    "cost": 2346.0
+  },
+  {
+    "id": "P014",
+    "name": "Clean Code",
+    "category": "Books",
+    "price": 3841.28,
+    "stock": 22,
+    "cost": 2317.41
+  },
+  {
+    "id": "P015",
+    "name": "The Pragmatic Programmer",
+    "category": "Books",
+    "price": 3550.07,
+    "stock": 45,
+    "cost": 2309.41
+  },
+  {
+    "id": "P016",
+    "name": "Stainless Steel Bottle",
+    "category": "Home & Kitchen",
+    "price": 1532.78,
+    "stock": 29,
+    "cost": 1004.39
+  },
+  {
+    "id": "P017",
+    "name": "Air Fryer 4L",
+    "category": "Home & Kitchen",
+    "price": 4793.62,
+    "stock": 45,
+    "cost": 3127.99
+  },
+  {
+    "id": "P018",
+    "name": "Coffee Maker",
+    "category": "Home & Kitchen",
+    "price": 689.61,
+    "stock": 50,
+    "cost": 386.67
+  },
+  {
+    "id": "P019",
+    "name": "Non-Stick Pan Set",
+    "category": "Home & Kitchen",
+    "price": 663.24,
+    "stock": 110,
+    "cost": 427.95
+  },
+  {
+    "id": "P020",
+    "name": "Bamboo Cutting Board",
+    "category": "Home & Kitchen",
+    "price": 1849.99,
+    "stock": 35,
+    "cost": 1165.72
+  },
+  {
+    "id": "P021",
+    "name": "Resistance Bands Set",
+    "category": "Sports",
+    "price": 4073.22,
+    "stock": 95,
+    "cost": 2389.85
+  },
+  {
+    "id": "P022",
+    "name": "Yoga Mat Premium",
+    "category": "Sports",
+    "price": 2404.24,
+    "stock": 17,
+    "cost": 1489.04
+  },
+  {
+    "id": "P023",
+    "name": "Dumbbells 5kg Pair",
+    "category": "Sports",
+    "price": 4869.96,
+    "stock": 50,
+    "cost": 2875.67
+  },
+  {
+    "id": "P024",
+    "name": "Jump Rope Speed",
+    "category": "Sports",
+    "price": 577.24,
+    "stock": 39,
+    "cost": 397.61
+  },
+  {
+    "id": "P025",
+    "name": "Foam Roller",
+    "category": "Sports",
+    "price": 4180.14,
+    "stock": 81,
+    "cost": 2730.57
+  }
+]
