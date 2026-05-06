@@ -104,11 +104,11 @@ export function LoginPage() {
 
   if (!selectedRole) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center px-4">
-        <div className="p-8 max-w-md text-center space-y-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm">
-          <h1 className="text-2xl font-bold">Choose Your Role First</h1>
-          <p className="text-slate-500 text-sm">Role selection defines your workspace and authorization scope.</p>
-          <Button asChild>
+      <div className="min-h-screen bg-[var(--surface)] text-[var(--on-surface)] flex items-center justify-center px-4">
+        <div className="p-10 max-w-md text-center space-y-6 rounded-[var(--radius-2xl)] ghost-border glass-card premium-shadow">
+          <h1 className="text-3xl font-extrabold tracking-tight">Choose Your Role First</h1>
+          <p className="text-[var(--on-surface-variant)] text-sm">Role selection defines your workspace and authorization scope.</p>
+          <Button asChild className="w-full mt-4">
             <Link to="/">Back to Role Selection</Link>
           </Button>
         </div>
@@ -116,38 +116,40 @@ export function LoginPage() {
     )
   }
 
+  const roleColor = selectedRole === 'seller' ? 'text-[var(--primary)]' : 'text-[var(--tertiary)]'
+
   return (
     <AuthPageLayout
       role={selectedRole}
       title="Welcome Back"
       subtitle="Sign in to your workspace with your role-scoped account."
       footer={
-        <div className="space-y-2 text-center text-sm text-slate-500">
+        <div className="space-y-3 text-center text-sm text-[var(--on-surface-variant)] font-medium">
           <p>
             Need an account?{' '}
-            <Link className="text-brand-600 hover:underline" to={`/auth/signup?role=${selectedRole}`}>
+            <Link className={`${roleColor} hover:underline font-bold`} to={`/auth/signup?role=${selectedRole}`}>
               Create one
             </Link>
           </p>
           <p>
-            <Link className="text-brand-600 hover:underline" to={`/auth/forgot-password?role=${selectedRole}`}>
+            <Link className={`${roleColor} hover:underline font-bold`} to={`/auth/forgot-password?role=${selectedRole}`}>
               Forgot password?
             </Link>
           </p>
         </div>
       }
     >
-      <div className="space-y-5">
+      <div className="space-y-6 bg-[var(--surface-container-high)] p-8 rounded-[var(--radius-2xl)] ghost-border premium-shadow">
         <div>
-          <h2 className="text-2xl font-bold">Sign In</h2>
-          <p className="text-sm text-slate-500 mt-1">Access your {selectedRole === 'seller' ? 'Seller' : 'Customer'} portal.</p>
+          <h2 className="text-2xl font-extrabold tracking-tight text-[var(--on-surface)]">Sign In</h2>
+          <p className="text-sm font-medium text-[var(--on-surface-variant)] mt-1">Access your {selectedRole === 'seller' ? 'Seller' : 'Customer'} portal.</p>
         </div>
 
-        <form className="space-y-4" onSubmit={onSubmit}>
+        <form className="space-y-5" onSubmit={onSubmit}>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Email</label>
+            <label className="text-sm font-bold text-[var(--on-surface)] tracking-wide">Email</label>
             <Input
-              icon={<Mail size={16} />}
+              icon={<Mail size={16} className="text-[var(--on-surface-variant)]" />}
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
@@ -157,9 +159,9 @@ export function LoginPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Password</label>
+            <label className="text-sm font-bold text-[var(--on-surface)] tracking-wide">Password</label>
             <Input
-              icon={<Lock size={16} />}
+              icon={<Lock size={16} className="text-[var(--on-surface-variant)]" />}
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -168,9 +170,13 @@ export function LoginPage() {
             />
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && (
+            <p className="text-sm text-[#ffb4ab] border border-[#93000a]/50 bg-[#93000a]/20 p-3 rounded-[var(--radius-lg)] shadow-inner">
+              {error}
+            </p>
+          )}
 
-          <Button className="w-full" type="submit" disabled={isSubmitting || fetchStatus === 'fetching'}>
+          <Button className="w-full h-12 text-lg shadow-[0_0_20px_rgba(192,193,255,0.15)]" type="submit" disabled={isSubmitting || fetchStatus === 'fetching'}>
             {isSubmitting ? 'Signing in...' : 'Sign In'}
           </Button>
         </form>

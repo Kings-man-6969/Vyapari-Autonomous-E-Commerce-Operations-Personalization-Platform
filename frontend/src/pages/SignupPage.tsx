@@ -204,11 +204,11 @@ export function SignupPage() {
 
   if (!selectedRole) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center px-4">
-        <div className="p-8 max-w-md text-center space-y-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm">
-          <h1 className="text-2xl font-bold">Choose Your Role First</h1>
-          <p className="text-slate-500 text-sm">Role selection defines your workspace and authorization scope.</p>
-          <Button asChild>
+      <div className="min-h-screen bg-[var(--surface)] text-[var(--on-surface)] flex items-center justify-center px-4">
+        <div className="p-10 max-w-md text-center space-y-6 rounded-[var(--radius-2xl)] ghost-border glass-card premium-shadow">
+          <h1 className="text-3xl font-extrabold tracking-tight">Choose Your Role First</h1>
+          <p className="text-[var(--on-surface-variant)] text-sm">Role selection defines your workspace and authorization scope.</p>
+          <Button asChild className="w-full mt-4">
             <Link to="/">Back to Role Selection</Link>
           </Button>
         </div>
@@ -216,33 +216,35 @@ export function SignupPage() {
     )
   }
 
+  const roleColor = selectedRole === 'seller' ? 'text-[var(--primary)]' : 'text-[var(--tertiary)]'
+
   return (
     <AuthPageLayout
       role={selectedRole}
       title="Create Your Workspace Account"
       subtitle="Set up your account once, then continue through your selected role journey."
       footer={
-        <p className="text-sm text-center text-slate-500">
+        <p className="text-sm font-medium text-center text-[var(--on-surface-variant)]">
           Already have an account?{' '}
-          <Link className="text-brand-600 hover:underline" to={`/auth/login?role=${selectedRole}`}>
+          <Link className={`${roleColor} hover:underline font-bold`} to={`/auth/login?role=${selectedRole}`}>
             Sign in
           </Link>
         </p>
       }
     >
-      <div className="space-y-5">
+      <div className="space-y-6 bg-[var(--surface-container-high)] p-8 rounded-[var(--radius-2xl)] ghost-border premium-shadow">
         <div>
-          <h2 className="text-2xl font-bold">Create Account</h2>
-          <p className="text-sm text-slate-500 mt-1">Sign up for your {selectedRole === 'seller' ? 'Seller' : 'Customer'} portal.</p>
+          <h2 className="text-2xl font-extrabold tracking-tight text-[var(--on-surface)]">Create Account</h2>
+          <p className="text-sm font-medium text-[var(--on-surface-variant)] mt-1">Sign up for your {selectedRole === 'seller' ? 'Seller' : 'Customer'} portal.</p>
         </div>
 
         {step === 'credentials' ? (
-          <form className="space-y-4" onSubmit={onCreateAccount}>
-            <div className="grid grid-cols-2 gap-3">
+          <form className="space-y-5" onSubmit={onCreateAccount}>
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">First name</label>
+                <label className="text-sm font-bold text-[var(--on-surface)] tracking-wide">First name</label>
                 <Input
-                  icon={<User size={16} />}
+                  icon={<User size={16} className="text-[var(--on-surface-variant)]"/>}
                   value={firstName}
                   onChange={(event) => setFirstName(event.target.value)}
                   placeholder="First"
@@ -250,7 +252,7 @@ export function SignupPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Last name</label>
+                <label className="text-sm font-bold text-[var(--on-surface)] tracking-wide">Last name</label>
                 <Input
                   value={lastName}
                   onChange={(event) => setLastName(event.target.value)}
@@ -261,9 +263,9 @@ export function SignupPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
+              <label className="text-sm font-bold text-[var(--on-surface)] tracking-wide">Email</label>
               <Input
-                icon={<Mail size={16} />}
+                icon={<Mail size={16} className="text-[var(--on-surface-variant)]"/>}
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -273,9 +275,9 @@ export function SignupPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Password</label>
+              <label className="text-sm font-bold text-[var(--on-surface)] tracking-wide">Password</label>
               <Input
-                icon={<Lock size={16} />}
+                icon={<Lock size={16} className="text-[var(--on-surface-variant)]"/>}
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -283,17 +285,17 @@ export function SignupPage() {
                 minLength={8}
                 required
               />
-              <div className="space-y-2">
-                <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-800">
+              <div className="space-y-3 mt-2">
+                <div className="h-1.5 w-full rounded-full bg-[var(--surface-container-highest)] shadow-inner overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${strengthColorClass(strength.score)}`}
                     style={{ width: `${(strength.score / 5) * 100}%` }}
                   />
                 </div>
-                <p className="text-xs text-slate-500">Strength: {strength.label}</p>
-                <ul className="space-y-1 text-xs">
+                <p className="text-xs font-bold text-[var(--on-surface)] tracking-wider uppercase">Strength: {strength.label}</p>
+                <ul className="space-y-2 text-xs font-medium">
                   {strength.requirements.map((rule) => (
-                    <li key={rule.id} className={rule.met ? 'text-emerald-600' : 'text-slate-500'}>
+                    <li key={rule.id} className={rule.met ? roleColor : 'text-[var(--on-surface-variant)]'}>
                       {rule.met ? '✓' : '•'} {rule.label}
                     </li>
                   ))}
@@ -302,9 +304,9 @@ export function SignupPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Confirm Password</label>
+              <label className="text-sm font-bold text-[var(--on-surface)] tracking-wide">Confirm Password</label>
               <Input
-                icon={<Lock size={16} />}
+                icon={<Lock size={16} className="text-[var(--on-surface-variant)]"/>}
                 type="password"
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
@@ -312,31 +314,39 @@ export function SignupPage() {
                 minLength={8}
                 required
               />
-              {passwordMismatch && <p className="text-xs text-red-600">Passwords do not match.</p>}
+              {passwordMismatch && <p className="text-xs text-[#ffb4ab] mt-1">Passwords do not match.</p>}
             </div>
 
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            {error && (
+              <p className="text-sm text-[#ffb4ab] border border-[#93000a]/50 bg-[#93000a]/20 p-3 rounded-[var(--radius-lg)] shadow-inner">
+                {error}
+              </p>
+            )}
 
-            <Button className="w-full" type="submit" disabled={isSubmitting || fetchStatus === 'fetching'}>
+            <Button className="w-full h-12 text-lg shadow-[0_0_20px_rgba(192,193,255,0.15)] mt-2" type="submit" disabled={isSubmitting || fetchStatus === 'fetching'}>
               {isSubmitting ? 'Creating account...' : 'Create Account'}
             </Button>
           </form>
         ) : (
-          <form className="space-y-4" onSubmit={onVerifyCode}>
+          <form className="space-y-5" onSubmit={onVerifyCode}>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Verification Code</label>
+              <label className="text-sm font-bold text-[var(--on-surface)] tracking-wide">Verification Code</label>
               <Input
                 value={verificationCode}
                 onChange={(event) => setVerificationCode(event.target.value)}
                 placeholder="Enter the email verification code"
                 required
               />
-              <p className="text-xs text-slate-500">We sent a verification code to your email address.</p>
+              <p className="text-xs font-medium text-[var(--on-surface-variant)] mt-2">We sent a verification code to your email address.</p>
             </div>
 
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            {error && (
+              <p className="text-sm text-[#ffb4ab] border border-[#93000a]/50 bg-[#93000a]/20 p-3 rounded-[var(--radius-lg)] shadow-inner">
+                {error}
+              </p>
+            )}
 
-            <Button className="w-full" type="submit" disabled={isSubmitting || fetchStatus === 'fetching'}>
+            <Button className="w-full h-12 text-lg shadow-[0_0_20px_rgba(192,193,255,0.15)] mt-2" type="submit" disabled={isSubmitting || fetchStatus === 'fetching'}>
               {isSubmitting ? 'Verifying...' : 'Verify Email'}
             </Button>
           </form>

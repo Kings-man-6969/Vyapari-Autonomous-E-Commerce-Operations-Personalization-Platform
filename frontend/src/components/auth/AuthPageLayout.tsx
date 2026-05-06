@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Badge } from '../ui/Badge'
+import { Store, ShoppingBag } from 'lucide-react'
 
 type AuthRole = 'customer' | 'seller' | null
 
@@ -12,58 +12,75 @@ type AuthPageLayoutProps = {
   footer?: ReactNode
 }
 
-const ROLE_THEMES: Record<Exclude<AuthRole, null>, { label: string; color: string }> = {
-  customer: { label: 'Customer Portal', color: 'bg-accent-100 text-accent-700 dark:bg-accent-900/40 dark:text-accent-300' },
-  seller: { label: 'Seller Portal', color: 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300' },
-}
-
-function HeroIllustration() {
-  return (
-    <div className="relative h-56 w-full overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-gradient-to-br from-brand-50 via-white to-accent-50 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900">
-      <div className="absolute -top-10 -right-8 h-36 w-36 rounded-full bg-brand-200/70 blur-xl dark:bg-brand-700/40" />
-      <div className="absolute -bottom-12 -left-8 h-40 w-40 rounded-full bg-accent-200/70 blur-xl dark:bg-accent-700/40" />
-
-      <div className="relative h-full w-full p-6">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-brand-600 text-white font-bold flex items-center justify-center">V</div>
-          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Vyapari Identity</span>
-        </div>
-
-        <div className="mt-8 grid grid-cols-3 gap-3">
-          <div className="h-20 rounded-lg border border-slate-200 bg-white/80 dark:border-slate-700 dark:bg-slate-900/70" />
-          <div className="h-28 rounded-lg border border-slate-200 bg-white/80 dark:border-slate-700 dark:bg-slate-900/70" />
-          <div className="h-16 rounded-lg border border-slate-200 bg-white/80 dark:border-slate-700 dark:bg-slate-900/70" />
-        </div>
-      </div>
-    </div>
-  )
+const ROLE_THEMES: Record<Exclude<AuthRole, null>, { label: string; color: string; icon: ReactNode }> = {
+  customer: { label: 'Customer Portal', color: 'bg-[var(--tertiary)]/10 text-[var(--tertiary)] border border-[var(--tertiary)]/20', icon: <ShoppingBag size={16} /> },
+  seller: { label: 'Seller Portal', color: 'bg-[var(--primary)]/10 text-[var(--primary)] border border-[var(--primary)]/20', icon: <Store size={16} /> },
 }
 
 export function AuthPageLayout({ role, title, subtitle, children, footer }: AuthPageLayoutProps) {
   const theme = role ? ROLE_THEMES[role] : null
+  const isSeller = role === 'seller'
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-      <div className="mx-auto max-w-6xl px-4 py-8">
-        <div className="mb-8 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-brand-600 text-white font-bold flex items-center justify-center">V</div>
-            <span className="font-bold tracking-tight">Vyapari</span>
+    <div className="flex min-h-screen w-full bg-[var(--surface-container-low)] text-[var(--on-surface)]">
+      {/* Left side: branding and illustration */}
+      <div className="hidden lg:flex w-1/2 flex-col justify-between overflow-hidden bg-[var(--surface-container)] relative ghost-border border-y-0 border-l-0">
+        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?q=80&w=2000&auto=format&fit=crop')] opacity-[0.03] bg-cover bg-center mix-blend-overlay" />
+        <div className="absolute inset-0 bg-gradient-to-br from-[var(--surface-container-low)]/80 via-[var(--surface-container)]/90 to-[var(--surface)] text-[var(--on-surface)]" />
+        
+        {/* Dynamic abstract highlight */}
+        <div className={`absolute top-[-20%] left-[-10%] w-[80%] h-[60%] blur-[120px] rounded-full opacity-20 pointer-events-none ${isSeller ? 'bg-[var(--primary)]' : 'bg-[var(--tertiary)]'}`} />
+
+        <div className="relative z-10 p-12">
+          <Link to="/" className="flex items-center gap-3 w-fit group">
+            <div className={`h-10 w-10 rounded-xl bg-gradient-to-br flex items-center justify-center text-[var(--on-primary)] font-bold text-xl premium-shadow group-hover:scale-105 transition-transform ${isSeller ? 'from-[var(--primary)] to-[var(--primary-container)]' : 'from-[var(--tertiary)] to-[var(--tertiary-container)]'}`}>V</div>
+            <span className="font-extrabold tracking-tight text-2xl text-[var(--on-surface)]">Vyapari</span>
           </Link>
-          {theme && <Badge className={theme.color}>{theme.label}</Badge>}
         </div>
+        
+        <div className="relative z-10 p-12 max-w-xl">
+          {theme && (
+            <div className={`mb-6 px-4 py-1.5 flex w-fit items-center gap-2 rounded-full text-label-sm ${theme.color}`}>
+              {theme.icon} {theme.label}
+            </div>
+          )}
+          <h1 className="text-[3rem] font-extrabold leading-[1.1] mb-6 tracking-tight text-[var(--on-surface)]">
+            {isSeller ? "Command your local enterprise." : "Curate your local lifestyle."}
+          </h1>
+          <p className="text-[var(--on-surface-variant)] text-lg leading-relaxed">
+            {isSeller 
+              ? "Join thousands of merchants managing inventory, tracking sales, and growing their footprint with AI-driven insights."
+              : "Shop the best from your neighborhood stores. Authentic, local, and delivered to your doorstep."}
+          </p>
+        </div>
+      </div>
 
-        <div className="grid gap-8 lg:grid-cols-2 lg:items-center">
-          <section className="space-y-4">
-            <h1 className="text-4xl font-extrabold leading-tight">{title}</h1>
-            <p className="text-slate-600 dark:text-slate-400">{subtitle}</p>
-            <HeroIllustration />
-          </section>
+      {/* Right side: form */}
+      <div className="flex w-full lg:w-1/2 flex-col justify-center px-4 py-12 sm:px-6 lg:px-20 xl:px-24">
+        <div className="mx-auto w-full max-w-sm lg:max-w-md">
+          {/* Mobile header view */}
+          <div className="flex lg:hidden items-center justify-between mb-10">
+             <Link to="/" className="flex items-center gap-2">
+              <div className={`h-8 w-8 rounded-lg bg-gradient-to-br flex items-center justify-center font-bold text-white ${isSeller ? 'from-[var(--primary)] to-[var(--primary-container)]' : 'from-[var(--tertiary)] to-[var(--tertiary-container)]'}`}>V</div>
+              <span className="font-bold tracking-tight">Vyapari</span>
+            </Link>
+            {theme && <span className={`px-2 py-1 text-xs font-bold uppercase tracking-wider rounded border ${theme.color}`}>{theme.label.split(' ')[0]}</span>}
+          </div>
 
-          <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-6 md:p-8 shadow-sm">
+          <div>
+            <h2 className="text-3xl font-extrabold tracking-tight text-[var(--on-surface)]">{title}</h2>
+            <p className="mt-2 text-[var(--on-surface-variant)]">{subtitle}</p>
+          </div>
+
+          <div className="mt-8">
             {children}
-            {footer && <div className="mt-6 border-t border-slate-200 dark:border-slate-800 pt-4">{footer}</div>}
-          </section>
+          </div>
+
+          {footer && (
+            <div className="mt-8 pt-6 ghost-border border-x-0 border-b-0 border-t">
+              {footer}
+            </div>
+          )}
         </div>
       </div>
     </div>
