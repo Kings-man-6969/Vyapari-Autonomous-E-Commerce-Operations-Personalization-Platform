@@ -1,0 +1,58 @@
+# ── Python / Backend ────────────────────────────────────────────
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.so
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Database (never commit SQLite DBs)
+backend/vyapari.db
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
+
+# Test artifacts
+backend/verify.py
+
+# ── Environment / Secrets ────────────────────────────────────────
+.env
+.env.local
+.env.production
+*.pem
+*.key
+
+# ── Frontend / Node ──────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+*.local
+
+# ── IDE & Editor ─────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Docker ───────────────────────────────────────────────────────
+# (keep docker-compose.yml and Dockerfiles, ignore runtime state)
+
+# ── Logs ─────────────────────────────────────────────────────────
+*.log
+logs/
