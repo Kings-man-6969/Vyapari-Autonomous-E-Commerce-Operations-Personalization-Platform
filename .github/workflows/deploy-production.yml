@@ -50,7 +50,7 @@ jobs:
     steps:
       - name: Trigger Render deploy hook
         run: |
-          curl --fail --show-error --silent \
+          curl --fail --show-error --location \
             --request POST \
             "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
 
@@ -66,14 +66,14 @@ jobs:
       - name: Optional backend health check
         if: steps.healthcheck.outputs.enabled == 'true'
         run: |
-          for i in {1..20}; do
+          for i in {1..12}; do
             status=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_HEALTHCHECK_URL")
             if [ "$status" -eq 200 ]; then
               echo "Backend health check passed"
               exit 0
             fi
-            echo "Waiting for backend health endpoint (attempt $i/20)..."
-            sleep 15
+            echo "Waiting for backend health endpoint (attempt $i/12)..."
+            sleep 10
           done
           echo "Backend health check failed"
           exit 1
