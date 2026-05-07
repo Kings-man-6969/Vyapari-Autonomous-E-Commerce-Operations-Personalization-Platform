@@ -48,3 +48,30 @@ This project is configured for:
 4. Authentication and route protection:
    - Sign in/out works.
    - Role-based/protected routes behave correctly.
+
+## 5) Optional GitHub Actions CI/CD
+
+Two workflows are included:
+
+- `.github/workflows/frontend-ci.yml`
+  - Runs `npm ci`, `npm run lint`, and `npm run build` in `frontend/` on PRs and pushes to `main`.
+- `.github/workflows/deploy-production.yml`
+  - On push to `main` (or manual dispatch), deploys:
+    - Frontend to Vercel
+    - Backend to Render via deploy hook
+
+Required GitHub repository secrets:
+
+- `VERCEL_TOKEN`
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`
+- `RENDER_DEPLOY_HOOK_URL`
+
+Optional secret:
+
+- `BACKEND_HEALTHCHECK_URL` (for example `https://<your-backend-domain>/health`)
+
+Notes:
+
+- Vercel deploy uses the `frontend/` directory and existing `frontend/vercel.json`.
+- Render deploy uses a deploy hook URL from your Render service settings.
