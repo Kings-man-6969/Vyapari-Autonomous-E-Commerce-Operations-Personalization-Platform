@@ -55,7 +55,7 @@ jobs:
             "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
 
       - name: Optional backend health check
-        if: ${{ env.BACKEND_HEALTHCHECK_URL != '' }}
+        if: env.BACKEND_HEALTHCHECK_URL != ''
         run: |
           for i in {1..20}; do
             status=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_HEALTHCHECK_URL")
