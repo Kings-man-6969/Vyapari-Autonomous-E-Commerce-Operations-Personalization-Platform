@@ -54,8 +54,17 @@ jobs:
             --request POST \
             "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
 
+      - name: Detect optional health check URL
+        id: healthcheck
+        run: |
+          if [ -n "$BACKEND_HEALTHCHECK_URL" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Optional backend health check
-        if: env.BACKEND_HEALTHCHECK_URL
+        if: steps.healthcheck.outputs.enabled == 'true'
         run: |
           for i in {1..20}; do
             status=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_HEALTHCHECK_URL")
