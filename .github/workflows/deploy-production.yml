@@ -46,6 +46,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       BACKEND_HEALTHCHECK_URL: ${{ secrets.BACKEND_HEALTHCHECK_URL }}
+      HEALTHCHECK_MAX_ATTEMPTS: "12"
+      HEALTHCHECK_SLEEP_SECONDS: "10"
 
     steps:
       - name: Trigger Render deploy hook
@@ -68,14 +70,14 @@ jobs:
       - name: Optional backend health check
         if: steps.healthcheck.outputs.enabled == 'true'
         run: |
-          for i in {1..12}; do
+          for ((i=1; i<=HEALTHCHECK_MAX_ATTEMPTS; i++)); do
             status=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_HEALTHCHECK_URL")
             if [ "$status" -eq 200 ]; then
               echo "Backend health check passed"
               exit 0
             fi
-            echo "Waiting for backend health endpoint (attempt $i/12)..."
-            sleep 10
+            echo "Waiting for backend health endpoint (attempt $i/$HEALTHCHECK_MAX_ATTEMPTS)..."
+            sleep "$HEALTHCHECK_SLEEP_SECONDS"
           done
           echo "Backend health check failed"
           exit 1
