@@ -6,7 +6,7 @@ import { AuthPageLayout } from '../components/auth/AuthPageLayout'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { useRoleContext } from '../role-context'
-import { evaluatePasswordStrength, strengthColorClass } from '../lib/password-strength'
+import { evaluatePasswordStrength, strengthColorClass } from '../password-strength'
 import { Lock, Mail, User } from 'lucide-react'
 
 function parseRoleParam(value: string | null): 'customer' | 'seller' | null {

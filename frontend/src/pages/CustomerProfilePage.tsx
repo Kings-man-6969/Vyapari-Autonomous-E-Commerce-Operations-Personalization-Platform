@@ -6,7 +6,7 @@ import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { clearAllAuthSessions } from '../auth'
-import { evaluatePasswordStrength, strengthColorClass } from '../lib/password-strength'
+import { evaluatePasswordStrength, strengthColorClass } from '../password-strength'
 import { User, Shield, Save, LogOut, KeyRound, MailCheck } from 'lucide-react'
 
 function parseErrorMessage(error: unknown) {
