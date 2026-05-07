@@ -20,6 +20,12 @@ uvicorn run:app --reload --host 0.0.0.0 --port 8000
 
 Use `.env.example` as a starting point for deployment environments.
 
+## Deployment
+
+For production deployment (Render backend + Vercel frontend + Clerk setup), see:
+
+- `../DEPLOYMENT.md`
+
 ## Production Start Command
 
 ```bash

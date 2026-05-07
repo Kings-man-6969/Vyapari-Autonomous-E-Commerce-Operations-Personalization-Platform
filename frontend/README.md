@@ -21,3 +21,9 @@ npm run build
 ```
 
 The production-ready static assets are generated in `frontend/dist`.
+
+## Deployment
+
+For production deployment (Vercel frontend + Render backend + Clerk setup), see:
+
+- `../DEPLOYMENT.md`
