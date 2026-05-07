@@ -51,6 +51,8 @@ jobs:
       - name: Trigger Render deploy hook
         run: |
           curl --fail --show-error --location \
+            --connect-timeout 15 \
+            --max-time 60 \
             --request POST \
             "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
 
