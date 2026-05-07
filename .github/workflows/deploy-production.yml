@@ -70,7 +70,7 @@ jobs:
       - name: Optional backend health check
         if: steps.healthcheck.outputs.enabled == 'true'
         run: |
-          for ((i=1; i<=HEALTHCHECK_MAX_ATTEMPTS; i++)); do
+          for ((i=1; i<=$HEALTHCHECK_MAX_ATTEMPTS; i++)); do
             status=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_HEALTHCHECK_URL")
             if [ "$status" -eq 200 ]; then
               echo "Backend health check passed"
