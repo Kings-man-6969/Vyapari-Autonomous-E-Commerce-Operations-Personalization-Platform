@@ -1,16 +1,29 @@
-# Vyapari Backend (Implementation Bootstrap)
+# Vyapari Backend
 
-## Quick Start
+## Local Quick Start
 
-1. Create virtual environment and install dependencies.
-2. Run API server.
-
-```powershell
+```bash
 cd backend
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn run:app --reload --port 8000
+uvicorn run:app --reload --host 0.0.0.0 --port 8000
+```
+
+## Environment Variables
+
+- `CORS_ALLOW_ORIGINS`: Comma-separated frontend origins allowed by CORS (default: `http://localhost:5173`)
+- `DEMO_AUTH_ENABLED`: `true` to allow demo token flow, `false` to require real Clerk JWT verification
+- `CLERK_ISSUER`: Optional Clerk issuer override for JWT verification
+- `CLERK_AUDIENCE`: Optional Clerk audience for JWT verification
+- `CLERK_WEBHOOK_SECRET`: Required for `/webhooks/clerk` signature verification
+
+Use `.env.example` as a starting point for deployment environments.
+
+## Production Start Command
+
+```bash
+uvicorn run:app --host 0.0.0.0 --port 8000
 ```
 
 ## Implemented Endpoints
