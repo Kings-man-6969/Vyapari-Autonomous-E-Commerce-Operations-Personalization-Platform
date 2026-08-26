@@ -1,52 +1,69 @@
-import React from 'react'
+import React from 'react';
 
-const variantStyles = {
-  success: { background: 'rgba(20,184,166,.1)',  color: '#14b8a6', border: '1px solid rgba(20,184,166,.25)' },
-  warning: { background: 'rgba(245,158,11,.1)', color: '#fbbf24', border: '1px solid rgba(245,158,11,.25)' },
-  danger:  { background: 'rgba(239,68,68,.1)',  color: '#f87171', border: '1px solid rgba(239,68,68,.25)' },
-  info:    { background: 'rgba(59,130,246,.1)', color: '#60a5fa', border: '1px solid rgba(59,130,246,.25)' },
-  neutral: { background: 'rgba(100,116,139,.1)',color: '#94a3b8', border: '1px solid rgba(100,116,139,.2)' },
-  primary: { background: 'rgba(13,148,136,.1)', color: '#2dd4bf', border: '1px solid rgba(13,148,136,.25)' },
-}
+/* ─── DESIGN.MD — Badge & Tag ───
+   Geometry: pill (border-radius: 9999px) is strictly enforced
+   Typography: eyebrow-cap (fontSize: 11-12px, letter-spacing: 0.72px)
+   Palette: Semantic tones mapped to DESIGN.md
+─────────────────────────────────── */
 
 export function riskVariant(level) {
-  const map = { high: 'danger', medium: 'warning', low: 'success' }
-  return map[String(level).toLowerCase()] || 'neutral'
+  const map = { high: 'danger', medium: 'warning', low: 'success' };
+  return map[level] || 'neutral';
 }
 
 export function statusVariant(status) {
   const map = {
-    approved: 'success', auto_executed: 'success',
-    pending: 'warning',
+    approved: 'success',
     rejected: 'danger',
-    active: 'success', inactive: 'neutral',
-    positive: 'success', negative: 'danger', neutral: 'neutral',
-  }
-  return map[String(status).toLowerCase()] || 'neutral'
+    pending:  'warning',
+    escalated: 'danger',
+    executed:  'success',
+    auto_executed: 'success',
+  };
+  return map[status] || 'neutral';
 }
 
-export function stockVariant(stock) {
-  const s = Number(stock)
-  if (s < 5)   return 'danger'
-  if (s <= 20) return 'warning'
-  return 'success'
+export function stockVariant(qty) {
+  if (qty <= 0) return 'danger';
+  if (qty <= 5) return 'danger';
+  if (qty <= 20) return 'warning';
+  return 'success';
 }
 
-export default function Badge({ children, variant = 'neutral', className = '' }) {
-  const vs = variantStyles[variant] || variantStyles.neutral
+const BADGE_STYLES = {
+  success: { bg: 'rgba(193,251,212,0.15)', color: '#c1fbd4', border: '1px solid rgba(193,251,212,0.3)' },
+  warning: { bg: 'rgba(254,243,199,0.15)', color: '#fef3c7', border: '1px solid rgba(254,243,199,0.3)' },
+  danger:  { bg: 'rgba(254,226,226,0.15)', color: '#fee2e2', border: '1px solid rgba(254,226,226,0.3)' },
+  info:    { bg: 'rgba(219,234,254,0.15)', color: '#dbeafe', border: '1px solid rgba(219,234,254,0.3)' },
+  teal:    { bg: 'rgba(193,251,212,0.15)', color: '#c1fbd4', border: '1px solid rgba(193,251,212,0.3)' },
+  neutral: { bg: '#1e2c31', color: 'rgba(255,255,255,0.8)', border: '1px solid rgba(255,255,255,0.1)' },
+};
+
+export default function Badge({ type = 'neutral', variant, children, style }) {
+  const v = variant || type;
+  const s = BADGE_STYLES[v] || BADGE_STYLES.neutral;
+
   return (
     <span
-      className={className}
       style={{
-        ...vs,
-        display: 'inline-flex', alignItems: 'center', gap: 4,
-        padding: '3px 9px', borderRadius: 'var(--r-full)',
-        fontSize: 11, fontWeight: 700,
-        letterSpacing: '.03em', whiteSpace: 'nowrap', lineHeight: 1.4,
-        fontFamily: 'var(--font-mono)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '3px 10px',
+        borderRadius: 9999,
+        fontSize: 11,
+        fontWeight: 500,
+        letterSpacing: '0.5px',
+        textTransform: 'uppercase',
+        fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+        fontFeatureSettings: '"ss03"',
+        background: s.bg,
+        color: s.color,
+        border: s.border,
+        whiteSpace: 'nowrap',
+        ...style,
       }}
     >
       {children}
     </span>
-  )
+  );
 }

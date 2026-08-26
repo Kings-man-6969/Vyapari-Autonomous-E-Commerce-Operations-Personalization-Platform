@@ -1,198 +1,399 @@
-import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { apiFetch } from '@/services/api'
-import { useToast } from '@/shared/components/Toast'
-import Spinner from '@/shared/components/Spinner'
-import EmptyState from '@/shared/components/EmptyState'
-import '@/customer.css'
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { apiFetch } from '../../services/api';
+import { useToast } from '../../shared/hooks/useToast';
+import { SpinnerPage } from '../../shared/components/Spinner';
+import '../../customer.css';
 
-const CAT_EMOJI = { Electronics: '💻', Clothing: '👕', Books: '📚', 'Home & Kitchen': '🏠', Sports: '⚽', default: '📦' }
+/* ─── helpers ─────────────────────────────────────────────────── */
+const fmt = (n) => '₹' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 0 });
 
-export default function CustomerCart({ sessionId, onCartUpdate }) {
-  const toast = useToast()
-  const [cart, setCart] = useState({ items: [], total: 0 })
-  const [loading, setLoading] = useState(true)
-  const [updatingId, setUpdatingId] = useState(null)
+const CATEGORY_EMOJI = {
+  Electronics:     '⚡',
+  Clothing:        '👗',
+  Books:           '📚',
+  'Home & Kitchen':'🏠',
+  Sports:          '🏃',
+};
 
-  async function loadCart() {
-    setLoading(true)
+/* ─── design tokens ────────────────────────────────────────────── */
+const FONT = "'Inter', sans-serif";
+const FF   = '"ss03"';
+
+const CARD_SHADOW = [
+  '0 8px 8px rgba(0,0,0,0.08)',
+  '0 4px 4px rgba(0,0,0,0.07)',
+  '0 2px 2px rgba(0,0,0,0.06)',
+  '0 0 0 1px rgba(0,0,0,0.06)',
+].join(', ');
+
+const LVL3_SHADOW = [
+  '0 4px 16px rgba(0,0,0,0.08)',
+  '0 2px 6px rgba(0,0,0,0.06)',
+  '0 0 0 1px rgba(0,0,0,0.05)',
+].join(', ');
+
+/* ─── component ────────────────────────────────────────────────── */
+export default function CustomerCart({ sessionId, token, onCartChange }) {
+  const { showToast } = useToast();
+  const navigate = useNavigate();
+
+  const [cart, setCart]             = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [updatingId, setUpdatingId] = useState(null);
+
+  async function fetchCart() {
+    setLoading(true);
     try {
-      const data = await apiFetch(`/cart?session_id=${encodeURIComponent(sessionId)}`)
-      setCart(data)
-      onCartUpdate?.(data.items?.length || 0)
-    } catch (err) { toast.error(err.message) }
-    finally { setLoading(false) }
+      const data = await apiFetch(`/cart?session_id=${sessionId}`);
+      setCart(data);
+    } catch {
+      setCart({ items: [] });
+    } finally { setLoading(false); }
   }
 
-  useEffect(() => { loadCart() }, [sessionId])
+  useEffect(() => { fetchCart(); }, [sessionId]);
 
-  async function updateQty(productId, newQty) {
-    if (newQty < 0) return
-    setUpdatingId(productId)
+  async function updateQty(item, newQty) {
+    if (newQty < 1) return handleRemove(item);
+    setUpdatingId(item.product_id);
     try {
-      if (newQty === 0) {
-        // Remove item entirely
-        await apiFetch(`/cart/remove?session_id=${encodeURIComponent(sessionId)}&product_id=${encodeURIComponent(productId)}`, { method: 'DELETE' })
-      } else {
-        // Set absolute quantity
-        await apiFetch(`/cart/update?session_id=${encodeURIComponent(sessionId)}`, {
-          method: 'PUT',
-          body: JSON.stringify({ product_id: productId, qty: newQty }),
-        })
-      }
-      await loadCart()
-    } catch (err) { toast.error(err.message) }
-    finally { setUpdatingId(null) }
+      await apiFetch(`/cart/item/${item.cart_item_id}?session_id=${sessionId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ qty: newQty }),
+      });
+      await fetchCart();
+      onCartChange?.();
+    } catch (err) {
+      showToast(err.message || 'Failed to update', 'error');
+    } finally { setUpdatingId(null); }
   }
 
-  async function removeItem(productId) {
-    setUpdatingId(productId)
+  async function handleRemove(item) {
+    setUpdatingId(item.product_id);
     try {
-      await apiFetch(`/cart/remove?session_id=${encodeURIComponent(sessionId)}&product_id=${encodeURIComponent(productId)}`, { method: 'DELETE' })
-      toast.info('Item removed from cart.')
-      await loadCart()
-    } catch { await loadCart() }
-    finally { setUpdatingId(null) }
+      await apiFetch(`/cart/item/${item.cart_item_id}?session_id=${sessionId}`, { method: 'DELETE' });
+      await fetchCart();
+      onCartChange?.();
+      showToast('Item removed', 'info');
+    } catch (err) {
+      showToast(err.message || 'Failed to remove', 'error');
+    } finally { setUpdatingId(null); }
   }
 
-  const isEmpty = !loading && cart.items.length === 0
+  if (loading) return (
+    <div style={{ background: '#fbfbf5', minHeight: '100vh' }}>
+      <SpinnerPage />
+    </div>
+  );
 
-  return (
-    <div className="customer-content animate-fade-in">
-      <div className="customer-page">
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 36, justifyContent: 'space-between', flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 36, fontWeight: 900, color: '#ecfdf5', letterSpacing: '-0.03em', marginBottom: 4 }}>
-              Your Cart
-            </h1>
-            <p style={{ color: 'rgba(167,243,208,.45)', fontSize: 14, fontFamily: "'Source Sans 3', sans-serif" }}>
-              {isEmpty ? 'Your cart is empty' : `${cart.items.length} item${cart.items.length !== 1 ? 's' : ''}`}
-            </p>
-          </div>
-          <Link to="/shop" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#34d399', fontSize: 13, fontWeight: 600, textDecoration: 'none', fontFamily: "'Source Sans 3', sans-serif" }}>
-            ← Continue Shopping
+  const items    = cart?.items || [];
+  const subtotal = cart?.total ?? items.reduce((s, i) => s + (i.price || 0) * (i.qty || i.quantity || 1), 0);
+
+  /* ── empty state ──────────────────────────────────────────────── */
+  if (items.length === 0) {
+    return (
+      <div style={{
+        background: '#fbfbf5', minHeight: '100vh',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '60px 24px',
+        fontFamily: FONT, fontFeatureSettings: FF,
+      }}>
+        <div style={{ textAlign: 'center', maxWidth: 400 }}>
+          <div style={{ fontSize: '4rem', marginBottom: 20 }}>🛒</div>
+          <h2 style={{
+            fontSize: 28, fontWeight: 300, color: '#000',
+            marginBottom: 12, letterSpacing: '-0.5px', lineHeight: 1.2,
+            fontFamily: FONT, fontFeatureSettings: FF,
+          }}>
+            Your cart is empty
+          </h2>
+          <p style={{
+            color: '#71717a', fontSize: 15, marginBottom: 32, lineHeight: 1.6,
+            fontFamily: FONT, fontFeatureSettings: FF,
+          }}>
+            Looks like you haven't added anything yet.
+          </p>
+          <Link
+            to="/shop"
+            style={{
+              display: 'inline-block', padding: '14px 28px',
+              background: '#000000', color: '#fff',
+              borderRadius: 9999, fontWeight: 420, fontSize: 15,
+              textDecoration: 'none',
+              fontFamily: FONT, fontFeatureSettings: FF,
+              transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+          >
+            Continue Shopping
           </Link>
         </div>
+      </div>
+    );
+  }
 
-        {loading
-          ? <div style={{ display: 'flex', justifyContent: 'center', padding: 72 }}><Spinner size="lg" /></div>
-          : isEmpty
-            ? (
-              <EmptyState
-                title="Your cart is empty"
-                description="Explore the shop to find products you'll love."
-                icon="🛒"
-                action={<Link to="/shop" className="cust-btn-primary">Browse Products</Link>}
-              />
-            )
-            : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 28, alignItems: 'start' }}>
-                {/* Items */}
-                <div className="cust-card" style={{ padding: 0 }}>
-                  {cart.items.map((item) => {
-                    const isUpdating = updatingId === item.product_id
-                    return (
-                      <div key={item.product_id} className="cart-item">
-                        {/* Icon */}
-                        <div style={{
-                          width: 68, height: 68, borderRadius: 'var(--r-lg)',
-                          background: 'rgba(16,185,129,.07)',
-                          border: '1px solid rgba(52,211,153,.12)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 28, flexShrink: 0,
-                        }}>
-                          {CAT_EMOJI.default}
-                        </div>
+  /* ── filled cart ──────────────────────────────────────────────── */
+  return (
+    <div style={{
+      background: '#fbfbf5', minHeight: '100vh',
+      padding: '56px 24px 80px',
+      fontFamily: FONT, fontFeatureSettings: FF,
+    }}>
+      <div style={{ maxWidth: 1080, margin: '0 auto' }}>
 
-                        {/* Info */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <Link
-                            to={`/shop/product/${item.product_id}`}
-                            style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 700, fontSize: 17, color: '#d1fae5', textDecoration: 'none', display: 'block', marginBottom: 4 }}
-                          >
-                            {item.name}
-                          </Link>
-                          <div style={{ fontSize: 13, color: 'rgba(167,243,208,.4)', fontFamily: "'Source Sans 3', sans-serif", marginBottom: 12 }}>
-                            ₹{Number(item.unit_price).toFixed(2)} each
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                            <div className="qty-stepper">
-                              <button
-                                onClick={() => updateQty(item.product_id, item.qty - 1)}
-                                disabled={isUpdating || item.qty <= 1}
-                                aria-label="Decrease quantity"
-                              >−</button>
-                              <span>{isUpdating ? <Spinner size="sm" /> : item.qty}</span>
-                              <button
-                                onClick={() => updateQty(item.product_id, item.qty + 1)}
-                                disabled={isUpdating}
-                                aria-label="Increase quantity"
-                              >+</button>
-                            </div>
-                            <button
-                              onClick={() => removeItem(item.product_id)}
-                              disabled={isUpdating}
-                              style={{ fontSize: 12, color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0, fontFamily: "'Source Sans 3', sans-serif" }}
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </div>
+        {/* Page heading */}
+        <h1 style={{
+          fontSize: 'clamp(1.6rem, 3vw, 2.4rem)', fontWeight: 500,
+          color: '#000', letterSpacing: '-0.5px', marginBottom: 36,
+          fontFamily: FONT, fontFeatureSettings: FF,
+        }}>
+          Your Cart
+          <span style={{
+            fontSize: 14, fontWeight: 400, color: '#71717a',
+            marginLeft: 12, verticalAlign: 'middle',
+            fontFamily: FONT, fontFeatureSettings: FF,
+          }}>
+            ({items.length} {items.length === 1 ? 'item' : 'items'})
+          </span>
+        </h1>
 
-                        {/* Price */}
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <div style={{ fontFamily: "'Source Sans 3', sans-serif", fontWeight: 800, fontSize: 20, color: '#ecfdf5' }}>
-                            ₹{Number(item.line_total).toFixed(2)}
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
+        {/* Two-column grid */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(300px, 2fr) minmax(280px, 1fr)',
+          gap: 32, alignItems: 'start',
+        }}>
 
-                {/* Summary */}
-                <div style={{ minWidth: 270 }}>
-                  <div className="cust-card" style={{ position: 'sticky', top: 80 }}>
-                    <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 20, fontWeight: 800, color: '#ecfdf5', marginBottom: 20 }}>
-                      Order Summary
-                    </h3>
+          {/* ── Cart items card ──────────────────────────────────── */}
+          <div style={{
+            background: '#ffffff',
+            border: '1px solid #e4e4e7',
+            borderRadius: 12,
+            boxShadow: CARD_SHADOW,
+            overflow: 'hidden',
+          }}>
+            {items.map((item, idx) => {
+              const isUpdating = updatingId === item.product_id;
+              const emoji      = CATEGORY_EMOJI[item.category] || '📦';
+              const itemQty    = item.qty || item.quantity || 1;
+              const lineTotal  = item.subtotal ?? ((item.price || 0) * itemQty);
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
-                      {cart.items.map((item) => (
-                        <div key={item.product_id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                          <span style={{ fontSize: 13, color: 'rgba(167,243,208,.5)', flex: 1, fontFamily: "'Source Sans 3', sans-serif" }}>{item.name} × {item.qty}</span>
-                          <span style={{ fontSize: 13, color: '#d1fae5', fontFamily: "'Source Sans 3', sans-serif", fontWeight: 600 }}>₹{Number(item.line_total).toFixed(2)}</span>
-                        </div>
-                      ))}
-                    </div>
+              return (
+                <div
+                  key={item.cart_item_id || item.product_id}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 20,
+                    padding: '20px 24px',
+                    borderTop: idx === 0 ? 'none' : '1px solid #e4e4e7',
+                    opacity: isUpdating ? 0.5 : 1,
+                    transition: 'opacity 0.2s',
+                  }}
+                >
+                  {/* Thumbnail */}
+                  <div
+                    onClick={() => navigate(`/shop/product/${item.product_id}`)}
+                    style={{
+                      width: 80, height: 80, borderRadius: 8,
+                      background: '#f4f4f5',
+                      border: '1px solid #e4e4e7',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0, cursor: 'pointer', overflow: 'hidden',
+                    }}
+                  >
+                    {item.image_url && item.image_url.startsWith('http') ? (
+                      <img
+                        src={item.image_url}
+                        alt={item.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <span style={{ fontSize: '2rem' }}>{emoji}</span>
+                    )}
+                  </div>
 
-                    <div style={{ height: 1, background: 'rgba(52,211,153,.1)', marginBottom: 16 }} />
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 24 }}>
-                      <span style={{ fontWeight: 700, fontSize: 15, color: '#d1fae5', fontFamily: "'Source Sans 3', sans-serif" }}>Total</span>
-                      <span style={{ fontFamily: "'Playfair Display', Georgia, serif", fontWeight: 900, fontSize: 28, color: '#34d399', letterSpacing: '-0.03em' }}>
-                        ₹{Number(cart.total).toFixed(2)}
-                      </span>
-                    </div>
-
-                    <Link
-                      to="/shop/checkout"
-                      className="cust-btn-primary cust-btn-lg"
-                      style={{ width: '100%', justifyContent: 'center', display: 'flex', textDecoration: 'none' }}
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      onClick={() => navigate(`/shop/product/${item.product_id}`)}
+                      style={{
+                        fontSize: 15, fontWeight: 500, color: '#000',
+                        marginBottom: 4, cursor: 'pointer',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        fontFamily: FONT, fontFeatureSettings: FF,
+                      }}
                     >
-                      Checkout →
-                    </Link>
+                      {item.name}
+                    </div>
+                    <div style={{
+                      fontSize: 14, fontWeight: 500, color: '#000',
+                      marginBottom: 12,
+                      fontFamily: FONT, fontFeatureSettings: FF,
+                    }}>
+                      {fmt(item.price)}{' '}
+                      <span style={{ fontWeight: 400, color: '#71717a', fontSize: 12 }}>each</span>
+                    </div>
 
-                    <p style={{ fontSize: 11, color: 'rgba(167,243,208,.25)', textAlign: 'center', marginTop: 12, lineHeight: 1.5, fontFamily: "'Source Sans 3', sans-serif" }}>
-                      Demo checkout — no real payment processed.
-                    </p>
+                    {/* Qty + Remove */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      {/* Stepper */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button
+                          onClick={() => updateQty(item, itemQty - 1)}
+                          disabled={isUpdating}
+                          style={{
+                            width: 32, height: 32, borderRadius: 9999,
+                            border: '1px solid #e4e4e7', background: 'transparent',
+                            color: '#000', fontSize: 16, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontFamily: FONT, lineHeight: 1,
+                          }}
+                        >
+                          −
+                        </button>
+                        <span style={{
+                          minWidth: 28, textAlign: 'center',
+                          fontSize: 14, fontWeight: 500, color: '#000',
+                          fontFamily: FONT, fontFeatureSettings: FF,
+                        }}>
+                          {itemQty}
+                        </span>
+                        <button
+                          onClick={() => updateQty(item, itemQty + 1)}
+                          disabled={isUpdating}
+                          style={{
+                            width: 32, height: 32, borderRadius: 9999,
+                            border: '1px solid #e4e4e7', background: 'transparent',
+                            color: '#000', fontSize: 16, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontFamily: FONT, lineHeight: 1,
+                          }}
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      {/* Remove */}
+                      <button
+                        onClick={() => handleRemove(item)}
+                        disabled={isUpdating}
+                        style={{
+                          fontSize: 13, color: '#71717a',
+                          background: 'transparent', border: 'none',
+                          cursor: 'pointer', padding: 0,
+                          fontFamily: FONT, fontFeatureSettings: FF,
+                          transition: 'color 0.15s',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.color = '#000'}
+                        onMouseLeave={e => e.currentTarget.style.color = '#71717a'}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Line total */}
+                  <div style={{
+                    fontSize: 15, fontWeight: 500, color: '#000',
+                    flexShrink: 0, minWidth: 72, textAlign: 'right',
+                    fontFamily: FONT, fontFeatureSettings: FF,
+                  }}>
+                    {fmt(lineTotal)}
                   </div>
                 </div>
-              </div>
-            )
-        }
+              );
+            })}
+          </div>
+
+          {/* ── Order Summary sidebar ────────────────────────────── */}
+          <div style={{
+            position: 'sticky', top: 100,
+            background: '#c1fbd4',
+            borderRadius: 12,
+            padding: 32,
+            boxShadow: LVL3_SHADOW,
+          }}>
+            <h3 style={{
+              fontSize: 16, fontWeight: 500, color: '#000',
+              marginBottom: 24, letterSpacing: '-0.3px',
+              fontFamily: FONT, fontFeatureSettings: FF,
+            }}>
+              Order Summary
+            </h3>
+
+            {/* Subtotal */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
+              <span style={{ fontSize: 14, color: '#000', fontWeight: 500, fontFamily: FONT, fontFeatureSettings: FF }}>
+                Subtotal
+              </span>
+              <span style={{ fontSize: 14, fontWeight: 500, color: '#000', fontFamily: FONT, fontFeatureSettings: FF }}>
+                {fmt(subtotal)}
+              </span>
+            </div>
+
+            {/* Delivery */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
+              <span style={{ fontSize: 14, color: '#000', fontWeight: 500, fontFamily: FONT, fontFeatureSettings: FF }}>
+                Delivery
+              </span>
+              <span style={{ fontSize: 14, fontWeight: 500, color: '#000', fontFamily: FONT, fontFeatureSettings: FF }}>
+                Free
+              </span>
+            </div>
+
+            {/* Divider */}
+            <div style={{ height: 1, background: 'rgba(0,0,0,0.08)', marginBottom: 20 }} />
+
+            {/* Total */}
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+              marginBottom: 28,
+            }}>
+              <span style={{ fontSize: 16, fontWeight: 500, color: '#000', fontFamily: FONT, fontFeatureSettings: FF }}>
+                Total
+              </span>
+              <span style={{ fontSize: 22, fontWeight: 500, color: '#000', fontFamily: FONT, fontFeatureSettings: FF }}>
+                {fmt(subtotal)}
+              </span>
+            </div>
+
+            {/* Checkout CTA */}
+            <button
+              onClick={() => navigate('/shop/checkout')}
+              style={{
+                width: '100%', padding: '14px 24px',
+                borderRadius: 9999, border: 'none',
+                background: '#000000', color: '#fff',
+                fontSize: 15, fontWeight: 420, cursor: 'pointer',
+                fontFamily: FONT, fontFeatureSettings: FF,
+                transition: 'opacity 0.15s',
+                letterSpacing: '-0.1px',
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              Proceed to Checkout →
+            </button>
+
+            {/* Continue shopping */}
+            <Link
+              to="/shop/products"
+              style={{
+                display: 'block', textAlign: 'center', marginTop: 18,
+                fontSize: 13, color: '#71717a', textDecoration: 'none',
+                fontFamily: FONT, fontFeatureSettings: FF,
+                transition: 'color 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = '#000'}
+              onMouseLeave={e => e.currentTarget.style.color = '#71717a'}
+            >
+              ← Continue Shopping
+            </Link>
+          </div>
+
+        </div>
       </div>
     </div>
-  )
+  );
 }

@@ -1,181 +1,288 @@
-import React, { useEffect, useState } from 'react'
-import { apiFetch } from '@/services/api'
-import { useToast } from '@/shared/components/Toast'
-import PageHeader from '@/shared/components/PageHeader'
-import StatCard from '@/shared/components/StatCard'
-import Badge, { statusVariant } from '@/shared/components/Badge'
-import EmptyState from '@/shared/components/EmptyState'
-import Spinner from '@/shared/components/Spinner'
+import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../../services/api';
+import { useToast } from '../../shared/hooks/useToast';
+import { SpinnerPage } from '../../shared/components/Spinner';
+
+/* ─── DESIGN.MD — Seller Review Manager ───
+   Canvas: #000000 · Cards: #0a0a0a · Hairlines: #1e2c31
+   Buttons: pill-only · Typography: Inter ss03
+───────────────────────────────────────────── */
 
 function StarRating({ stars, max = 5 }) {
   return (
     <div style={{ display: 'flex', gap: 2 }}>
       {Array.from({ length: max }).map((_, i) => (
-        <span key={i} style={{ fontSize: 14, color: i < stars ? '#f59e0b' : 'var(--c-surface-3)' }}>★</span>
+        <span key={i} style={{ fontSize: 14, color: i < stars ? '#d97706' : '#3f3f46' }}>★</span>
       ))}
     </div>
-  )
+  );
 }
 
-export default function SellerReviewManager({ token }) {
-  const toast = useToast()
-  const [reviews, setReviews] = useState([])
-  const [drafts, setDrafts] = useState({})
-  const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(null)
+const SENTIMENT_BADGES = {
+  POSITIVE: { bg: 'rgba(193,251,212,0.15)', color: '#c1fbd4' },
+  NEGATIVE: { bg: 'rgba(254,226,226,0.15)', color: '#fee2e2' },
+  NEUTRAL:  { bg: '#1e2c31', color: '#ffffff' },
+};
 
-  useEffect(() => { loadReviews() }, [token])
+export default function SellerReviewManager({ token }) {
+  const { showToast } = useToast();
+  const [reviews, setReviews] = useState([]);
+  const [drafts, setDrafts] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(null);
+
+  useEffect(() => { loadReviews(); }, [token]);
 
   async function loadReviews() {
-    setLoading(true)
+    setLoading(true);
     try {
-      const payload = await apiFetch('/reviews/seller/pending', {}, token)
-      setReviews(payload.pending_reviews || [])
+      const payload = await apiFetch('/reviews/seller/pending', {}, token);
+      setReviews(payload.pending_reviews || []);
     } catch (err) {
-      toast.error(err.message)
+      showToast(err.message, 'error');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
   async function submitResponse(reviewId) {
-    const text = drafts[reviewId]?.trim()
-    if (!text) { toast.warning('Write a response before submitting.'); return }
-    setSubmitting(reviewId)
+    const text = drafts[reviewId]?.trim();
+    if (!text) { showToast('Write a response before submitting.', 'warning'); return; }
+    setSubmitting(reviewId);
     try {
       await apiFetch(`/reviews/${reviewId}/response`, {
         method: 'POST',
         body: JSON.stringify({ response_text: text }),
-      }, token)
-      setDrafts((c) => ({ ...c, [reviewId]: '' }))
-      toast.success('Response submitted successfully.')
-      await loadReviews()
+      }, token);
+      setDrafts(c => ({ ...c, [reviewId]: '' }));
+      showToast('Response submitted successfully.', 'success');
+      await loadReviews();
     } catch (err) {
-      toast.error(err.message)
+      showToast(err.message, 'error');
     } finally {
-      setSubmitting(null)
+      setSubmitting(null);
     }
   }
 
-  const avgStars = reviews.length ? reviews.reduce((s, r) => s + Number(r.stars || 0), 0) / reviews.length : 0
-  const negativePct = reviews.length ? Math.round(reviews.filter(r => r.sentiment === 'NEGATIVE').length / reviews.length * 100) : 0
+  const avgStars = reviews.length ? reviews.reduce((s, r) => s + Number(r.stars || 0), 0) / reviews.length : 0;
+  const negativePct = reviews.length ? Math.round(reviews.filter(r => r.sentiment === 'NEGATIVE').length / reviews.length * 100) : 0;
 
-  if (loading) {
-    return <div style={{ display: 'flex', justifyContent: 'center', padding: 64 }}><Spinner size="lg" /></div>
-  }
+  if (loading && reviews.length === 0) return <SpinnerPage message="Loading feedback triage queue…" />;
 
   return (
-    <div className="animate-fade-in">
-      <PageHeader
-        title="Review Manager"
-        description="Respond to pending customer reviews. Close the feedback loop and improve satisfaction."
-        action={
-          <button onClick={loadReviews} className="btn btn-secondary btn-sm">
-            <RefreshIcon /> Refresh
-          </button>
-        }
-      />
-
-      {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 14, marginBottom: 28 }}>
-        <StatCard label="Pending Reviews" value={reviews.length} variant={reviews.length > 0 ? 'warning' : 'success'} />
-        <StatCard label="Average Rating" value={`${avgStars.toFixed(1)} ★`} variant="info" />
-        <StatCard label="Negative Sentiment" value={`${negativePct}%`} variant={negativePct > 30 ? 'danger' : 'success'} />
+    <div style={{
+      fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+      fontFeatureSettings: '"ss03"',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
+        <div>
+          <h1 style={{ fontSize: 28, fontWeight: 400, color: '#ffffff', letterSpacing: '0.36px', lineHeight: 1.2, marginBottom: 6, fontFeatureSettings: '"ss03"' }}>
+            Review Management
+          </h1>
+          <p style={{ color: '#71717a', fontSize: 15, fontWeight: 420, fontFeatureSettings: '"ss03"' }}>
+            Triage sentiment signals and publish verified merchant responses.
+          </p>
+        </div>
+        <button
+          onClick={loadReviews}
+          disabled={loading}
+          style={{
+            padding: '9px 20px',
+            background: 'transparent',
+            color: 'rgba(255,255,255,0.8)',
+            borderRadius: 9999,
+            border: '1px solid #1e2c31',
+            fontWeight: 420,
+            fontSize: 14,
+            cursor: loading ? 'wait' : 'pointer',
+            transition: 'all 0.18s',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            fontFeatureSettings: '"ss03"',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; e.currentTarget.style.color = '#ffffff'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = '#1e2c31'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)'; }}
+        >
+          <span>↻</span>
+          <span>{loading ? 'Refreshing…' : 'Refresh'}</span>
+        </button>
       </div>
 
-      {/* Reviews list */}
-      {reviews.length === 0
-        ? <EmptyState
-            title="All caught up!"
-            description="There are no pending reviews to respond to. New reviews will appear here automatically."
-            icon="✅"
-          />
-        : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {reviews.map((review) => {
-              const sentiment = (review.sentiment || 'Unknown').toUpperCase()
-              const sentimentVariant =
-                sentiment === 'POSITIVE' ? 'success' :
-                sentiment === 'NEGATIVE' ? 'danger' : 'neutral'
-              const charCount = (drafts[review.review_id] || '').length
-
-              return (
-                <article key={review.review_id} className="card animate-fade-in">
-                  {/* Header */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                      <StarRating stars={review.stars} />
-                      <Badge variant={sentimentVariant}>{sentiment}</Badge>
-                    </div>
-                    <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--c-text-faint)', fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
-                      <div>{review.review_id}</div>
-                      <div>{review.product_id}</div>
-                    </div>
-                  </div>
-
-                  {/* Review meta */}
-                  <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--c-text-faint)', marginBottom: 12 }}>
-                    Customer: <span style={{ color: 'var(--c-text-muted)', fontWeight: 600 }}>{review.user_id || 'anonymous'}</span>
-                    {review.created_at && (
-                      <> · {new Date(review.created_at).toLocaleDateString()}</>
-                    )}
-                  </div>
-
-                  {/* Review text */}
-                  <div style={reviewTextStyle}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--c-text-faint)" strokeWidth="2" style={{ flexShrink: 0, marginTop: 2 }}><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
-                    <p style={{ margin: 0, color: 'var(--c-text)', lineHeight: 1.7, fontSize: 'var(--fs-sm)' }}>{review.text}</p>
-                  </div>
-
-                  {/* Response textarea */}
-                  <div style={{ marginTop: 14 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <label style={{ fontSize: 'var(--fs-xs)', fontWeight: 700, color: 'var(--c-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        Your Response
-                      </label>
-                      <span style={{ fontSize: 'var(--fs-xs)', color: charCount > 400 ? 'var(--c-warning)' : 'var(--c-text-faint)' }}>
-                        {charCount} chars
-                      </span>
-                    </div>
-                    <textarea
-                      rows="3"
-                      className="form-textarea"
-                      value={drafts[review.review_id] || ''}
-                      onChange={(e) => setDrafts((c) => ({ ...c, [review.review_id]: e.target.value }))}
-                      placeholder="Thank the customer, address their concern, and offer support…"
-                    />
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-                      <button
-                        onClick={() => submitResponse(review.review_id)}
-                        disabled={submitting === review.review_id || !drafts[review.review_id]?.trim()}
-                        className="btn btn-primary btn-sm"
-                      >
-                        {submitting === review.review_id
-                          ? <><Spinner size="sm" color="#fff" /> Submitting…</>
-                          : 'Submit Response'}
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              )
-            })}
+      {/* KPI Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 32 }}>
+        {[
+          { label: 'Pending Feedback', value: reviews.length, sub: 'Needs merchant reply', alert: reviews.length > 0 },
+          { label: 'Average Score', value: `${avgStars.toFixed(1)} ★`, sub: 'Pending cohort' },
+          { label: 'Negative Ratio', value: `${negativePct}%`, sub: negativePct > 25 ? 'High escalation tier' : 'Healthy sentiment', alert: negativePct > 25 },
+        ].map((stat, i) => (
+          <div
+            key={i}
+            style={{
+              background: '#0a0a0a',
+              border: '1px solid #1e2c31',
+              borderRadius: 12,
+              padding: '20px 24px',
+              boxShadow: '0 1px 2px rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.04)',
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 400, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.72px', marginBottom: 8, fontFeatureSettings: '"ss03"' }}>
+              {stat.label}
+            </div>
+            <div style={{ fontSize: 28, fontWeight: 400, color: stat.alert ? '#fee2e2' : '#ffffff', marginBottom: 4, fontFeatureSettings: '"ss03"' }}>
+              {stat.value}
+            </div>
+            <div style={{ fontSize: 12, color: stat.alert ? '#fee2e2' : '#71717a', fontFeatureSettings: '"ss03"' }}>
+              {stat.sub}
+            </div>
           </div>
-        )
-      }
+        ))}
+      </div>
+
+      {/* Reviews List */}
+      {reviews.length === 0 ? (
+        <div style={{
+          textAlign: 'center',
+          padding: '64px 24px',
+          background: '#0a0a0a',
+          border: '1px solid #1e2c31',
+          borderRadius: 12,
+        }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>✓</div>
+          <div style={{ fontSize: 18, fontWeight: 500, color: '#ffffff', marginBottom: 4, fontFeatureSettings: '"ss03"' }}>All caught up!</div>
+          <div style={{ color: '#71717a', fontSize: 14, fontFeatureSettings: '"ss03"' }}>There are no pending customer reviews requiring merchant intervention.</div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {reviews.map((review) => {
+            const sentiment = (review.sentiment || 'NEUTRAL').toUpperCase();
+            const badge = SENTIMENT_BADGES[sentiment] || SENTIMENT_BADGES.NEUTRAL;
+            const charCount = (drafts[review.review_id] || '').length;
+
+            return (
+              <div
+                key={review.review_id}
+                style={{
+                  background: '#0a0a0a',
+                  border: '1px solid #1e2c31',
+                  borderRadius: 12,
+                  padding: '28px',
+                  boxShadow: '0 1px 2px rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.04)',
+                }}
+              >
+                {/* Review Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <StarRating stars={review.stars} />
+                    <span style={{
+                      display: 'inline-flex',
+                      padding: '2px 8px',
+                      borderRadius: 9999,
+                      fontSize: 10,
+                      fontWeight: 500,
+                      background: badge.bg,
+                      color: badge.color,
+                      letterSpacing: '0.5px',
+                      textTransform: 'uppercase',
+                      fontFeatureSettings: '"ss03"',
+                    }}>
+                      {sentiment}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12, color: '#71717a', textAlign: 'right', fontFeatureSettings: '"ss03"' }}>
+                    Ref: #{review.review_id.slice(0, 8).toUpperCase()} · Product: {review.product_id.slice(0, 8)}
+                  </div>
+                </div>
+
+                <div style={{ fontSize: 13, color: '#71717a', marginBottom: 16, fontFeatureSettings: '"ss03"' }}>
+                  Customer: <span style={{ color: '#ffffff', fontWeight: 500 }}>{review.user_id || 'anonymous'}</span>
+                  {review.created_at && ` · ${new Date(review.created_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                </div>
+
+                {/* Review text quote */}
+                <div style={{
+                  padding: '18px 20px',
+                  background: '#121212',
+                  border: '1px solid #1e2c31',
+                  borderRadius: 10,
+                  marginBottom: 24,
+                }}>
+                  <p style={{ margin: 0, color: '#ffffff', fontSize: 15, lineHeight: 1.6, fontFeatureSettings: '"ss03"' }}>
+                    "{review.text}"
+                  </p>
+                </div>
+
+                {/* Response area */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <label style={{ fontSize: 12, fontWeight: 400, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.72px', fontFeatureSettings: '"ss03"' }}>
+                      Merchant Response
+                    </label>
+                    <span style={{ fontSize: 12, color: charCount > 400 ? '#fee2e2' : '#71717a', fontFeatureSettings: '"ss03"' }}>
+                      {charCount} / 500
+                    </span>
+                  </div>
+                  <textarea
+                    rows={3}
+                    value={drafts[review.review_id] || ''}
+                    onChange={e => setDrafts(c => ({ ...c, [review.review_id]: e.target.value.slice(0, 500) }))}
+                    placeholder="Address customer feedback, clarify resolution, or offer support…"
+                    style={{
+                      width: '100%',
+                      background: '#121212',
+                      border: '1px solid #1e2c31',
+                      borderRadius: 8,
+                      padding: '12px 14px',
+                      color: '#ffffff',
+                      fontSize: 14,
+                      fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+                      fontFeatureSettings: '"ss03"',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      resize: 'vertical',
+                      transition: 'border-color 0.18s',
+                    }}
+                    onFocus={e => e.target.style.borderColor = 'rgba(255,255,255,0.3)'}
+                    onBlur={e => e.target.style.borderColor = '#1e2c31'}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+                    <button
+                      onClick={() => submitResponse(review.review_id)}
+                      disabled={submitting === review.review_id || !drafts[review.review_id]?.trim()}
+                      style={{
+                        padding: '10px 24px',
+                        background: (!drafts[review.review_id]?.trim() || submitting === review.review_id) ? '#1e2c31' : '#ffffff',
+                        color: (!drafts[review.review_id]?.trim() || submitting === review.review_id) ? '#71717a' : '#000000',
+                        borderRadius: 9999,
+                        border: 'none',
+                        fontWeight: 500,
+                        fontSize: 14,
+                        cursor: (!drafts[review.review_id]?.trim() || submitting === review.review_id) ? 'not-allowed' : 'pointer',
+                        fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+                        fontFeatureSettings: '"ss03"',
+                        transition: 'all 0.18s',
+                      }}
+                      onMouseEnter={e => {
+                        if (drafts[review.review_id]?.trim() && submitting !== review.review_id) {
+                          e.currentTarget.style.background = '#e4e4e7';
+                        }
+                      }}
+                      onMouseLeave={e => {
+                        if (drafts[review.review_id]?.trim() && submitting !== review.review_id) {
+                          e.currentTarget.style.background = '#ffffff';
+                        }
+                      }}
+                    >
+                      {submitting === review.review_id ? 'Publishing…' : 'Publish Response'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
-  )
-}
-
-const reviewTextStyle = {
-  display: 'flex',
-  gap: 10,
-  alignItems: 'flex-start',
-  padding: '12px 14px',
-  borderRadius: 'var(--radius-md)',
-  background: 'var(--c-surface-2)',
-  border: '1px solid var(--c-border)',
-}
-
-function RefreshIcon() {
-  return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+  );
 }

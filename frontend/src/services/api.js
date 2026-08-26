@@ -1,84 +1,56 @@
-export const API_BASE = import.meta.env.VITE_API_BASE || ''
-
-let accessToken = ''
+const BASE_URL = 'http://localhost:8000/api/v1';
+let _accessToken = null;
 
 export function setAccessToken(token) {
-  accessToken = token || ''
-}
-
-export function getAccessToken() {
-  return accessToken
+  _accessToken = token;
+  localStorage.setItem('vyapari_token', token);
 }
 
 export function clearAccessToken() {
-  accessToken = ''
+  _accessToken = null;
+  localStorage.removeItem('vyapari_token');
 }
 
-async function parseError(response) {
-  let message = `Request failed (${response.status})`
-  try {
-    const payload = await response.json()
-    message = payload.detail || payload.message || message
-  } catch {
-    // keep fallback message
-  }
-  return new Error(message)
-}
-
-export async function refreshSession() {
-  const response = await fetch(`${API_BASE}/auth/refresh`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-  })
-
-  if (!response.ok) {
-    throw await parseError(response)
-  }
-
-  const payload = await response.json()
-  setAccessToken(payload.access_token)
-  return payload
+export function getAccessToken() {
+  return _accessToken || localStorage.getItem('vyapari_token');
 }
 
 export async function bootstrapSession() {
+  const token = localStorage.getItem('vyapari_token');
+  if (!token) return null;
+  _accessToken = token;
   try {
-    return await refreshSession()
+    const me = await apiFetch('/auth/me');
+    return { access_token: token, role: me.account_type, user_id: me.user_id, name: me.name };
   } catch {
-    clearAccessToken()
-    return null
+    clearAccessToken();
+    return null;
   }
 }
 
-export async function apiFetch(path, options = {}, token = accessToken, retry = true) {
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-  }
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
-  }
-
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    credentials: 'include',
-    headers,
-  })
-
-  if (response.status === 401 && retry && path !== '/auth/login' && path !== '/auth/refresh') {
-    const refreshed = await refreshSession()
-    return apiFetch(path, options, refreshed.access_token, false)
-  }
-
+export async function apiFetch(path, options = {}, tokenOverride) {
+  const token = tokenOverride || getAccessToken();
+  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetch(`${BASE_URL}${path}`, { ...options, headers });
   if (!response.ok) {
-    throw await parseError(response)
+    let errorMsg = `HTTP ${response.status}`;
+    try {
+      const err = await response.json();
+      errorMsg = err.detail || err.message || errorMsg;
+    } catch {}
+    throw new Error(errorMsg);
   }
+  if (response.status === 204) return null;
+  return response.json();
+}
 
-  const contentType = response.headers.get('content-type') || ''
-  if (contentType.includes('application/json')) {
-    return response.json()
+export function getSessionId(userId) {
+  if (userId) return userId;
+  let id = localStorage.getItem('vyapari_session_id');
+  if (!id) {
+    id = 'sess_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem('vyapari_session_id', id);
   }
-
-  return null
+  return id;
 }

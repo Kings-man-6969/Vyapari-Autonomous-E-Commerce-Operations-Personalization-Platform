@@ -1,107 +1,173 @@
-import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { apiFetch } from '@/services/api'
-import { useToast } from '@/shared/components/Toast'
-import Spinner from '@/shared/components/Spinner'
-import EmptyState from '@/shared/components/EmptyState'
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { apiFetch } from '../../services/api';
+import { useToast } from '../../shared/hooks/useToast';
+import { SpinnerPage } from '../../shared/components/Spinner';
+import { ProductCard } from '../../shared/components/ProductCard';
+import '../../customer.css';
 
-export default function CustomerWishlist({ token, onAddToCart }) {
-  const toast = useToast()
-  const [items, setItems] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [addingToCart, setAddingToCart] = useState(null)
+/* ─── DESIGN.MD — Transactional Track ───
+   Canvas: #fbfbf5 cream
+   Cards: #ffffff white, hairline border, Level-3 stacked shadow
+   CTAs: solid black pill
+─────────────────────────────────────────── */
 
-  async function loadWishlist() {
+export default function CustomerWishlist({ sessionId, onCartChange }) {
+  const { showToast } = useToast();
+  const navigate = useNavigate();
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [removingId, setRemovingId] = useState(null);
+  const [addingToCartId, setAddingToCartId] = useState(null);
+
+  async function fetchWishlist() {
+    setLoading(true);
     try {
-      const data = await apiFetch('/wishlist', {}, token)
-      setItems(data)
+      const data = await apiFetch(`/wishlist?session_id=${sessionId}`);
+      setItems(data.items || data.products || []);
+    } catch {
+      setItems([]);
+    } finally { setLoading(false); }
+  }
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    fetchWishlist();
+  }, [sessionId]);
+
+  async function handleRemove(product) {
+    setRemovingId(product.product_id);
+    try {
+      await apiFetch(`/wishlist/${product.product_id}`, { method: 'DELETE' });
+      setItems(prev => prev.filter(i => i.product_id !== product.product_id));
+      showToast('Removed from wishlist', 'info');
+      onCartChange?.();
     } catch (err) {
-      toast.error("Failed to load wishlist")
-    } finally {
-      setLoading(false)
-    }
+      showToast(err.message || 'Failed to remove', 'error');
+    } finally { setRemovingId(null); }
   }
 
-  useEffect(() => { loadWishlist() }, [token])
-
-  async function handleRemove(productId) {
+  async function handleAddToCart(product) {
+    setAddingToCartId(product.product_id);
     try {
-      await apiFetch(`/wishlist/${encodeURIComponent(productId)}`, { method: 'DELETE' }, token)
-      toast.info("Removed from wishlist")
-      loadWishlist()
-    } catch (e) {
-      toast.error("Failed to remove item")
-    }
+      await apiFetch(`/cart/add?session_id=${sessionId}`, {
+        method: 'POST',
+        body: JSON.stringify({ product_id: product.product_id, qty: 1 }),
+      });
+      showToast(`${product.name} added to cart!`, 'success');
+      onCartChange?.();
+    } catch (err) {
+      showToast(err.message || 'Failed to add to cart', 'error');
+    } finally { setAddingToCartId(null); }
   }
 
-  async function handleAddToCart(productId) {
-    setAddingToCart(productId)
-    try {
-      await onAddToCart(productId, 1)
-      toast.success("Added to cart!")
-    } catch (e) {
-      toast.error("Failed to add to cart")
-    } finally {
-      setAddingToCart(null)
-    }
-  }
-
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><Spinner size="lg" /></div>
-
-  if (items.length === 0) {
-    return (
-      <div className="customer-content animate-fade-in">
-        <div className="customer-page">
-          <EmptyState
-            title="Your Wishlist is Empty"
-            description="Save items you love and keep track of them here."
-            icon="❤️"
-            action={<Link to="/shop" className="cust-btn-primary">Browse Products</Link>}
-          />
-        </div>
-      </div>
-    )
-  }
+  if (loading) return (
+    <div style={{ background: '#fbfbf5', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <SpinnerPage />
+    </div>
+  );
 
   return (
-    <div className="customer-content animate-fade-in">
-      <div className="customer-page">
-        <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 32, fontWeight: 900, color: '#ecfdf5', marginBottom: 24 }}>Your Wishlist</h1>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 24 }}>
-          {items.map(item => (
-            <div key={item.product_id} className="cust-card" style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ height: 160, background: 'rgba(255,255,255,0.05)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 48, marginBottom: 16 }}>
-                🎁
-              </div>
-              <Link to={`/shop/product/${item.product_id}`} style={{ fontSize: 16, fontWeight: 'bold', color: '#ecfdf5', textDecoration: 'none', marginBottom: 8, display: 'block' }}>
-                {item.name}
-              </Link>
-              <div style={{ fontSize: 18, color: '#34d399', fontWeight: 'bold', marginBottom: 16 }}>
-                ₹{item.price.toFixed(2)}
-              </div>
-              <div style={{ marginTop: 'auto', display: 'flex', gap: 8 }}>
-                <button 
-                  onClick={() => handleAddToCart(item.product_id)} 
-                  className="cust-btn-primary" 
-                  style={{ flex: 1, justifyContent: 'center' }}
-                  disabled={addingToCart === item.product_id}
-                >
-                  {addingToCart === item.product_id ? <Spinner size="sm" /> : "Add to Cart"}
-                </button>
-                <button 
-                  onClick={() => handleRemove(item.product_id)} 
-                  className="btn btn-secondary" 
-                  style={{ padding: '0 12px' }}
-                  title="Remove"
-                >
-                  🗑️
-                </button>
-              </div>
-            </div>
-          ))}
+    <div style={{
+      background: '#fbfbf5', minHeight: '100vh',
+      padding: '48px 24px 80px',
+      fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+      fontFeatureSettings: '"ss03"',
+    }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 16 }}>
+          <div>
+            <h1 style={{
+              fontSize: 'clamp(2rem, 5vw, 55px)',
+              fontWeight: 300, color: '#000000',
+              lineHeight: 1.16, fontFeatureSettings: '"ss03"',
+            }}>
+              Wishlist
+            </h1>
+            <p style={{ fontSize: 16, fontWeight: 420, color: '#71717a', marginTop: 6, fontFeatureSettings: '"ss03"' }}>
+              {items.length} item{items.length !== 1 ? 's' : ''} saved for later.
+            </p>
+          </div>
+          {items.length > 0 && (
+            <Link to="/shop/products" style={{
+              padding: '9px 20px', borderRadius: 9999,
+              border: '1px solid #e4e4e7', background: '#ffffff',
+              fontSize: 14, fontWeight: 420, color: '#000000',
+              textDecoration: 'none', transition: 'border-color 0.18s',
+              fontFeatureSettings: '"ss03"',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = '#000000'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#e4e4e7'}
+            >
+              Continue Shopping
+            </Link>
+          )}
         </div>
+
+        {/* Hairline divider */}
+        <div style={{ height: 1, background: '#e4e4e7', margin: '24px 0 40px' }} />
+
+        {items.length === 0 ? (
+          <div style={{
+            textAlign: 'center', padding: '80px 24px',
+            background: '#ffffff', border: '1px solid #e4e4e7',
+            borderRadius: 12, maxWidth: 560, margin: '0 auto',
+            boxShadow: '0 2px 2px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)',
+          }}>
+            <div style={{ fontSize: '3.5rem', marginBottom: 20 }}>♡</div>
+            <h2 style={{ fontSize: 24, fontWeight: 400, color: '#000000', marginBottom: 10, fontFeatureSettings: '"ss03"' }}>
+              Your wishlist is empty
+            </h2>
+            <p style={{ fontSize: 16, fontWeight: 420, color: '#71717a', marginBottom: 32, fontFeatureSettings: '"ss03"' }}>
+              Save items you love to find them later.
+            </p>
+            <Link to="/shop/products" style={{
+              display: 'inline-flex', padding: '12px 28px',
+              background: '#000000', color: '#ffffff',
+              borderRadius: 9999, fontWeight: 420, fontSize: 15,
+              textDecoration: 'none', transition: 'background 0.18s',
+              fontFeatureSettings: '"ss03"',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = '#3f3f46'}
+            onMouseLeave={e => e.currentTarget.style.background = '#000000'}
+            >
+              Browse Products
+            </Link>
+          </div>
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+            gap: 24,
+          }}>
+            {items.map((item, idx) => (
+              <div
+                key={item.product_id}
+                style={{
+                  opacity: removingId === item.product_id ? 0.4 : 1,
+                  transition: 'opacity 0.2s',
+                  animation: `floatIn 0.4s ease ${idx * 40}ms both`,
+                }}
+              >
+                <ProductCard
+                  product={item}
+                  onAddToCart={handleAddToCart}
+                  onWishlist={handleRemove}
+                  inWishlist={true}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      <style>{`
+        @keyframes floatIn {
+          from { opacity: 0; transform: translateY(16px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
-  )
+  );
 }

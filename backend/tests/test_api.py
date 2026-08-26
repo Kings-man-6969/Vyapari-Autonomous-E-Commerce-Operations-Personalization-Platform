@@ -17,11 +17,14 @@ def _client():
     # Seed demo data for tests
     db = SessionLocal()
     
+    from datetime import datetime, timezone
+    now_str = datetime.now(timezone.utc).isoformat()
+    
     # Create demo users
     users = [
-        models.User(user_id="USR_ADMIN_001", email="admin@vyapari.local", name="Vyapari Admin", account_type="admin", password_hash=_hash_password("admin123"), is_active=1),
-        models.User(user_id="USR_SELLER_001", email="seller@vyapari.local", name="Default Seller", account_type="seller", password_hash=_hash_password("seller123"), is_active=1),
-        models.User(user_id="USR_CUST_001", email="customer@vyapari.local", name="Test Customer", account_type="customer", password_hash=_hash_password("customer123"), is_active=1),
+        models.User(user_id="USR_ADMIN_001", email="admin@vyapari.local", name="Vyapari Admin", account_type="admin", password_hash=_hash_password("admin123"), is_active=1, created_at=now_str),
+        models.User(user_id="USR_SELLER_001", email="seller@vyapari.local", name="Default Seller", account_type="seller", password_hash=_hash_password("seller123"), is_active=1, created_at=now_str),
+        models.User(user_id="USR_CUST_001", email="customer@vyapari.local", name="Test Customer", account_type="customer", password_hash=_hash_password("customer123"), is_active=1, created_at=now_str),
     ]
     for user in users:
         db.add(user)
@@ -29,11 +32,11 @@ def _client():
     
     # Create demo products
     products = [
-        models.Product(product_id="PRD_001", seller_id="USR_SELLER_001", name="Wireless Headphones", category="Electronics", price=1499.99, cost=900.0, stock=25),
-        models.Product(product_id="PRD_002", seller_id="USR_SELLER_001", name="Running Shoes", category="Sports", price=2999.00, cost=1700.0, stock=12),
-        models.Product(product_id="PRD_003", seller_id="USR_SELLER_001", name="Cotton T-Shirt", category="Clothing", price=699.00, cost=320.0, stock=50),
-        models.Product(product_id="PRD_004", seller_id="USR_SELLER_001", name="Cooking Pan", category="Home & Kitchen", price=1199.00, cost=650.0, stock=7),
-        models.Product(product_id="PRD_005", seller_id="USR_SELLER_001", name="Data Structures Book", category="Books", price=499.00, cost=220.0, stock=30),
+        models.Product(product_id="PRD_001", seller_id="USR_SELLER_001", name="Wireless Headphones", category="Electronics", price=1499.99, cost=900.0, stock=25, created_at=now_str),
+        models.Product(product_id="PRD_002", seller_id="USR_SELLER_001", name="Running Shoes", category="Sports", price=2999.00, cost=1700.0, stock=12, created_at=now_str),
+        models.Product(product_id="PRD_003", seller_id="USR_SELLER_001", name="Cotton T-Shirt", category="Clothing", price=699.00, cost=320.0, stock=50, created_at=now_str),
+        models.Product(product_id="PRD_004", seller_id="USR_SELLER_001", name="Cooking Pan", category="Home & Kitchen", price=1199.00, cost=650.0, stock=7, created_at=now_str),
+        models.Product(product_id="PRD_005", seller_id="USR_SELLER_001", name="Data Structures Book", category="Books", price=499.00, cost=220.0, stock=30, created_at=now_str),
     ]
     for product in products:
         db.add(product)
@@ -41,11 +44,11 @@ def _client():
     
     # Create demo reviews
     reviews = [
-        models.Review(review_id="REV_SEED_001", product_id="PRD_001", user_id="USR_001", stars=5, text="Excellent sound quality and battery life.", status="approved", sentiment="POSITIVE"),
-        models.Review(review_id="REV_SEED_002", product_id="PRD_001", user_id="USR_002", stars=4, text="Comfortable to wear for long hours.", status="approved", sentiment="POSITIVE"),
-        models.Review(review_id="REV_SEED_003", product_id="PRD_002", user_id="USR_003", stars=5, text="Great grip and very comfortable.", status="approved", sentiment="POSITIVE"),
-        models.Review(review_id="REV_SEED_004", product_id="PRD_003", user_id="USR_004", stars=3, text="Fabric is decent for the price.", status="approved", sentiment="NEUTRAL"),
-        models.Review(review_id="REV_SEED_005", product_id="PRD_005", user_id="USR_005", stars=4, text="Good explanations and examples.", status="approved", sentiment="POSITIVE"),
+        models.Review(review_id="REV_SEED_001", product_id="PRD_001", user_id="USR_CUST_001", stars=5, text="Excellent sound quality and battery life.", status="approved", sentiment="POSITIVE", created_at=now_str),
+        models.Review(review_id="REV_SEED_002", product_id="PRD_001", user_id="USR_CUST_001", stars=4, text="Comfortable to wear for long hours.", status="approved", sentiment="POSITIVE", created_at=now_str),
+        models.Review(review_id="REV_SEED_003", product_id="PRD_002", user_id="USR_CUST_001", stars=5, text="Great grip and very comfortable.", status="approved", sentiment="POSITIVE", created_at=now_str),
+        models.Review(review_id="REV_SEED_004", product_id="PRD_003", user_id="USR_CUST_001", stars=3, text="Fabric is decent for the price.", status="approved", sentiment="NEUTRAL", created_at=now_str),
+        models.Review(review_id="REV_SEED_005", product_id="PRD_005", user_id="USR_CUST_001", stars=4, text="Good explanations and examples.", status="approved", sentiment="POSITIVE", created_at=now_str),
     ]
     for review in reviews:
         db.add(review)
@@ -62,6 +65,7 @@ def _client():
             confidence_score=0.78,
             risk_level="MEDIUM",
             decision_status="pending",
+            created_at=now_str,
         ),
         models.Decision(
             decision_id="DEC_1006",
@@ -72,6 +76,7 @@ def _client():
             confidence_score=0.92,
             risk_level="LOW",
             decision_status="auto_executed",
+            created_at=now_str,
         ),
     ]
     for decision in decisions:

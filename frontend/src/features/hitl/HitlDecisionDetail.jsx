@@ -1,202 +1,287 @@
-import React, { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { apiFetch } from '@/services/api'
-import { useToast } from '@/shared/components/Toast'
-import Badge, { riskVariant, statusVariant } from '@/shared/components/Badge'
-import Spinner from '@/shared/components/Spinner'
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { apiFetch } from '@/services/api';
+import { useToast } from '@/shared/hooks/useToast';
+import Badge, { riskVariant, statusVariant } from '@/shared/components/Badge';
+import Spinner from '@/shared/components/Spinner';
 
-/*
-  HITL DECISION DETAIL
-  Typography: Newsreader for narrative, IBM Plex Mono for IDs/scores/timestamps
-  Dark-mode, audit-trail aesthetic, high-contrast actions
-*/
+/* ─── DESIGN.MD — HITL Decision Detail ───
+   Canvas: #000000 · Cards: #0a0a0a · Hairlines: #1e2c31
+   Buttons: pill-only · Typography: Inter ss03
+──────────────────────────────────────────── */
 
-function MetaRow({ label, value, mono = false }) {
+function MetaRow({ label, value }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid var(--color-border)', gap: 16 }}>
-      <dt style={{ fontSize: 10, color: 'var(--color-text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', flexShrink: 0, fontFamily: "'IBM Plex Mono', monospace" }}>
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '12px 0',
+      borderBottom: '1px solid #1e2c31',
+      gap: 16,
+    }}>
+      <dt style={{
+        fontSize: 12,
+        color: '#71717a',
+        fontWeight: 400,
+        textTransform: 'uppercase',
+        letterSpacing: '0.72px',
+        flexShrink: 0,
+        fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+        fontFeatureSettings: '"ss03"',
+      }}>
         {label}
       </dt>
-      <dd style={{ fontSize: 13, color: 'var(--color-text-primary)', fontWeight: 500, textAlign: 'right', fontFamily: mono ? "'IBM Plex Mono', monospace" : "'Newsreader', Georgia, serif" }}>
+      <dd style={{
+        fontSize: 14,
+        color: '#ffffff',
+        fontWeight: 420,
+        textAlign: 'right',
+        fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+        fontFeatureSettings: '"ss03"',
+        margin: 0,
+      }}>
         {value}
       </dd>
     </div>
-  )
+  );
 }
 
 export default function HitlDecisionDetail({ token }) {
-  const { decisionId } = useParams()
-  const navigate = useNavigate()
-  const toast    = useToast()
-  const [decision, setDecision]   = useState(null)
-  const [loading, setLoading]     = useState(true)
-  const [actioning, setActioning] = useState(false)
+  const { decisionId } = useParams();
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+  const [decision, setDecision] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [actioning, setActioning] = useState(false);
 
   useEffect(() => {
     apiFetch(`/hitl/decisions/${decisionId}`, {}, token)
       .then(setDecision)
-      .catch((err) => toast.error(err.message))
-      .finally(() => setLoading(false))
-  }, [decisionId, token])
+      .catch((err) => showToast(err.message, 'error'))
+      .finally(() => setLoading(false));
+  }, [decisionId, token]);
 
   async function handleApprove() {
-    setActioning(true)
+    setActioning(true);
     try {
-      await apiFetch(`/hitl/decisions/${decisionId}/approve`, { method: 'POST', body: JSON.stringify({ approver_id: 'USR_ADMIN_001' }) }, token)
-      toast.success('Decision approved.')
-      navigate('/hitl')
-    } catch (err) { toast.error(err.message) }
-    finally { setActioning(false) }
+      await apiFetch(`/hitl/decisions/${decisionId}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ approver_id: 'USR_ADMIN_001' }),
+      }, token);
+      showToast('Decision approved and scheduled for execution.', 'success');
+      navigate('/hitl');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setActioning(false);
+    }
   }
 
   async function handleReject() {
-    setActioning(true)
+    setActioning(true);
     try {
-      await apiFetch(`/hitl/decisions/${decisionId}/reject`, { method: 'POST', body: JSON.stringify({ approver_id: 'USR_ADMIN_001', reason: 'Business override' }) }, token)
-      toast.info('Decision rejected.')
-      navigate('/hitl')
-    } catch (err) { toast.error(err.message) }
-    finally { setActioning(false) }
+      await apiFetch(`/hitl/decisions/${decisionId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ approver_id: 'USR_ADMIN_001', reason: 'Operator override' }),
+      }, token);
+      showToast('Decision rejected.', 'info');
+      navigate('/hitl');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setActioning(false);
+    }
   }
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 64 }}><Spinner size="lg" /></div>
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}><Spinner size="lg" /></div>;
 
-  if (!decision) return (
-    <div style={{ textAlign: 'center', padding: 64, color: 'var(--color-text-muted)' }}>
-      <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
-      <div style={{ fontFamily: "'Newsreader', Georgia, serif", fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 8, fontSize: 18 }}>Decision not found</div>
-      <Link to="/hitl" className="btn btn-secondary btn-sm">← Back to Queue</Link>
-    </div>
-  )
+  if (!decision) {
+    return (
+      <div style={{ textAlign: 'center', padding: 64, color: '#71717a', fontFamily: "'Inter', sans-serif" }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
+        <div style={{ fontWeight: 500, color: '#ffffff', marginBottom: 16, fontSize: 18 }}>Decision not found</div>
+        <Link
+          to="/hitl"
+          style={{
+            padding: '8px 20px',
+            borderRadius: 9999,
+            background: 'transparent',
+            border: '1px solid #1e2c31',
+            color: '#ffffff',
+            textDecoration: 'none',
+            fontSize: 13,
+          }}
+        >
+          ← Back to Queue
+        </Link>
+      </div>
+    );
+  }
 
-  const isPending = decision.decision_status === 'pending'
-  const riskBorderColor = { high: '#f59e0b', medium: '#3b82f6', low: '#14b8a6' }[decision.risk_level] || '#64748b'
-  const confidence = Number(decision.confidence_score || 0)
+  const isPending = decision.decision_status === 'pending';
+  const confidence = Number(decision.confidence_score || 0);
 
   return (
-    <div className="animate-fade-in">
-      {/* Back */}
-      <Link to="/hitl" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--color-text-muted)', fontSize: 13, fontWeight: 500, textDecoration: 'none', marginBottom: 20, fontFamily: "'IBM Plex Mono', monospace" }}>
+    <div style={{
+      maxWidth: 900,
+      margin: '0 auto',
+      fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+      fontFeatureSettings: '"ss03"',
+    }}>
+      {/* Back link */}
+      <Link
+        to="/hitl"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          color: '#71717a',
+          fontSize: 13,
+          fontWeight: 420,
+          textDecoration: 'none',
+          marginBottom: 24,
+          fontFeatureSettings: '"ss03"',
+        }}
+        onMouseEnter={e => e.currentTarget.style.color = '#ffffff'}
+        onMouseLeave={e => e.currentTarget.style.color = '#71717a'}
+      >
         ← Back to Queue
       </Link>
 
       {/* Header card */}
-      <div className="card" style={{ marginBottom: 20, borderLeft: `4px solid ${riskBorderColor}`, padding: '20px 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 10, fontFamily: "'IBM Plex Mono', monospace", color: 'var(--color-text-faint)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+      <div style={{
+        background: '#0a0a0a',
+        border: '1px solid #1e2c31',
+        borderRadius: 12,
+        padding: '28px 32px',
+        marginBottom: 24,
+        boxShadow: '0 1px 2px rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.04)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 11, color: '#71717a', textTransform: 'uppercase', letterSpacing: '0.72px', marginBottom: 6, fontFeatureSettings: '"ss03"' }}>
               Decision ID
             </div>
-            <h2 style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 20, fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 12, wordBreak: 'break-all' }}>
+            <h1 style={{ fontSize: 22, fontWeight: 500, color: '#ffffff', marginBottom: 12, wordBreak: 'break-all', fontFeatureSettings: '"ss03"' }}>
               {decision.decision_id}
-            </h2>
+            </h1>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <Badge variant={statusVariant(decision.decision_status)}>{decision.decision_status}</Badge>
               <Badge variant={riskVariant(decision.risk_level)}>{decision.risk_level} risk</Badge>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 600, color: confidence >= 0.75 ? '#14b8a6' : confidence >= 0.5 ? '#60a5fa' : '#fbbf24', padding: '2px 8px', background: 'rgba(255,255,255,.04)', borderRadius: 4, border: '1px solid rgba(255,255,255,.08)' }}>
-                conf: {confidence.toFixed(2)}
+              <span style={{
+                fontSize: 12,
+                fontWeight: 500,
+                color: confidence >= 0.75 ? '#c1fbd4' : '#fee2e2',
+                padding: '2px 8px',
+                background: 'rgba(255,255,255,0.05)',
+                borderRadius: 9999,
+                border: '1px solid #1e2c31',
+                fontFeatureSettings: '"ss03"',
+              }}>
+                {(confidence * 100).toFixed(0)}% Confidence
               </span>
             </div>
           </div>
 
           {/* Action buttons */}
           {isPending && (
-            <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
-              {actioning
-                ? <Spinner size="md" />
-                : (
-                  <>
-                    <button
-                      onClick={handleApprove}
-                      style={{
-                        padding: '10px 20px', borderRadius: 'var(--r-md)',
-                        background: 'rgba(20,184,166,.1)', border: '1px solid rgba(20,184,166,.35)',
-                        color: '#14b8a6', fontSize: 13, fontWeight: 700,
-                        cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace",
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        transition: 'all 150ms',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(20,184,166,.2)'; e.currentTarget.style.boxShadow = '0 0 16px rgba(20,184,166,.2)' }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(20,184,166,.1)'; e.currentTarget.style.boxShadow = 'none' }}
-                    >
-                      <CheckIcon /> APPROVE
-                    </button>
-                    <button
-                      onClick={handleReject}
-                      style={{
-                        padding: '10px 20px', borderRadius: 'var(--r-md)',
-                        background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)',
-                        color: '#f87171', fontSize: 13, fontWeight: 700,
-                        cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace",
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        transition: 'all 150ms',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.16)' }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,.08)' }}
-                    >
-                      <XIcon /> REJECT
-                    </button>
-                  </>
-                )
-              }
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button
+                onClick={handleApprove}
+                disabled={actioning}
+                style={{
+                  padding: '10px 24px',
+                  borderRadius: 9999,
+                  background: '#ffffff',
+                  color: '#000000',
+                  border: 'none',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: actioning ? 'wait' : 'pointer',
+                  transition: 'background 0.15s',
+                  fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+                  fontFeatureSettings: '"ss03"',
+                }}
+                onMouseEnter={e => { if (!actioning) e.currentTarget.style.background = '#e4e4e7'; }}
+                onMouseLeave={e => { if (!actioning) e.currentTarget.style.background = '#ffffff'; }}
+              >
+                Approve & Execute
+              </button>
+              <button
+                onClick={handleReject}
+                disabled={actioning}
+                style={{
+                  padding: '10px 22px',
+                  borderRadius: 9999,
+                  background: 'transparent',
+                  color: '#fee2e2',
+                  border: '1px solid rgba(254,226,226,0.3)',
+                  fontSize: 14,
+                  fontWeight: 420,
+                  cursor: actioning ? 'wait' : 'pointer',
+                  transition: 'all 0.15s',
+                  fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+                  fontFeatureSettings: '"ss03"',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(254,226,226,0.1)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                Reject
+              </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Details grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 18 }}>
-        <div className="card">
-          <h3 style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '.08em', fontFamily: "'IBM Plex Mono', monospace" }}>
-            Decision Info
-          </h3>
-          <dl>
-            <MetaRow label="Product"  value={decision.product_id}   mono />
-            <MetaRow label="Agent"    value={decision.agent_type} />
-            <MetaRow label="Type"     value={decision.decision_type} />
-            <MetaRow label="Status"   value={<Badge variant={statusVariant(decision.decision_status)}>{decision.decision_status}</Badge>} />
-          </dl>
-        </div>
-
-        <div className="card">
-          <h3 style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '.08em', fontFamily: "'IBM Plex Mono', monospace" }}>
-            Risk Assessment
-          </h3>
-          <dl>
-            <MetaRow label="Risk Level"  value={<Badge variant={riskVariant(decision.risk_level)}>{decision.risk_level}</Badge>} />
-            <MetaRow label="Confidence"  value={
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, fontSize: 16, color: confidence >= 0.75 ? '#14b8a6' : confidence >= 0.5 ? '#60a5fa' : '#fbbf24' }}>
-                {confidence.toFixed(2)}
-              </span>
-            } />
-            {decision.approval_reason && <MetaRow label="Resolution" value={decision.approval_reason} />}
-          </dl>
-        </div>
-      </div>
-
-      {/* Proposed action — audit-log style */}
-      <div className="card">
-        <h3 style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: 14, textTransform: 'uppercase', letterSpacing: '.08em', fontFamily: "'IBM Plex Mono', monospace" }}>
-          Proposed Action
-        </h3>
+      {/* Decision Metadata & Agent Reasoning */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }}>
+        
+        {/* Metadata Card */}
         <div style={{
-          background: 'var(--color-bg-primary)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--r-md)',
-          padding: 'var(--sp-4)',
-          fontFamily: "'IBM Plex Mono', monospace",
-          fontSize: 13,
-          color: '#60a5fa',
-          lineHeight: 1.75,
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
+          background: '#0a0a0a',
+          border: '1px solid #1e2c31',
+          borderRadius: 12,
+          padding: '24px',
+          boxShadow: '0 1px 2px rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.04)',
         }}>
-          {decision.proposed_action || '— No proposed action data —'}
+          <h2 style={{ fontSize: 16, fontWeight: 500, color: '#ffffff', marginBottom: 16, fontFeatureSettings: '"ss03"' }}>
+            Decision Parameters
+          </h2>
+          <dl style={{ margin: 0 }}>
+            <MetaRow label="Action Type" value={decision.decision_type} />
+            <MetaRow label="Target Entity" value={decision.entity_id || decision.product_id || 'System'} />
+            <MetaRow label="Created Timestamp" value={decision.created_at ? new Date(decision.created_at).toLocaleString() : '—'} />
+            <MetaRow label="Resolved Timestamp" value={decision.updated_at ? new Date(decision.updated_at).toLocaleString() : 'Pending'} />
+            <MetaRow label="Assigned Approver" value={decision.approver_id || 'Awaiting Signoff'} />
+          </dl>
         </div>
+
+        {/* Reasoning Narrative Card */}
+        <div style={{
+          background: '#0a0a0a',
+          border: '1px solid #1e2c31',
+          borderRadius: 12,
+          padding: '24px',
+          boxShadow: '0 1px 2px rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.04)',
+        }}>
+          <h2 style={{ fontSize: 16, fontWeight: 500, color: '#ffffff', marginBottom: 16, fontFeatureSettings: '"ss03"' }}>
+            Autonomous Agent Rationale
+          </h2>
+          <div style={{
+            padding: '18px 20px',
+            background: '#121212',
+            border: '1px solid #1e2c31',
+            borderRadius: 10,
+            color: 'rgba(255,255,255,0.9)',
+            fontSize: 14,
+            lineHeight: 1.6,
+          }}>
+            {decision.reasoning || decision.details || 'Algorithm generated recommendation based on real-time stock velocity, competitor index, and elasticity thresholds.'}
+          </div>
+        </div>
+
       </div>
     </div>
-  )
+  );
 }
-
-function CheckIcon() { return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg> }
-function XIcon()     { return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg> }

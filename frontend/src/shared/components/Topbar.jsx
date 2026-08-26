@@ -1,172 +1,162 @@
-import React, { useEffect, useState } from 'react'
-import Breadcrumbs from './Breadcrumbs'
-import NotificationBell from './NotificationBell'
-import CommandPalette from './CommandPalette'
+import React from 'react';
+import { Link } from 'react-router-dom';
 
-/*
-  SELLER/HITL TOPBAR — upgraded
-  - ⌘K command palette trigger
-  - Notification bell with live badge
-  - Breadcrumb navigation
-  - Visible mobile hamburger
-  - Role badge + sign-out
-  Space Grotesk / JetBrains Mono
-*/
+/* ─── DESIGN.MD — Topbar Component ───
+   Canvas: #000000 pure black · Hairline: #1e2c31
+   Pill elements throughout · Inter typography with ss03
+──────────────────────────────────────── */
 
-export default function Topbar({ role, onLogout, onMenuToggle, pageTitle, token }) {
-  const [cmdOpen, setCmdOpen] = useState(false)
-
-  // ⌘K / Ctrl+K global shortcut
-  useEffect(() => {
-    function handler(e) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        setCmdOpen(v => !v)
-      }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [])
+export default function Topbar({ role, userName, onLogout }) {
+  const roleLabel = role === 'admin' ? 'Admin' : role === 'seller' ? 'Seller' : 'Operator';
+  const roleBg = role === 'admin' ? '#fee2e2' : '#1e2c31';
+  const roleColor = role === 'admin' ? '#991b1b' : '#ffffff';
 
   return (
-    <>
-      <div className="app-topbar">
-        {/* Mobile hamburger — always visible on mobile */}
-        <button
-          onClick={onMenuToggle}
-          id="topbar-menu-toggle"
-          className="btn-icon btn-ghost"
-          aria-label="Toggle navigation menu"
-          style={{ flexShrink: 0 }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M3 6h18M3 12h18M3 18h18"/>
-          </svg>
-        </button>
-
-        {/* Page title + breadcrumbs */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <Breadcrumbs />
+    <header style={{
+      height: 64,
+      background: '#000000',
+      borderBottom: '1px solid #1e2c31',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '0 28px',
+      flexShrink: 0,
+      zIndex: 40,
+      position: 'sticky',
+      top: 0,
+      fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+      fontFeatureSettings: '"ss03"',
+    }}>
+      {/* Left: status indicator */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '4px 12px',
+          borderRadius: 9999,
+          background: '#0a0a0a',
+          border: '1px solid #1e2c31',
+        }}>
           <div style={{
-            fontSize: 'var(--fs-sm)',
-            fontWeight: 700,
-            color: 'var(--color-text-primary)',
-            fontFamily: 'var(--font-display)',
-            letterSpacing: '-0.01em',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            marginTop: 1,
-          }}>
-            {pageTitle}
-          </div>
-        </div>
-
-        {/* Command palette trigger */}
-        <button
-          onClick={() => setCmdOpen(true)}
-          aria-label="Open command palette (Ctrl+K)"
-          title="Command Palette (Ctrl+K)"
-          className="hide-mobile"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '6px 12px',
-            background: 'var(--color-bg-raised)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--r-md)',
-            color: 'var(--color-text-muted)',
-            fontSize: 'var(--fs-xs)',
-            fontFamily: "'JetBrains Mono', monospace",
-            cursor: 'pointer',
-            transition: 'all var(--t-base)',
-            flexShrink: 0,
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.borderColor = 'var(--color-border-hover)'
-            e.currentTarget.style.color = 'var(--color-text-primary)'
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.borderColor = 'var(--color-border)'
-            e.currentTarget.style.color = 'var(--color-text-muted)'
-          }}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-          </svg>
-          Search…
-          <kbd style={{
-            padding: '2px 5px',
-            background: 'rgba(255,255,255,.06)',
-            border: '1px solid rgba(255,255,255,.1)',
-            borderRadius: 4,
-            fontSize: 10,
-          }}>⌘K</kbd>
-        </button>
-
-        {/* Right cluster */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          {/* Notification bell (seller/admin only) */}
-          {(role === 'seller' || role === 'admin') && (
-            <NotificationBell token={token} />
-          )}
-
-          {/* Role badge */}
-          <div
-            className="hide-xs"
-            style={{
-              padding: '4px 12px',
-              borderRadius: 'var(--r-full)',
-              background: 'rgba(13,148,136,.1)',
-              border: '1px solid rgba(13,148,136,.25)',
-              color: '#14b8a6',
-              fontSize: 'var(--fs-xs)',
-              fontWeight: 700,
-              fontFamily: 'var(--font-mono)',
-              letterSpacing: '.05em',
-              textTransform: 'uppercase',
-            }}
-          >
-            {role || 'user'}
-          </div>
-
-          {/* Sign out */}
-          <button
-            onClick={onLogout}
-            aria-label="Sign out"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '7px 12px',
-              borderRadius: 'var(--r-md)',
-              border: '1px solid rgba(239,68,68,.2)',
-              background: 'rgba(239,68,68,.06)',
-              color: '#f87171',
-              fontSize: 'var(--fs-xs)',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all var(--t-base)',
-              fontFamily: 'var(--font-display)',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = 'rgba(239,68,68,.14)'
-              e.currentTarget.style.borderColor = 'rgba(239,68,68,.4)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'rgba(239,68,68,.06)'
-              e.currentTarget.style.borderColor = 'rgba(239,68,68,.2)'
-            }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-            <span className="hide-xs">Sign out</span>
-          </button>
+            width: 6, height: 6,
+            borderRadius: '50%',
+            background: '#c1fbd4',
+          }} />
+          <span style={{
+            fontSize: 11,
+            fontWeight: 500,
+            color: 'rgba(255,255,255,0.7)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.72px',
+            fontFeatureSettings: '"ss03"',
+          }}>System Active</span>
         </div>
       </div>
 
-      {/* Command Palette portal */}
-      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
-    </>
-  )
+      {/* Right: navigation link + user info + logout */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {/* Customer store preview link */}
+        <Link
+          to="/shop"
+          style={{
+            padding: '7px 16px',
+            borderRadius: 9999,
+            background: 'transparent',
+            border: '1px solid #1e2c31',
+            color: 'rgba(255,255,255,0.8)',
+            fontSize: 13,
+            fontWeight: 420,
+            textDecoration: 'none',
+            transition: 'all 0.18s',
+            fontFeatureSettings: '"ss03"',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; e.currentTarget.style.color = '#ffffff'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = '#1e2c31'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)'; }}
+        >
+          <span>Storefront</span>
+          <span style={{ fontSize: 11 }}>↗</span>
+        </Link>
+
+        {/* Role badge */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '4px 12px',
+          borderRadius: 9999,
+          background: roleBg,
+          color: roleColor,
+          fontSize: 11,
+          fontWeight: 500,
+          textTransform: 'uppercase',
+          letterSpacing: '0.72px',
+          fontFeatureSettings: '"ss03"',
+        }}>
+          <span>{roleLabel}</span>
+        </div>
+
+        {/* User name */}
+        {userName && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '4px 14px 4px 6px',
+            borderRadius: 9999,
+            background: '#0a0a0a',
+            border: '1px solid #1e2c31',
+          }}>
+            <div style={{
+              width: 24, height: 24,
+              borderRadius: '50%',
+              background: '#c1fbd4',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, fontWeight: 600, color: '#000000',
+              flexShrink: 0,
+            }}>
+              {userName.charAt(0).toUpperCase()}
+            </div>
+            <span style={{
+              fontSize: 13,
+              fontWeight: 420,
+              color: '#ffffff',
+              maxWidth: 120,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontFeatureSettings: '"ss03"',
+            }}>
+              {userName}
+            </span>
+          </div>
+        )}
+
+        {/* Logout button — button-outline-on-dark */}
+        <button
+          onClick={onLogout}
+          style={{
+            padding: '7px 16px',
+            borderRadius: 9999,
+            background: 'transparent',
+            border: '1px solid #1e2c31',
+            color: '#71717a',
+            fontSize: 13,
+            fontWeight: 420,
+            cursor: 'pointer',
+            transition: 'all 0.18s',
+            fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+            fontFeatureSettings: '"ss03"',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#ffffff'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = '#71717a'; e.currentTarget.style.borderColor = '#1e2c31'; }}
+        >
+          Sign out
+        </button>
+      </div>
+    </header>
+  );
 }

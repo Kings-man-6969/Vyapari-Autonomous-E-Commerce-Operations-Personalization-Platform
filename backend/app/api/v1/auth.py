@@ -1,119 +1,142 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie, Header
-from sqlalchemy.orm import Session
+import uuid
 from typing import Optional
-import jwt
-from datetime import datetime
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from passlib.context import CryptContext
 
-from ... import models, schemas
-from ...core.security import (
-    get_db, verify_password, create_access_token, create_refresh_token,
-    set_refresh_cookie, clear_refresh_cookie, JWT_SECRET, JWT_ALGORITHM, REFRESH_COOKIE_NAME,
-    get_current_user
-)
+from app.database import get_db
+from app.models import User
+from app.schemas import RegisterRequest, LoginRequest, TokenResponse, UserResponse
+from app.core.auth import create_access_token, get_current_user, get_optional_user
 
 router = APIRouter()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-@router.post("/login", response_model=schemas.TokenResponse)
-def login(payload: schemas.LoginIn, response: Response, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == payload.email).first()
-    if not user or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is deactivated")
+REVOKED_TOKENS = set()
 
-    access_token = create_access_token(user.user_id, user.account_type)
-    refresh_token, refresh_expires = create_refresh_token(user.user_id)
 
-    user.refresh_token = refresh_token
-    user.refresh_token_expires_at = refresh_expires
-    user.last_login = datetime.utcnow()
-    db.commit()
+def _now():
+    return datetime.now(timezone.utc).isoformat()
 
-    set_refresh_cookie(response, refresh_token)
 
-    return schemas.TokenResponse(access_token=access_token, role=user.account_type, user_id=user.user_id)
-
-@router.get("/me", response_model=schemas.UserMe)
-def me(user: models.User = Depends(get_current_user)):
-    return schemas.UserMe(
-        user_id=user.user_id,
-        email=user.email,
-        name=user.name,
-        account_type=user.account_type,
-        is_active=user.is_active,
-    )
-
-@router.post("/refresh", response_model=schemas.TokenResponse)
-def refresh(
-    response: Response,
-    request_refresh_token: Optional[str] = Cookie(default=None, alias=REFRESH_COOKIE_NAME),
-    header_refresh_token: Optional[str] = Header(default=None, alias="X-Refresh-Token"),
-    db: Session = Depends(get_db),
-):
-    refresh_token = request_refresh_token or header_refresh_token
-    if not refresh_token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token missing")
-
-    try:
-        payload = jwt.decode(refresh_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        if payload.get("type") != "refresh":
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
-        user_id = payload.get("sub")
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
-
-    user = db.query(models.User).filter(models.User.user_id == user_id).first()
-    if not user or user.refresh_token != refresh_token or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token invalid or revoked")
-
-    new_refresh_token, refresh_expires = create_refresh_token(user.user_id)
-    user.refresh_token = new_refresh_token
-    user.refresh_token_expires_at = refresh_expires
-    db.commit()
-
-    set_refresh_cookie(response, new_refresh_token)
-
-    new_access_token = create_access_token(user.user_id, user.account_type)
-    return schemas.TokenResponse(access_token=new_access_token, role=user.account_type, user_id=user.user_id)
-
-@router.post("/logout")
-def logout(response: Response, request_refresh_token: Optional[str] = Cookie(default=None, alias=REFRESH_COOKIE_NAME), db: Session = Depends(get_db)):
-    if request_refresh_token:
-        user = db.query(models.User).filter(models.User.refresh_token == request_refresh_token).first()
-        if user:
-            user.refresh_token = None
-            user.refresh_token_expires_at = None
-            db.commit()
-    clear_refresh_cookie(response)
-    return {"status": "logged_out"}
-
-@router.post("/register", response_model=schemas.TokenResponse, status_code=201)
-def register(payload: schemas.RegisterIn, response: Response, db: Session = Depends(get_db)):
-    """Register a new customer account."""
-    existing = db.query(models.User).filter(models.User.email == payload.email).first()
-    if existing:
+@router.post("/register", response_model=UserResponse, status_code=201)
+def register(req: RegisterRequest, db: Session = Depends(get_db)):
+    if db.query(User).filter(User.email == req.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
-
-    from ...core.security import hash_password
-    import uuid
-    user_id = f"USR_{uuid.uuid4().hex[:8].upper()}"
-    user = models.User(
-        user_id=user_id,
-        email=payload.email,
-        name=payload.name,
-        account_type="customer",
-        password_hash=hash_password(payload.password),
-        is_active=1,
+    user = User(
+        user_id=str(uuid.uuid4()),
+        email=req.email.lower().strip(),
+        name=req.name.strip(),
+        password_hash=pwd_context.hash(req.password),
+        account_type=req.account_type,
+        created_at=_now(),
+        is_active=True,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+    return UserResponse(
+        user_id=user.user_id,
+        email=user.email,
+        name=user.name,
+        account_type=user.account_type,
+        created_at=user.created_at,
+    )
 
-    access_token = create_access_token(user.user_id, user.account_type)
-    refresh_token, refresh_expires = create_refresh_token(user.user_id)
-    user.refresh_token = refresh_token
-    user.refresh_token_expires_at = refresh_expires
+
+@router.post("/login", response_model=TokenResponse)
+def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == req.email.lower().strip()).first()
+    if not user or not pwd_context.verify(req.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account is inactive")
+    user.last_login = _now()
     db.commit()
+    token = create_access_token({"sub": user.user_id, "role": user.account_type})
+    response.set_cookie(key="vyapari_refresh", value=token, httponly=True)
+    return TokenResponse(
+        access_token=token,
+        role=user.account_type,
+        user_id=user.user_id,
+        name=user.name,
+    )
 
-    set_refresh_cookie(response, refresh_token)
-    return schemas.TokenResponse(access_token=access_token, role=user.account_type, user_id=user.user_id)
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh_token(request: Request, db: Session = Depends(get_db)):
+    cookie_token = request.cookies.get("vyapari_refresh")
+    auth_header = request.headers.get("Authorization", "")
+    token = cookie_token or (auth_header.replace("Bearer ", "") if auth_header.startswith("Bearer ") else None)
+
+    if not token or token in REVOKED_TOKENS:
+        raise HTTPException(status_code=401, detail="Refresh token revoked or missing")
+
+    from app.core.auth import decode_token
+    payload = decode_token(token)
+    user_id = payload.get("sub")
+    user = db.query(User).filter(User.user_id == user_id, User.is_active == True).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    new_token = create_access_token({"sub": user.user_id, "role": user.account_type})
+    return TokenResponse(
+        access_token=new_token,
+        role=user.account_type,
+        user_id=user.user_id,
+        name=user.name,
+    )
+
+
+@router.post("/logout")
+def logout(request: Request, response: Response):
+    cookie_token = request.cookies.get("vyapari_refresh")
+    if cookie_token:
+        REVOKED_TOKENS.add(cookie_token)
+    response.delete_cookie("vyapari_refresh")
+    return {"message": "Logged out", "status": "logged_out"}
+
+
+@router.get("/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(get_current_user)):
+    return UserResponse(
+        user_id=current_user.user_id,
+        email=current_user.email,
+        name=current_user.name,
+        account_type=current_user.account_type,
+        created_at=current_user.created_at,
+    )
+
+
+class ProfileUpdateIn(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+
+
+@router.put("/me", response_model=UserResponse)
+@router.put("/profile", response_model=UserResponse)
+def update_profile(
+    payload: ProfileUpdateIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if payload.name:
+        current_user.name = payload.name.strip()
+    if payload.email:
+        new_email = payload.email.lower().strip()
+        existing = db.query(User).filter(User.email == new_email).first()
+        if existing and existing.user_id != current_user.user_id:
+            raise HTTPException(status_code=400, detail="Email already in use")
+        current_user.email = new_email
+    db.commit()
+    db.refresh(current_user)
+    return UserResponse(
+        user_id=current_user.user_id,
+        email=current_user.email,
+        name=current_user.name,
+        account_type=current_user.account_type,
+        created_at=current_user.created_at,
+    )
+

@@ -1,104 +1,192 @@
-import React, { useState, useEffect } from 'react'
-import { apiFetch } from '@/services/api'
-import { useToast } from '@/shared/components/Toast'
-import PageHeader from '@/shared/components/PageHeader'
+import React, { useState, useEffect } from 'react';
+import { apiFetch } from '@/services/api';
+import { useToast } from '@/shared/hooks/useToast';
+import PageHeader from '@/shared/components/PageHeader';
+
+/* ─── DESIGN.MD — Seller AI Assistant & Logs ───
+   Canvas: #000000 · Cards: #0a0a0a · Hairlines: #1e2c31
+   Buttons: pill-only · Typography: Inter ss03
+───────────────────────────────────────────────── */
 
 export default function SellerAIAssistant({ token }) {
-  const toast = useToast()
-  const [command, setCommand] = useState('')
-  const [sending, setSending] = useState(false)
-  const [logs, setLogs] = useState([])
+  const { showToast } = useToast();
+  const [command, setCommand] = useState('');
+  const [sending, setSending] = useState(false);
+  const [logs, setLogs] = useState([]);
 
   const fetchLogs = async () => {
     try {
-      const data = await apiFetch('/agent/logs', {}, token)
-      setLogs(data)
+      const data = await apiFetch('/agent/logs', {}, token);
+      setLogs(data || []);
     } catch (err) {
-      console.error("Failed to load logs", err)
+      console.error('Failed to load logs', err);
     }
-  }
+  };
 
   useEffect(() => {
-    fetchLogs()
-    const interval = setInterval(fetchLogs, 5000)
-    return () => clearInterval(interval)
-  }, [token])
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 5000);
+    return () => clearInterval(interval);
+  }, [token]);
 
   const handleCommand = async (e) => {
-    e.preventDefault()
-    if (!command.trim()) return
-    setSending(true)
+    e.preventDefault();
+    if (!command.trim()) return;
+    setSending(true);
     try {
       await apiFetch('/agent/command', {
         method: 'POST',
-        body: JSON.stringify({ command })
-      }, token)
-      toast.success("Command sent to AI Assistant")
-      setCommand('')
-      fetchLogs() // immediate update
+        body: JSON.stringify({ command }),
+      }, token);
+      showToast('Command dispatched to Autonomous AI Agent', 'success');
+      setCommand('');
+      fetchLogs();
     } catch (err) {
-      toast.error(err.message || "Failed to send command")
+      showToast(err.message || 'Failed to dispatch command', 'error');
     } finally {
-      setSending(false)
+      setSending(false);
     }
-  }
+  };
 
   return (
-    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)' }}>
-      <PageHeader 
-        title="AI Assistant & Logs" 
-        description="Command your autonomous agent and view its action history."
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: 'calc(100vh - 120px)',
+      fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+      fontFeatureSettings: '"ss03"',
+    }}>
+      <PageHeader
+        title="Autonomous AI Assistant & Logs"
+        description="Command store agents directly and inspect autonomous telemetry in real time."
       />
 
-      <div style={{ flex: 1, display: 'flex', gap: 24, overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', gap: 24, overflow: 'hidden', flexWrap: 'wrap' }}>
         
-        {/* Chat / Command Interface */}
-        <div className="surface-card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: 20, borderBottom: '1px solid var(--color-border)' }}>
-            <h2 style={{ fontSize: 16, margin: 0, fontFamily: 'var(--font-display)', color: 'var(--color-text-primary)' }}>Command Interface</h2>
+        {/* Command & Chat Interface */}
+        <div style={{
+          flex: 1,
+          minWidth: 320,
+          display: 'flex',
+          flexDirection: 'column',
+          background: '#0a0a0a',
+          border: '1px solid #1e2c31',
+          borderRadius: 12,
+          boxShadow: '0 1px 2px rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.04)',
+          overflow: 'hidden',
+        }}>
+          <div style={{ padding: '18px 24px', borderBottom: '1px solid #1e2c31' }}>
+            <h2 style={{ fontSize: 16, margin: 0, fontWeight: 500, color: '#ffffff', fontFeatureSettings: '"ss03"' }}>
+              Command Dispatch
+            </h2>
           </div>
           
-          <div style={{ flex: 1, padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ padding: 16, background: 'var(--color-bg-base)', borderRadius: 'var(--r-md)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-              👋 Hello! I'm your AI Agent. I can help you update pricing, fulfill orders, or analyze your sales. What would you like me to do?
+          <div style={{ flex: 1, padding: 24, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{
+              padding: '16px 20px',
+              background: '#121212',
+              borderRadius: 10,
+              border: '1px solid #1e2c31',
+              color: 'rgba(255,255,255,0.8)',
+              fontSize: 14,
+              lineHeight: 1.6,
+            }}>
+              👋 <strong>Vyapari AI Agent ready.</strong> I can execute inventory adjustments, price simulation sweeps, review triage, and sales forecasting. Enter an operational prompt below.
             </div>
           </div>
 
-          <div style={{ padding: 20, borderTop: '1px solid var(--color-border)' }}>
+          <div style={{ padding: '18px 24px', borderTop: '1px solid #1e2c31', background: '#0a0a0a' }}>
             <form onSubmit={handleCommand} style={{ display: 'flex', gap: 12 }}>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={command}
                 onChange={e => setCommand(e.target.value)}
-                placeholder="e.g. 'Update prices by 5% for low stock items'"
-                style={{ flex: 1, padding: '12px 16px', borderRadius: 'var(--r-md)', background: 'var(--color-bg-base)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }}
+                placeholder="e.g. 'Simulate price elasticity for low-stock SKUs'…"
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  borderRadius: 9999,
+                  background: '#121212',
+                  border: '1px solid #1e2c31',
+                  color: '#ffffff',
+                  fontSize: 14,
+                  fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+                  fontFeatureSettings: '"ss03"',
+                  outline: 'none',
+                }}
+                onFocus={e => e.target.style.borderColor = 'rgba(255,255,255,0.3)'}
+                onBlur={e => e.target.style.borderColor = '#1e2c31'}
                 disabled={sending}
               />
-              <button type="submit" className="btn btn-primary" disabled={sending || !command.trim()}>
-                {sending ? 'Sending...' : 'Send'}
+              <button
+                type="submit"
+                disabled={sending || !command.trim()}
+                style={{
+                  padding: '10px 24px',
+                  background: sending || !command.trim() ? '#1e2c31' : '#ffffff',
+                  color: sending || !command.trim() ? '#71717a' : '#000000',
+                  borderRadius: 9999,
+                  border: 'none',
+                  fontWeight: 500,
+                  fontSize: 14,
+                  cursor: sending || !command.trim() ? 'not-allowed' : 'pointer',
+                  transition: 'background 0.18s',
+                  fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+                  fontFeatureSettings: '"ss03"',
+                }}
+              >
+                {sending ? 'Dispatching…' : 'Dispatch'}
               </button>
             </form>
           </div>
         </div>
 
-        {/* Action Logs */}
-        <div className="surface-card" style={{ width: 400, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: 20, borderBottom: '1px solid var(--color-border)' }}>
-            <h2 style={{ fontSize: 16, margin: 0, fontFamily: 'var(--font-display)', color: 'var(--color-text-primary)' }}>Agent Logs</h2>
+        {/* Action Logs Feed */}
+        <div style={{
+          width: 380,
+          minWidth: 300,
+          display: 'flex',
+          flexDirection: 'column',
+          background: '#0a0a0a',
+          border: '1px solid #1e2c31',
+          borderRadius: 12,
+          boxShadow: '0 1px 2px rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.04)',
+          overflow: 'hidden',
+        }}>
+          <div style={{ padding: '18px 24px', borderBottom: '1px solid #1e2c31', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ fontSize: 16, margin: 0, fontWeight: 500, color: '#ffffff', fontFeatureSettings: '"ss03"' }}>
+              Agent Telemetry
+            </h2>
+            <span style={{ fontSize: 11, color: '#c1fbd4', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live</span>
           </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+
+          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
             {logs.length === 0 ? (
-              <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', marginTop: 40 }}>No actions logged yet.</div>
+              <div style={{ textAlign: 'center', color: '#71717a', fontSize: 14, marginTop: 40 }}>
+                No actions logged yet.
+              </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {logs.map(log => (
-                  <div key={log.log_id} style={{ padding: 16, borderRadius: 'var(--r-md)', background: 'var(--color-bg-base)', border: '1px solid var(--color-border)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)', textTransform: 'uppercase' }}>{log.action_type}</span>
-                      <span style={{ fontSize: 11, color: 'var(--color-text-faint)' }}>{new Date(log.created_at).toLocaleTimeString()}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {logs.map((log, idx) => (
+                  <div
+                    key={log.log_id || idx}
+                    style={{
+                      padding: '14px 16px',
+                      borderRadius: 10,
+                      background: '#121212',
+                      border: '1px solid #1e2c31',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 500, color: '#c1fbd4', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        {log.action_type || 'AGENT_TASK'}
+                      </span>
+                      <span style={{ fontSize: 11, color: '#71717a' }}>
+                        {log.created_at ? new Date(log.created_at).toLocaleTimeString() : ''}
+                      </span>
                     </div>
-                    <div style={{ fontSize: 14, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-                      {log.details}
+                    <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5 }}>
+                      {log.details || log.message}
                     </div>
                   </div>
                 ))}
@@ -109,5 +197,5 @@ export default function SellerAIAssistant({ token }) {
 
       </div>
     </div>
-  )
+  );
 }

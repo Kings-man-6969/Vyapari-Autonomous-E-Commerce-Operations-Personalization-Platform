@@ -1,36 +1,56 @@
-import React from 'react'
+import React from 'react';
 
-const sizes = { sm: 14, md: 20, lg: 30, xl: 44 }
-const borders = { sm: 2, md: 2.5, lg: 3, xl: 3.5 }
-
-export default function Spinner({ size = 'md', color }) {
-  const dim = sizes[size] || 20
-  const bw  = borders[size] || 2.5
-  const c   = color || 'var(--color-primary)'
-  return (
-    <div
-      aria-label="Loading"
-      style={{
-        width: dim, height: dim,
-        borderRadius: '50%',
-        border: `${bw}px solid transparent`,
-        borderTopColor: c,
-        borderRightColor: `${c}40`,
-        animation: 'spin .75s linear infinite',
-        flexShrink: 0,
-      }}
-    />
-  )
-}
+/* ─── DESIGN.MD — Spinner & Loading ───
+   Clean monochrome spinner with subtle stroke
+───────────────────────────────────────── */
 
 export function SpinnerPage({ message = 'Loading…' }) {
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      minHeight: '100vh', gap: 16, background: 'var(--color-bg-primary)',
+      minHeight: '60vh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 16,
+      fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+      fontFeatureSettings: '"ss03"',
     }}>
-      <Spinner size="lg" color="var(--color-primary)" />
-      <span style={{ color: 'var(--color-text-muted)', fontSize: 13, fontFamily: 'var(--font-mono)' }}>{message}</span>
+      <div style={{
+        width: 36,
+        height: 36,
+        borderRadius: '50%',
+        border: '2px solid rgba(255,255,255,0.1)',
+        borderTopColor: '#ffffff',
+        animation: 'spin 0.8s linear infinite',
+      }} />
+      {message && (
+        <span style={{
+          fontSize: 12,
+          fontWeight: 400,
+          color: '#71717a',
+          letterSpacing: '0.72px',
+          textTransform: 'uppercase',
+        }}>
+          {message}
+        </span>
+      )}
     </div>
-  )
+  );
+}
+
+export default function Spinner({ size = 'md', color = '#ffffff' }) {
+  const sz = size === 'sm' ? 14 : size === 'lg' ? 32 : 20;
+  return (
+    <span style={{
+      display: 'inline-block',
+      width: sz,
+      height: sz,
+      borderRadius: '50%',
+      border: '2px solid rgba(255,255,255,0.15)',
+      borderTopColor: color,
+      animation: 'spin 0.8s linear infinite',
+      flexShrink: 0,
+    }} />
+  );
 }

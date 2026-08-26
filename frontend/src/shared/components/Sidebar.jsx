@@ -1,236 +1,284 @@
-import React from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import React, { useState } from 'react';
+import { NavLink, Link } from 'react-router-dom';
 
-/*
-  SELLER DASHBOARD SIDEBAR + MOBILE BOTTOM TAB BAR
-  - Desktop: fixed left sidebar (unchanged)
-  - Mobile: bottom tab navigation (Meesho/Flipkart style)
-  Font: Space Grotesk (geometric, technical confidence)
-  Colors: Slate blue / teal on deep charcoal
-*/
+/* ─── DESIGN.MD — Dark Operational Sidebar ───
+   Canvas: #000000 pure black · Hairline: #1e2c31
+   Nav items: pill shape (border-radius: 9999px)
+   Typography: Inter with ss03 feature settings
+─────────────────────────────────────────────── */
 
-const navGroups = [
-  {
-    label: 'Seller',
-    items: [
-      { to: '/seller/overview',  label: 'Overview',    icon: <GridIcon />,    mobileIcon: <GridIcon /> },
-      { to: '/seller/inventory', label: 'Inventory',   icon: <BoxIcon />,     mobileIcon: <BoxIcon /> },
-      { to: '/seller/pricing',   label: 'Pricing',     icon: <TagIcon />,     mobileIcon: <TagIcon /> },
-      { to: '/seller/orders',    label: 'Orders',      icon: <OrderIcon />,   mobileIcon: <OrderIcon /> },
-      { to: '/seller/finance',   label: 'Finance',     icon: <ChartIcon />,   mobileIcon: <ChartIcon /> },
-      { to: '/seller/reviews',   label: 'Reviews',     icon: <StarIcon />,    mobileIcon: <StarIcon /> },
-      { to: '/seller/settings',  label: 'Settings',    icon: <SettingsIcon />,mobileIcon: <SettingsIcon /> },
-      { to: '/seller/agent',     label: 'AI Assistant',icon: <AgentIcon />,   mobileIcon: <AgentIcon /> },
-    ],
-  },
-  {
-    label: 'HITL Operations',
-    items: [
-      { to: '/hitl',           label: 'Decisions', icon: <QueueIcon />,  mobileIcon: <QueueIcon /> },
-      { to: '/hitl/history',   label: 'History',   icon: <ClockIcon />,  mobileIcon: <ClockIcon /> },
-      { to: '/hitl/analytics', label: 'Analytics', icon: <ChartIcon />,  mobileIcon: <ChartIcon /> },
-    ],
-  },
-]
+const NAV_ITEMS = [
+  { icon: <OverviewIcon />, label: 'Overview',     to: '/seller/overview' },
+  { icon: <BoxIcon />,      label: 'Inventory',    to: '/seller/inventory' },
+  { icon: <TagIcon />,      label: 'Pricing',      to: '/seller/pricing' },
+  { icon: <OrderIcon />,    label: 'Orders',       to: '/seller/orders' },
+  { icon: <FinanceIcon />,  label: 'Finance',      to: '/seller/finance' },
+  { icon: <StarIcon />,     label: 'Reviews',      to: '/seller/reviews' },
+  { icon: <ChartIcon />,    label: 'Analytics',    to: '/seller/analytics' },
+  { icon: <AiIcon />,       label: 'AI Assistant', to: '/seller/ai' },
+  { icon: <PlusIcon />,     label: 'Add Product',  to: '/seller/products/add' },
+  { icon: <GearIcon />,     label: 'Settings',     to: '/seller/settings' },
+];
 
-// Items shown in mobile bottom tab (most used 5)
-const mobileTabItems = [
-  { to: '/seller/overview',  label: 'Home',      icon: <GridIcon /> },
-  { to: '/seller/inventory', label: 'Inventory', icon: <BoxIcon /> },
-  { to: '/seller/orders',    label: 'Orders',    icon: <OrderIcon /> },
-  { to: '/hitl',             label: 'HITL',      icon: <QueueIcon /> },
-  { to: '/seller/agent',     label: 'AI',        icon: <AgentIcon /> },
-]
+const HITL_ITEMS = [
+  { icon: <BrainIcon />,  label: 'HITL Queue',     to: '/hitl',          badge: true, end: true },
+  { icon: <ClockIcon />,  label: 'History',         to: '/hitl/history' },
+  { icon: <GraphIcon />,  label: 'HITL Analytics',  to: '/hitl/analytics' },
+];
 
-export default function Sidebar({ open, onClose }) {
-  const location = useLocation()
+const ADMIN_ITEMS = [
+  { icon: <ShieldIcon />, label: 'Platform Vitals', to: '/admin/overview' },
+  { icon: <UsersIcon />,  label: 'User Directory',  to: '/admin/users' },
+  { icon: <LockIcon />,   label: 'Moderation',      to: '/admin/moderation' },
+];
 
-  function isActive(to) {
-    if (to === '/hitl') return location.pathname === '/hitl'
-    return location.pathname.startsWith(to)
-  }
+export default function Sidebar({ role, pendingCount = 0 }) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  const itemStyle = (isActive) => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: collapsed ? 0 : 12,
+    padding: collapsed ? '10px' : '9px 16px',
+    borderRadius: 9999,
+    textDecoration: 'none',
+    marginBottom: 4,
+    fontSize: 14,
+    fontWeight: isActive ? 500 : 420,
+    color: isActive ? '#000000' : 'rgba(255,255,255,0.7)',
+    background: isActive ? '#ffffff' : 'transparent',
+    transition: 'all 0.18s ease',
+    justifyContent: collapsed ? 'center' : 'flex-start',
+    fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+    fontFeatureSettings: '"ss03"',
+    position: 'relative',
+    overflow: 'hidden',
+  });
 
   return (
-    <>
-      {/* Overlay for mobile drawer */}
-      <div
-        className={`sidebar-overlay${open ? ' visible' : ''}`}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* ── DESKTOP SIDEBAR ───────────────────────────────── */}
-      <aside
-        className={`app-sidebar${open ? ' open' : ''}`}
-        aria-label="Main navigation"
-        role="navigation"
-      >
-        {/* Brand */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 12,
-          padding: '20px 18px 16px',
-          borderBottom: '1px solid var(--color-border)',
-          marginBottom: 4,
-        }}>
-          <div style={{
-            width: 38, height: 38, borderRadius: 10,
-            background: 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)',
+    <aside style={{
+      width: collapsed ? 64 : 240,
+      flexShrink: 0,
+      background: '#000000',
+      borderRight: '1px solid #1e2c31',
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100vh',
+      position: 'sticky',
+      top: 0,
+      overflow: 'hidden',
+      transition: 'width 0.25s cubic-bezier(0.16,1,0.3,1)',
+      zIndex: 50,
+      fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+      fontFeatureSettings: '"ss03"',
+    }}>
+      {/* Logo Header */}
+      <div style={{
+        padding: '16px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: collapsed ? 'center' : 'space-between',
+        borderBottom: '1px solid #1e2c31',
+        minHeight: 64,
+      }}>
+        {!collapsed && (
+          <Link to={role === 'admin' ? '/admin/overview' : '/seller/overview'} style={{ textDecoration: 'none' }}>
+            <span style={{
+              fontSize: 16,
+              fontWeight: 600,
+              color: '#ffffff',
+              letterSpacing: '0.5px',
+              fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+              fontFeatureSettings: '"ss03"',
+            }}>VYAPARI</span>
+          </Link>
+        )}
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          style={{
+            width: 32, height: 32,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', flexShrink: 0,
-            boxShadow: '0 0 16px rgba(13,148,136,.4)',
-          }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
-              <path d="M3 6h18" /><path d="M16 10a4 4 0 0 1-8 0" />
-            </svg>
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 'var(--fs-md)', color: 'var(--color-text-primary)', letterSpacing: '-0.02em', fontFamily: 'var(--font-display)' }}>Vyapari</div>
-            <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-faint)', fontWeight: 500, fontFamily: 'var(--font-mono)', letterSpacing: '.04em' }}>Operations Console</div>
-          </div>
-        </div>
+            borderRadius: 9999,
+            background: '#0a0a0a',
+            border: '1px solid #1e2c31',
+            color: '#71717a',
+            cursor: 'pointer',
+            transition: 'all 0.18s',
+            flexShrink: 0,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#ffffff'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = '#71717a'; e.currentTarget.style.borderColor = '#1e2c31'; }}
+          aria-label="Toggle sidebar"
+        >
+          {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+        </button>
+      </div>
 
-        {/* Nav */}
-        <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }} aria-label="Sidebar navigation">
-          {navGroups.map((group) => (
-            <div key={group.label} style={{ marginBottom: 28 }}>
+      {/* Nav body */}
+      <nav style={{ flex: 1, overflowY: 'auto', padding: '16px 12px' }}>
+        {/* Admin Navigation (Only for Admin role) */}
+        {role === 'admin' && (
+          <div style={{ marginBottom: 12 }}>
+            {!collapsed && (
               <div style={{
-                fontSize: 'var(--fs-xs)', fontWeight: 700,
-                color: 'var(--color-text-faint)',
-                letterSpacing: '.1em', textTransform: 'uppercase',
-                padding: '4px 8px 10px',
-                fontFamily: 'var(--font-mono)',
-              }}>
-                {group.label}
-              </div>
-              {group.items.map((item) => {
-                const active = isActive(item.to)
-                return (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    onClick={onClose}
-                    aria-current={active ? 'page' : undefined}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '9px 10px',
-                      fontSize: 'var(--fs-sm)', fontWeight: active ? 600 : 500,
-                      textDecoration: 'none',
-                      transition: 'all 150ms ease',
-                      marginBottom: 2,
-                      borderRadius: 'var(--r-md)',
-                      background: active ? 'rgba(13,148,136,.12)' : 'transparent',
-                      color: active ? '#2dd4bf' : 'var(--color-text-muted)',
-                      borderLeft: active ? '2px solid #0d9488' : '2px solid transparent',
-                      fontFamily: 'var(--font-display)',
-                      outline: 'none',
-                    }}
-                    onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 2px rgba(13,148,136,.4)' }}
-                    onBlur={e => { e.currentTarget.style.boxShadow = 'none' }}
-                    onMouseEnter={e => {
-                      if (!active) {
-                        e.currentTarget.style.background = 'var(--color-bg-raised)'
-                        e.currentTarget.style.color = 'var(--color-text-primary)'
-                      }
-                    }}
-                    onMouseLeave={e => {
-                      if (!active) {
-                        e.currentTarget.style.background = 'transparent'
-                        e.currentTarget.style.color = 'var(--color-text-muted)'
-                      }
-                    }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', color: active ? '#0d9488' : 'var(--color-text-faint)', transition: 'color 150ms' }}>
-                      {item.icon}
-                    </span>
-                    {item.label}
-                  </Link>
-                )
-              })}
-            </div>
-          ))}
-        </nav>
-
-        {/* Footer */}
-        <div style={{ padding: '12px 18px 16px', borderTop: '1px solid var(--color-border)' }}>
-          <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-faint)', fontFamily: 'var(--font-mono)' }}>
-            Autonomous E-Commerce
+                fontSize: 11, fontWeight: 400, color: '#71717a',
+                textTransform: 'uppercase', letterSpacing: '0.72px',
+                padding: '4px 12px 8px',
+                fontFeatureSettings: '"ss03"',
+              }}>Administration</div>
+            )}
+            {ADMIN_ITEMS.map(item => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                style={({ isActive }) => itemStyle(isActive)}
+                onMouseEnter={e => {
+                  if (!e.currentTarget.style.background.includes('rgb(255, 255, 255)')) {
+                    e.currentTarget.style.background = '#0a0a0a';
+                    e.currentTarget.style.color = '#ffffff';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!e.currentTarget.style.background.includes('rgb(255, 255, 255)')) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
+                  }
+                }}
+              >
+                <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center', color: 'inherit' }}>{item.icon}</span>
+                {!collapsed && <span>{item.label}</span>}
+              </NavLink>
+            ))}
           </div>
-          <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-text-faint)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
-            v1.0.0
-          </div>
-        </div>
-      </aside>
+        )}
 
-      {/* ── MOBILE BOTTOM TAB BAR ─────────────────────────── */}
-      <nav
-        className="mobile-tab-bar"
-        aria-label="Mobile navigation"
-        role="navigation"
-      >
-        {mobileTabItems.map((item) => {
-          const active = isActive(item.to)
-          return (
-            <Link
+        {/* Seller Navigation (Only for Seller role) */}
+        {role === 'seller' && (
+          <div style={{ marginBottom: 12 }}>
+            {!collapsed && (
+              <div style={{
+                fontSize: 11, fontWeight: 400, color: '#71717a',
+                textTransform: 'uppercase', letterSpacing: '0.72px',
+                padding: '4px 12px 8px',
+                fontFeatureSettings: '"ss03"',
+              }}>Store Operations</div>
+            )}
+            {NAV_ITEMS.map(item => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                style={({ isActive }) => itemStyle(isActive)}
+                onMouseEnter={e => {
+                  if (!e.currentTarget.style.background.includes('rgb(255, 255, 255)')) {
+                    e.currentTarget.style.background = '#0a0a0a';
+                    e.currentTarget.style.color = '#ffffff';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!e.currentTarget.style.background.includes('rgb(255, 255, 255)')) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
+                  }
+                }}
+              >
+                <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center', color: 'inherit' }}>{item.icon}</span>
+                {!collapsed && <span>{item.label}</span>}
+              </NavLink>
+            ))}
+          </div>
+        )}
+
+        {/* Hairline Divider */}
+        <div style={{ height: 1, background: '#1e2c31', margin: '12px 6px 16px' }} />
+
+        {/* HITL / Autonomous Control (Shared by Admin & Seller) */}
+        <div>
+          {!collapsed && (
+            <div style={{
+              fontSize: 11, fontWeight: 400, color: '#71717a',
+              textTransform: 'uppercase', letterSpacing: '0.72px',
+              padding: '4px 12px 8px',
+              fontFeatureSettings: '"ss03"',
+            }}>Autonomous Oversight</div>
+          )}
+          {HITL_ITEMS.map(item => (
+            <NavLink
               key={item.to}
               to={item.to}
-              aria-current={active ? 'page' : undefined}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 4,
-                flex: 1,
-                padding: '8px 4px',
-                textDecoration: 'none',
-                color: active ? '#2dd4bf' : '#64748b',
-                fontSize: 9,
-                fontWeight: active ? 700 : 500,
-                fontFamily: 'var(--font-display)',
-                letterSpacing: '.03em',
-                transition: 'color 150ms',
-                background: 'transparent',
-                border: 'none',
-                position: 'relative',
+              end={item.end}
+              style={({ isActive }) => itemStyle(isActive)}
+              onMouseEnter={e => {
+                if (!e.currentTarget.style.background.includes('rgb(255, 255, 255)')) {
+                  e.currentTarget.style.background = '#0a0a0a';
+                  e.currentTarget.style.color = '#ffffff';
+                }
+              }}
+              onMouseLeave={e => {
+                if (!e.currentTarget.style.background.includes('rgb(255, 255, 255)')) {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
+                }
               }}
             >
-              {/* Active indicator */}
-              {active && (
+              <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center', color: 'inherit' }}>{item.icon}</span>
+              {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
+              {item.badge && pendingCount > 0 && (
                 <span style={{
-                  position: 'absolute',
-                  top: 0, left: '25%', right: '25%',
-                  height: 2,
-                  background: '#0d9488',
-                  borderRadius: '0 0 var(--r-sm) var(--r-sm)',
-                }}/>
+                  background: '#fee2e2',
+                  color: '#991b1b',
+                  fontSize: 11,
+                  fontWeight: 500,
+                  borderRadius: 9999,
+                  minWidth: 20,
+                  height: 20,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 6px',
+                  flexShrink: 0,
+                  fontFeatureSettings: '"ss03"',
+                }}>{pendingCount > 99 ? '99+' : pendingCount}</span>
               )}
-              <span style={{
-                display: 'flex',
-                padding: active ? '6px' : '4px',
-                borderRadius: 'var(--r-sm)',
-                background: active ? 'rgba(13,148,136,.15)' : 'transparent',
-                transition: 'all 150ms',
-              }}>
-                {item.icon}
-              </span>
-              {item.label}
-            </Link>
-          )
-        })}
+            </NavLink>
+          ))}
+        </div>
       </nav>
-    </>
-  )
+
+      {/* Footer */}
+      {!collapsed && (
+        <div style={{
+          padding: '16px 20px',
+          borderTop: '1px solid #1e2c31',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+        }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#c1fbd4' }} />
+          <span style={{ fontSize: 12, color: '#71717a', fontFeatureSettings: '"ss03"' }}>
+            Vyapari Autonomous Ops
+          </span>
+        </div>
+      )}
+    </aside>
+  );
 }
 
-// ── Icons ───────────────────────────────────────────────────────
-function GridIcon()    { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> }
-function BoxIcon()     { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg> }
-function TagIcon()     { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2H2v10l9.29 9.29a1 1 0 0 0 1.41 0l7.72-7.72a1 1 0 0 0 0-1.41z"/><path d="M7 7h.01"/></svg> }
-function StarIcon()    { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> }
-function OrderIcon()   { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> }
-function QueueIcon()   { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg> }
-function ClockIcon()   { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> }
-function ChartIcon()   { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg> }
-function SettingsIcon(){ return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> }
-function AgentIcon()   { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg> }
+/* ─── SVG Icons ─── */
+function OverviewIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>; }
+function BoxIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg>; }
+function TagIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M12 2H2v10l9.29 9.29a1 1 0 0 0 1.41 0l7.72-7.72a1 1 0 0 0 0-1.41z"/><path d="M7 7h.01"/></svg>; }
+function StarIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>; }
+function OrderIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" x2="21" y1="6" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>; }
+function FinanceIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>; }
+function ChartIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>; }
+function AiIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>; }
+function PlusIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>; }
+function GearIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>; }
+function BrainIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg>; }
+function ClockIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>; }
+function GraphIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>; }
+function ShieldIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>; }
+function UsersIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>; }
+function LockIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>; }
+function ChevronLeftIcon()  { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>; }
+function ChevronRightIcon() { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>; }

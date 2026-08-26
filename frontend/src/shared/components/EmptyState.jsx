@@ -1,56 +1,34 @@
-import React from 'react'
+import React from 'react';
 
-export default function EmptyState({ title = 'Nothing here yet', description = '', icon, action }) {
+/* ─── DESIGN.MD — EmptyState ───
+   Container: #0a0a0a card with #1e2c31 border and Level 1 elevation
+   Typography: Inter ss03
+───────────────────────────────── */
+
+export default function EmptyState({ icon = '📦', title = 'No items found', description = '', action }) {
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 16,
-      padding: '56px 24px',
-      textAlign: 'center',
-    }}>
-      {/* Icon / illustration */}
-      <div style={{
-        width: 64,
-        height: 64,
-        borderRadius: '50%',
-        background: 'var(--c-surface-2)',
-        border: '1px solid var(--c-border)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: 28,
-      }}>
-        {icon || <EmptyIcon />}
+    <div
+      style={{
+        textAlign: 'center',
+        padding: '64px 24px',
+        background: '#0a0a0a',
+        border: '1px solid #1e2c31',
+        borderRadius: 12,
+        boxShadow: '0 1px 2px rgba(255,255,255,0.05), inset 0 1px 0 rgba(255,255,255,0.04)',
+        fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+        fontFeatureSettings: '"ss03"',
+      }}
+    >
+      <div style={{ fontSize: '3rem', marginBottom: 16 }}>{icon}</div>
+      <div style={{ fontSize: 18, fontWeight: 500, color: '#ffffff', marginBottom: 8, fontFeatureSettings: '"ss03"' }}>
+        {title}
       </div>
-
-      <div>
-        <div style={{ fontWeight: 600, color: 'var(--c-text)', fontSize: 'var(--fs-md)', marginBottom: 6 }}>
-          {title}
-        </div>
-        {description && (
-          <div style={{ color: 'var(--c-text-muted)', fontSize: 'var(--fs-sm)', maxWidth: 320, lineHeight: 1.6 }}>
-            {description}
-          </div>
-        )}
-      </div>
-
-      {action && (
-        <div style={{ marginTop: 4 }}>
-          {action}
+      {description && (
+        <div style={{ fontSize: 14, color: '#71717a', maxWidth: 440, margin: '0 auto 24px', lineHeight: 1.5, fontFeatureSettings: '"ss03"' }}>
+          {description}
         </div>
       )}
+      {action && <div style={{ marginTop: 16 }}>{action}</div>}
     </div>
-  )
-}
-
-function EmptyIcon() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--c-text-faint)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="20" height="14" rx="2" />
-      <path d="M8 21h8M12 17v4" />
-    </svg>
-  )
+  );
 }

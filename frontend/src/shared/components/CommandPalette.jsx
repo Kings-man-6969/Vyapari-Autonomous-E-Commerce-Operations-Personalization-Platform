@@ -1,226 +1,191 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-/*
-  COMMAND PALETTE — ⌘K / Ctrl+K
-  Linear / Notion-style universal navigation
-  Space Grotesk, dark surface, instant filter
-*/
+/* ─── DESIGN.MD — Command Palette ───
+   Container: #0a0a0a with Level 2 elevation and #1e2c31 border
+   Item list: pill focus highlights, Inter ss03 typography
+─────────────────────────────────────── */
 
 const COMMANDS = [
-  // Seller
   { id: 'overview',   label: 'Dashboard Overview',     path: '/seller/overview',  group: 'Seller',       icon: '⬡' },
   { id: 'inventory',  label: 'Inventory Management',   path: '/seller/inventory', group: 'Seller',       icon: '📦' },
   { id: 'pricing',    label: 'Pricing Control',        path: '/seller/pricing',   group: 'Seller',       icon: '🏷' },
-  { id: 'reviews',    label: 'Review Manager',         path: '/seller/reviews',   group: 'Seller',       icon: '★' },
   { id: 'orders',     label: 'Order Management',       path: '/seller/orders',    group: 'Seller',       icon: '📋' },
   { id: 'finance',    label: 'Financial Dashboard',    path: '/seller/finance',   group: 'Seller',       icon: '₹' },
+  { id: 'reviews',    label: 'Review Manager',         path: '/seller/reviews',   group: 'Seller',       icon: '★' },
+  { id: 'analytics',  label: 'Performance Analytics',  path: '/seller/analytics', group: 'Seller',       icon: '📈' },
+  { id: 'agent',      label: 'AI Assistant',           path: '/seller/ai',        group: 'Seller',       icon: '🤖' },
   { id: 'settings',   label: 'Store Settings',         path: '/seller/settings',  group: 'Seller',       icon: '⚙' },
-  { id: 'agent',      label: 'AI Assistant',           path: '/seller/agent',     group: 'Seller',       icon: '🤖' },
-  // HITL
   { id: 'hitl',       label: 'Decision Queue',         path: '/hitl',             group: 'HITL Ops',     icon: '⚡' },
   { id: 'history',    label: 'Decision History',       path: '/hitl/history',     group: 'HITL Ops',     icon: '🕐' },
-  { id: 'analytics',  label: 'HITL Analytics',         path: '/hitl/analytics',   group: 'HITL Ops',     icon: '📊' },
-]
+  { id: 'hitl-stats', label: 'HITL Analytics',         path: '/hitl/analytics',   group: 'HITL Ops',     icon: '📊' },
+  { id: 'adm-vitals', label: 'Platform Vitals',        path: '/admin/overview',   group: 'Admin',        icon: '🛡️' },
+  { id: 'adm-users',  label: 'User Directory',         path: '/admin/users',      group: 'Admin',        icon: '👥' },
+  { id: 'adm-mod',    label: 'Moderation Queue',       path: '/admin/moderation', group: 'Admin',        icon: '🔒' },
+];
 
 export default function CommandPalette({ open, onClose }) {
-  const [query, setQuery] = useState('')
-  const [selected, setSelected] = useState(0)
-  const inputRef = useRef(null)
-  const navigate = useNavigate()
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState(0);
+  const inputRef = useRef(null);
+  const navigate = useNavigate();
 
   const filtered = query.trim().length === 0
     ? COMMANDS
     : COMMANDS.filter(c =>
         c.label.toLowerCase().includes(query.toLowerCase()) ||
         c.group.toLowerCase().includes(query.toLowerCase())
-      )
+      );
 
-  // Reset selection when filter changes
-  useEffect(() => { setSelected(0) }, [query])
+  useEffect(() => { setSelected(0); }, [query]);
 
-  // Focus input when opened
   useEffect(() => {
     if (open) {
-      setQuery('')
-      setSelected(0)
-      setTimeout(() => inputRef.current?.focus(), 30)
+      setQuery('');
+      setSelected(0);
+      setTimeout(() => inputRef.current?.focus(), 30);
     }
-  }, [open])
+  }, [open]);
 
-  const navigate_to = useCallback((path) => {
-    navigate(path)
-    onClose()
-  }, [navigate, onClose])
+  const navigateTo = useCallback((path) => {
+    navigate(path);
+    onClose();
+  }, [navigate, onClose]);
 
   function handleKey(e) {
     if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setSelected(s => Math.min(s + 1, filtered.length - 1))
+      e.preventDefault();
+      setSelected(s => Math.min(s + 1, filtered.length - 1));
     } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setSelected(s => Math.max(s - 1, 0))
+      e.preventDefault();
+      setSelected(s => Math.max(s - 1, 0));
     } else if (e.key === 'Enter') {
-      e.preventDefault()
-      if (filtered[selected]) navigate_to(filtered[selected].path)
+      e.preventDefault();
+      if (filtered[selected]) navigateTo(filtered[selected].path);
     } else if (e.key === 'Escape') {
-      onClose()
+      onClose();
     }
   }
 
-  if (!open) return null
-
-  // Group results
-  const groups = {}
-  filtered.forEach(c => {
-    if (!groups[c.group]) groups[c.group] = []
-    groups[c.group].push(c)
-  })
-
-  let globalIdx = 0
+  if (!open) return null;
 
   return (
     <>
-      {/* Backdrop */}
       <div
         onClick={onClose}
         style={{
-          position: 'fixed', inset: 0,
-          background: 'rgba(0,0,0,.65)',
-          backdropFilter: 'blur(6px)',
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(10px)',
           zIndex: 9000,
         }}
         aria-hidden="true"
       />
-      {/* Panel */}
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
         style={{
           position: 'fixed',
-          top: '18%', left: '50%',
+          top: '20vh',
+          left: '50%',
           transform: 'translateX(-50%)',
-          width: '100%', maxWidth: 560,
-          background: '#111827',
-          border: '1px solid rgba(255,255,255,.1)',
-          borderRadius: 14,
-          boxShadow: '0 32px 80px rgba(0,0,0,.7)',
+          width: '100%',
+          maxWidth: 560,
+          background: '#0a0a0a',
+          border: '1px solid #1e2c31',
+          borderRadius: 12,
+          boxShadow: '0 30px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.08)',
           zIndex: 9001,
           overflow: 'hidden',
-          animation: 'cmdSlideIn .18s ease forwards',
+          fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+          fontFeatureSettings: '"ss03"',
+          animation: 'modalIn 0.2s cubic-bezier(0.16,1,0.3,1) both',
         }}
-        onKeyDown={handleKey}
       >
-        {/* Search input */}
+        {/* Search header */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '14px 16px',
-          borderBottom: '1px solid rgba(255,255,255,.07)',
+          padding: '16px 20px',
+          borderBottom: '1px solid #1e2c31',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
         }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5" strokeLinecap="round">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-          </svg>
+          <span style={{ color: '#71717a', fontSize: 16 }}>🔍</span>
           <input
             ref={inputRef}
-            type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search commands, pages…"
+            onKeyDown={handleKey}
+            placeholder="Type a command or jump to page…"
             style={{
-              flex: 1, background: 'transparent', border: 'none', outline: 'none',
-              color: '#e2e8f0', fontSize: 15, fontFamily: "'Space Grotesk', sans-serif",
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              color: '#ffffff',
+              fontSize: 16,
+              outline: 'none',
+              fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+              fontFeatureSettings: '"ss03"',
             }}
-            aria-label="Command palette search"
           />
-          <kbd style={{
-            padding: '3px 7px', borderRadius: 5,
-            background: 'rgba(255,255,255,.07)',
-            border: '1px solid rgba(255,255,255,.1)',
-            fontSize: 11, color: '#64748b',
-            fontFamily: "'JetBrains Mono', monospace",
-          }}>ESC</kbd>
+          <span style={{
+            padding: '2px 8px',
+            borderRadius: 9999,
+            background: '#141414',
+            border: '1px solid #1e2c31',
+            color: '#71717a',
+            fontSize: 11,
+          }}>
+            ESC
+          </span>
         </div>
 
         {/* Results */}
-        <div style={{ maxHeight: 360, overflowY: 'auto', padding: '6px 0' }}>
+        <div style={{ maxHeight: 340, overflowY: 'auto', padding: '8px' }}>
           {filtered.length === 0 ? (
-            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#64748b', fontSize: 13, fontFamily: "'Space Grotesk', sans-serif" }}>
-              No results for "{query}"
+            <div style={{ padding: '32px 16px', textAlign: 'center', color: '#71717a', fontSize: 14 }}>
+              No commands found
             </div>
           ) : (
-            Object.entries(groups).map(([group, items]) => (
-              <div key={group}>
-                <div style={{
-                  padding: '8px 16px 4px',
-                  fontSize: 10, fontWeight: 700,
-                  color: '#475569', letterSpacing: '.08em',
-                  textTransform: 'uppercase',
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}>
-                  {group}
+            filtered.map((c, idx) => {
+              const isSelected = idx === selected;
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => navigateTo(c.path)}
+                  onMouseEnter={() => setSelected(idx)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    borderRadius: 8,
+                    background: isSelected ? '#1a1a1a' : 'transparent',
+                    color: isSelected ? '#ffffff' : 'rgba(255,255,255,0.75)',
+                    cursor: 'pointer',
+                    transition: 'all 0.1s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: 14, opacity: isSelected ? 1 : 0.6 }}>{c.icon}</span>
+                    <span style={{ fontSize: 14, fontWeight: isSelected ? 500 : 420 }}>{c.label}</span>
+                  </div>
+                  <span style={{
+                    fontSize: 11,
+                    color: '#71717a',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                  }}>
+                    {c.group}
+                  </span>
                 </div>
-                {items.map((cmd) => {
-                  const idx = globalIdx++
-                  const isSelected = idx === selected
-                  return (
-                    <button
-                      key={cmd.id}
-                      onClick={() => navigate_to(cmd.path)}
-                      onMouseEnter={() => setSelected(idx)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        width: '100%', padding: '9px 16px',
-                        background: isSelected ? 'rgba(13,148,136,.14)' : 'transparent',
-                        border: 'none', borderRadius: 0,
-                        color: isSelected ? '#2dd4bf' : '#cbd5e1',
-                        fontSize: 14, fontFamily: "'Space Grotesk', sans-serif",
-                        cursor: 'pointer', textAlign: 'left',
-                        transition: 'background 100ms, color 100ms',
-                        outline: isSelected ? '2px solid rgba(13,148,136,.4)' : 'none',
-                        outlineOffset: -2,
-                      }}
-                      aria-selected={isSelected}
-                    >
-                      <span style={{ fontSize: 15, width: 20, textAlign: 'center', flexShrink: 0 }}>{cmd.icon}</span>
-                      <span style={{ flex: 1 }}>{cmd.label}</span>
-                      {isSelected && (
-                        <kbd style={{
-                          padding: '2px 6px', borderRadius: 4,
-                          background: 'rgba(13,148,136,.2)',
-                          border: '1px solid rgba(13,148,136,.3)',
-                          fontSize: 10, color: '#14b8a6',
-                          fontFamily: "'JetBrains Mono', monospace",
-                        }}>↵</kbd>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            ))
+              );
+            })
           )}
-        </div>
-
-        {/* Footer hint */}
-        <div style={{
-          padding: '10px 16px',
-          borderTop: '1px solid rgba(255,255,255,.06)',
-          display: 'flex', gap: 16,
-        }}>
-          {[['↑↓', 'Navigate'], ['↵', 'Open'], ['ESC', 'Close']].map(([key, label]) => (
-            <span key={key} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#475569', fontFamily: "'Space Grotesk', sans-serif" }}>
-              <kbd style={{
-                padding: '2px 6px', borderRadius: 4,
-                background: 'rgba(255,255,255,.06)',
-                border: '1px solid rgba(255,255,255,.08)',
-                fontSize: 10, color: '#64748b',
-                fontFamily: "'JetBrains Mono', monospace",
-              }}>{key}</kbd>
-              {label}
-            </span>
-          ))}
         </div>
       </div>
     </>
-  )
+  );
 }

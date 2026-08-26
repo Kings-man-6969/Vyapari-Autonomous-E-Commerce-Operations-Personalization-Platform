@@ -1,112 +1,98 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useCallback } from 'react';
 
-/**
- * Modal — Accessible overlay dialog
- * @param {boolean} open
- * @param {function} onClose
- * @param {string} title
- * @param {React.ReactNode} children
- * @param {string} [size] - 'sm' | 'md' | 'lg'
- */
-export default function Modal({ open, onClose, title, children, size = 'md' }) {
-  const dialogRef = useRef(null)
+/* ─── DESIGN.MD — Modal Component ───
+   Background: #0a0a0a elevated card
+   Border: 1px solid #1e2c31
+   Elevation: Level 2 / Level 4 dialog
+   Buttons: pill-only (border-radius: 9999px)
+────────────────────────────────────── */
+
+export default function Modal({ open, title, children, onClose, maxWidth = 520 }) {
+  const handleKey = useCallback((e) => {
+    if (e.key === 'Escape') onClose();
+  }, [onClose]);
 
   useEffect(() => {
-    if (!open) return
-    const el = dialogRef.current
-    if (el) el.focus()
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
+    if (open) {
+      document.addEventListener('keydown', handleKey);
+      return () => document.removeEventListener('keydown', handleKey);
     }
-  }, [open, onClose])
+  }, [open, handleKey]);
 
-  if (!open) return null
-
-  const maxWidths = { sm: 400, md: 560, lg: 760 }
+  if (!open) return null;
 
   return (
     <div
-      style={overlayStyle}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
-      aria-modal="true"
-      role="dialog"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.75)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px',
+        animation: 'fadeIn 0.2s ease',
+      }}
+      onClick={onClose}
     >
       <div
-        ref={dialogRef}
-        tabIndex={-1}
-        style={{ ...dialogStyle, maxWidth: maxWidths[size] || maxWidths.md }}
-        className="animate-fade-in"
-        aria-labelledby="modal-title"
-        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#0a0a0a',
+          border: '1px solid #1e2c31',
+          borderRadius: 12,
+          padding: '32px',
+          width: '100%',
+          maxWidth,
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08)',
+          fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+          fontFeatureSettings: '"ss03"',
+          animation: 'modalIn 0.25s cubic-bezier(0.16,1,0.3,1) both',
+        }}
+        onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
-        <div style={headerStyle}>
-          <h3 id="modal-title" style={{ margin: 0, fontSize: 'var(--fs-lg)', fontWeight: 700, color: 'var(--c-text)' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 24,
+        }}>
+          <h3 style={{
+            fontSize: 20,
+            fontWeight: 500,
+            color: '#ffffff',
+            letterSpacing: '0.3px',
+            fontFeatureSettings: '"ss03"',
+          }}>
             {title}
           </h3>
-          <button onClick={onClose} style={closeStyle} aria-label="Close modal">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="m18 6-12 12M6 6l12 12" />
-            </svg>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 9999,
+              background: 'transparent',
+              border: '1px solid #1e2c31',
+              color: '#71717a',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 13,
+              transition: 'all 0.18s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#ffffff'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = '#71717a'; e.currentTarget.style.borderColor = '#1e2c31'; }}
+          >
+            ✕
           </button>
         </div>
-
-        {/* Body */}
-        <div style={{ padding: '0 24px 24px' }}>
-          {children}
-        </div>
+        {children}
       </div>
     </div>
-  )
-}
-
-const overlayStyle = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0, 0, 0, 0.72)',
-  backdropFilter: 'blur(4px)',
-  zIndex: 1000,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: 20,
-}
-
-const dialogStyle = {
-  width: '100%',
-  background: 'var(--c-surface)',
-  border: '1px solid var(--c-border)',
-  borderRadius: 'var(--radius-2xl)',
-  boxShadow: 'var(--shadow-xl)',
-  outline: 'none',
-  maxHeight: 'calc(100vh - 40px)',
-  overflow: 'auto',
-}
-
-const headerStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '20px 24px 16px',
-  borderBottom: '1px solid var(--c-border)',
-  marginBottom: 20,
-}
-
-const closeStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  width: 30,
-  height: 30,
-  borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--c-border)',
-  background: 'transparent',
-  color: 'var(--c-text-muted)',
-  cursor: 'pointer',
-  transition: 'all 150ms ease',
-  flexShrink: 0,
+  );
 }
