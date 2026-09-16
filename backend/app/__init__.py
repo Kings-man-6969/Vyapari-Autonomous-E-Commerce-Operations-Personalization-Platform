@@ -1,1 +1,0 @@
-"""Vyapari backend app package."""

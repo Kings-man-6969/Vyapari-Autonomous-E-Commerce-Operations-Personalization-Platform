@@ -1,0 +1,181 @@
+/* Seller Dashboard Module Styles */
+
+.layout {
+  display: flex;
+  min-height: 100svh;
+  background-color: var(--color-canvas-cream);
+}
+
+/* ── Sidebar ──────────────────────────────────────────────────────────────── */
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background-color: var(--color-canvas-light);
+  border-right: 1px solid var(--color-hairline-light);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  overflow-y: auto;
+}
+
+.sidebarLogo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-xl);
+  border-bottom: 1px solid var(--color-hairline-light);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  font-feature-settings: "ss03";
+}
+
+.sidebarLogo a {
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+.sidebarNav {
+  flex: 1;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-md);
+  color: var(--color-shade-60);
+  text-decoration: none;
+  font-size: var(--text-body-md-size);
+  font-weight: 450;
+  transition: background-color var(--duration-fast), color var(--duration-fast);
+}
+
+.navItem:hover {
+  background-color: var(--color-canvas-cream);
+  color: var(--color-ink);
+}
+
+.navItem.active {
+  background-color: var(--color-canvas-cream);
+  color: var(--color-ink);
+  font-weight: 550;
+}
+
+.navIcon { font-size: 18px; }
+
+.sidebarFooter {
+  padding: var(--space-xl);
+  border-top: 1px solid var(--color-hairline-light);
+}
+
+/* ── Main ──────────────────────────────────────────────────────────────────── */
+.main {
+  flex: 1;
+  padding: var(--space-xxl);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxl);
+}
+
+.topBar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+/* ── KYC Banner ───────────────────────────────────────────────────────────── */
+.kycBanner {
+  background-color: var(--color-pistachio-10);
+  border-radius: var(--radius-lg);
+  padding: var(--space-xl);
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  font-size: 24px;
+}
+
+.kycBanner > div { flex: 1; }
+
+/* ── Stats ────────────────────────────────────────────────────────────────── */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-lg);
+}
+
+.statCard {
+  display: flex;
+  flex-direction: column;
+}
+
+.statHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.statIcon { font-size: 24px; }
+
+/* ── Section ──────────────────────────────────────────────────────────────── */
+.section { display: flex; flex-direction: column; }
+
+.tableCard { padding: 0; overflow: hidden; }
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-body-md-size);
+}
+
+.table th {
+  text-align: left;
+  padding: var(--space-md) var(--space-xl);
+  font-size: var(--text-caption-size);
+  font-weight: 500;
+  color: var(--color-shade-50);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  background-color: var(--color-canvas-cream);
+  border-bottom: 1px solid var(--color-hairline-light);
+}
+
+.table td {
+  padding: var(--space-lg) var(--space-xl);
+  border-bottom: 1px solid var(--color-hairline-light);
+  color: var(--color-ink);
+}
+
+.table tbody tr:last-child td { border-bottom: none; }
+.table tbody tr:hover td { background-color: var(--color-canvas-cream); }
+
+/* ── Empty State ──────────────────────────────────────────────────────────── */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-lg);
+  padding: var(--space-huge);
+  border: 1px dashed var(--color-hairline-light);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 1023px) {
+  .statsGrid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 767px) {
+  .sidebar  { display: none; }
+  .main     { padding: var(--space-xl) var(--space-lg); }
+  .statsGrid { grid-template-columns: 1fr; }
+}
