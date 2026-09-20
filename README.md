@@ -1,385 +1,226 @@
-# 🛍️ Vyapari — Autonomous E-Commerce Operations & Personalization Platform
+# Vyapari — Autonomous E-Commerce Operations & Personalization Platform
 
-[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Next.js](https://img.shields.io/badge/Frontend-Next.js%2014-black?style=flat-square&logo=next.js&logoColor=white)](https://nextjs.org/)
-[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2016%20%2B%20pgvector-336791?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Redis](https://img.shields.io/badge/Cache%20%26%20Broker-Redis%207-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
-[![Celery](https://img.shields.io/badge/Task%20Queue-Celery-37814A?style=flat-square&logo=celery&logoColor=white)](https://docs.celeryq.dev/)
-[![Razorpay](https://img.shields.io/badge/Payments-Razorpay%20INR-0C2340?style=flat-square&logo=razorpay&logoColor=white)](https://razorpay.com/)
-
-**Vyapari** is a production-grade, dual-role e-commerce marketplace built specifically for the Indian market. It bridges buyers and sellers through tailored experiences: a high-converting transactional store for customers and an autonomous operations and analytics dashboard for sellers, backed by an AI/ML-ready foundation from Day 1.
+Vyapari is a production-grade, multi-role autonomous e-commerce platform benchmarked against Amazon, Flipkart, and Shopify. Built with a dual-AI microservice architecture, it combines real-time pgvector dense semantic search with agentic generative AI seller copilots, resilient transaction concurrency, and an intuitive multi-device responsive interface.
 
 ---
 
-## 📑 Table of Contents
+## 1. System Architecture
 
-- [Key Highlights](#-key-highlights)
-- [System Architecture](#-system-architecture)
-- [Design System & Aesthetics](#-design-system--aesthetics)
-- [Tech Stack](#-tech-stack)
-- [Repository Structure](#-repository-structure)
-- [Getting Started](#-getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Environment Configuration](#environment-configuration)
-  - [Running with Docker Compose (Recommended)](#running-with-docker-compose-recommended)
-  - [Running Backend & Frontend Locally](#running-backend--frontend-locally)
-- [API Reference](#-api-reference)
-- [Database & AI/ML Readiness](#-databaseml-readiness)
-- [Testing](#-testing)
-- [Contributing & Development Guidelines](#-contributing--development-guidelines)
+Vyapari is orchestrated as a 6-tier containerized ecosystem coordinated via Docker Compose:
 
----
-
-## 🌟 Key Highlights
-
-- 👥 **Dual-Role Marketplace**: Seamless customer and seller workflows with role-based routing and permissions.
-- 🔒 **KYC Verification Pipeline**: Strict seller onboarding with GSTIN/PAN validation, bank details verification, and an admin review queue. Sellers cannot list products until approved.
-- 💳 **Indian Market Payments**: Deep Razorpay integration with INR-first transactions (paise precision), HMAC-SHA256 signature verification, and webhook handling.
-- 🧠 **AI/ML Ready From Day 1**: PostgreSQL with `pgvector` enabled out of the box. Includes schemas for `product_embeddings`, `user_embeddings`, `user_events`, and `model_registry`. Rule-based fallback recommendations for MVP with direct upgrade paths to semantic search.
-- 🎨 **Shopifi-Inspired Two-Canvas Design System**:
-  - **Cinematic Dark (`#000000`)**: High-impact marketing, landing page hero, and footers.
-  - **Transactional Cream/Light (`#fbfbf5` / `#ffffff`)**: High-contrast, clean customer storefront, checkout, and seller management dashboards.
-  - **Typography**: Inter Display with OpenType stylistic set `ss03` enabled.
-- ⚡ **Asynchronous Background Processing**: Celery + Redis for order confirmation emails, KYC notifications, and scheduled embedding refreshes.
-
----
-
-## 🏗️ System Architecture
-
-```mermaid
-flowchart TD
-    subgraph Client Layer
-        Web["Next.js 14+ Frontend (App Router, Turbopack)"]
-    end
-
-    subgraph API & Gateway Layer
-        FastAPI["FastAPI Backend (Async / Uvicorn)"]
-    end
-
-    subgraph Service & Task Layer
-        AuthSvc["Auth Service (JWT & Google OAuth2)"]
-        OrderSvc["Order & Cart Service"]
-        PaySvc["Payment Service (Razorpay)"]
-        RecSvc["Recommendation Service"]
-        VecSvc["Vector Store Service (pgvector)"]
-        CeleryWorker["Celery Worker (SendGrid / Async Jobs)"]
-        CeleryBeat["Celery Beat (Scheduled Tasks)"]
-    end
-
-    subgraph Data & Storage Layer
-        Postgres[("PostgreSQL 16 + pgvector")]
-        Redis[("Redis 7 (Broker & Session Cache)")]
-    end
-
-    Web -->|HTTP / REST| FastAPI
-    FastAPI --> AuthSvc
-    FastAPI --> OrderSvc
-    FastAPI --> PaySvc
-    FastAPI --> RecSvc
-    FastAPI --> VecSvc
-
-    FastAPI -->|Enqueue Jobs| Redis
-    CeleryBeat -->|Trigger Periodic Tasks| Redis
-    Redis -->|Consume Tasks| CeleryWorker
-
-    AuthSvc --> Postgres
-    OrderSvc --> Postgres
-    PaySvc --> Postgres
-    RecSvc --> Postgres
-    VecSvc --> Postgres
+```
+                                  [ Browser / Client Viewport ]
+                                  (Desktop · Tablet · Mobile)
+                                                │
+                                                ▼ (Port 3000)
+                                  ┌───────────────────────────┐
+                                  │  Frontend (React 18/Vite) │
+                                  └─────────────┬─────────────┘
+                                                │ HTTP / REST
+                                                ▼ (Port 8000)
+                                  ┌───────────────────────────┐
+                                  │    Backend Core (Node.js) │
+                                  │    Express API Gateway    │
+                                  └──────┬──────┬──────┬──────┘
+                                         │      │      │
+                ┌────────────────────────┘      │      └────────────────────────┐
+                ▼ (Port 8001)                   ▼ (Port 5432)                   ▼ (Port 8002)
+    ┌───────────────────────┐       ┌───────────────────────┐       ┌───────────────────────┐
+    │ Service-Recommendation│       │   PostgreSQL 16 DB    │       │ Service-Seller-Agent  │
+    │ Python / FastAPI      │──────▶│   pgvector (384-dim)  │◀──────│ Python / FastAPI      │
+    │ (all-MiniLM-L6-v2)    │       │   + Redis 7 (Cache)   │       │ (Google Gemini RAG)   │
+    └───────────────────────┘       └───────────────────────┘       └───────────────────────┘
 ```
 
----
+### Component Responsibilities
 
-## 🎨 Design System & Aesthetics
-
-Vyapari adheres to the design specification described in [`DESIGN.md`](./DESIGN.md):
-
-| Element | Specification |
-| :--- | :--- |
-| **Canvas Modes** | **Cinematic Dark**: `#000000` (Hero, Marketing, Footers)<br>**Transactional Cream**: `#fbfbf5` / `#ffffff` (Store, Dashboards, Auth) |
-| **Accents** | **Aloe**: `#c1fbd4`, **Pistachio**: `#d4f9e0`, **Elevated Dark**: `#1e2c31` |
-| **Typography** | Primary font: **Inter / Inter Display** with OpenType feature `font-feature-settings: "ss03"` |
-| **Controls** | Pill-shaped CTA buttons (`border-radius: 9999px`), subtle hairline borders (`#e4e4e7` / `#1e2c31`), smooth elevation shadows |
+| Service | Technology | Port | Responsibilities |
+|---|---|---|---|
+| **Frontend** | React 18, Vite, Lucide Icons, Vanilla CSS | `3000` | Multi-role UI/UX (Customer, Seller, Admin), responsive 3-column PDP, search autocomplete popover, mobile sticky bottom purchase bar, sliding faceted drawer. |
+| **Backend Core** | Node.js, Express, `pg` Pool, JWT | `8000` | API Gateway, role authorization, ACID transaction management with `SELECT ... FOR UPDATE`, Natural Language Query parser, Razorpay simulated checkout. |
+| **Recommendation Service** | Python 3.11, FastAPI, SentenceTransformers | `8001` | Dense vector embeddings generation via `all-MiniLM-L6-v2` (384-dim), pgvector cosine similarity search (`1 - (pe.embedding <=> $1::vector)`), personalized recommendations. |
+| **Seller Agent Service** | Python 3.11, FastAPI, Google Gemini | `8002` | Automated listing generation, inventory velocity advisory, merchant copilot chat, Support RAG policy retrieval. |
+| **Database** | PostgreSQL 16 + pgvector v0.8.6 | `5432` | Relational tables, HNSW vector indexes (`vector_cosine_ops`), audit trails, order state machines, review reply threads. |
+| **Cache** | Redis 7 Alpine | `6379` | Session caching, vector lookup acceleration, search debounce caching. |
 
 ---
 
-## 💻 Tech Stack
+## 2. Core Functional Capabilities
 
-### Backend (`vyapari-backend/`)
-- **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.11+)
-- **ORM & DB Engine**: [SQLAlchemy 2.0](https://www.sqlalchemy.org/) (Async with `asyncpg`)
-- **Migrations**: [Alembic](https://alembic.sqlalchemy.org/) (Async configuration)
-- **Validation & Settings**: [Pydantic v2](https://docs.pydantic.dev/) + `pydantic-settings`
-- **Database**: PostgreSQL 16 with `pgvector` and `pg_trgm` extensions
-- **Background Tasks**: [Celery](https://docs.celeryq.dev/) with [Redis](https://redis.io/)
-- **Auth & Security**: JWT (jose), Passlib (bcrypt), Authlib (Google OAuth2)
-- **Payments**: Razorpay Python SDK (HMAC-SHA256 signature verification)
-- **Logging & Monitoring**: Structlog (JSON in prod, colored in dev), Sentry SDK
+### A. Customer Journey & Catalog Discovery
+- **Real-Time Autocomplete Popover (`/api/products/suggest`):**
+  - Debounced (220ms) instant dropdown beneath search inputs on all viewports.
+  - Displays product matches with image thumbnails, titles, brand/category tags, INR pricing, and gold star rating pills.
+  - Dynamic discovery badges for matching brands (with item count) and categories.
+  - Keyboard accessible (Escape dismisses, click-outside closes, clear button).
+- **Natural Language Query (NLQ) Search Engine:**
+  - Ingests free-form conversational queries (e.g., *"noise cancelling headphones under 10000 with fast delivery"*).
+  - Automatically parses price bounds (`price <= 10000`), quality intents (`min_rating = 4.0`), delivery constraints (`next_day = true`), and catalog brand mentions.
+  - Combines SQL constraints with pgvector 384-dimensional cosine similarity search into a hybrid match score.
+  - Displays an **AI Intelligence Banner** detailing extracted semantics and active filter pills.
+- **Faceted Product Catalog (`/explore`):**
+  - Left-hand sticky sidebar with brand checkboxes, price range presets, custom Min/Max inputs, 4★ & up customer rating filters, discount tags, and next-day delivery toggles.
+- **3-Column Amazon / Flipkart Standard PDP (`/products/:id`):**
+  - **Column 1:** Multi-image gallery with vertical thumbnail strip and hover staging view.
+  - **Column 2:** Brand authorized badge, full title, review ratings, savings breakdown, interactive bank offers & EMI widget, bulleted feature highlights, and technical specifications table.
+  - **Column 3:** Sticky Buy Box with 6-digit Pincode Delivery Estimator, live stock status, quantity picker, 256-bit SSL trust badge, and return policies.
+  - **Mobile Experience (<768px):** Clean single-column stack with a **Fixed Bottom Purchase Bar** pinned to the bottom of the viewport for instant checkout.
+- **Customer Reviews & Official Seller Reply Threads:**
+  - Public reviews displaying reviewer name, star rating, review headline, detailed comment, verified purchase badge, and helpful counter.
+  - Official seller reply boxes nested under reviews (`seller_reply`, `seller_reply_at`, store name, verified brand tag).
+- **Account Operations:**
+  - Wishlist management with instant optimistic heart toggles.
+  - Address Book with multiple delivery addresses and default shipping assignment.
+  - Notification Center for order milestones and platform announcements.
+  - Order tracking timeline with live order status (`pending`, `confirmed`, `shipped`, `delivered`).
 
-### Frontend (`vyapari-frontend/`)
-- **Framework**: [Next.js 14+](https://nextjs.org/) (App Router, Turbopack, TypeScript)
-- **Styling**: Pure Vanilla CSS with CSS Custom Properties and CSS Modules (no Tailwind lock-in)
-- **Data Fetching**: [SWR](https://swr.vercel.app/) + native `fetch`
-- **Icons**: [Lucide React](https://lucide.dev/)
-- **Token Management**: `js-cookie`
+### B. Seller Operations Console (`/seller/*`)
+- **4-Step Regulatory KYC Onboarding (`/seller/onboarding`):**
+  - Step 1: Business Profile & Brand Information.
+  - Step 2: Tax & Regulatory Identifiers (PAN & GSTIN validation).
+  - Step 3: Bank Settlement Coordinates (Account number, IFSC, Holder name).
+  - Step 4: Primary Category Selection & Regulatory Declaration.
+  - Real-time role elevation upon submission.
+- **Inventory Velocity Forecasting (`/seller/inventory`):**
+  - Computes 30-day sales velocity, estimated days of stock runway, and automatic stockout risk alert pills.
+- **AI Listing Studio (`/seller/ai-listing`):**
+  - Generates SEO-optimized descriptions, bullet highlights, and computes 384-dim dense embeddings directly into pgvector.
+- **Seller Reviews Desk (`/seller/reviews`):**
+  - Audit buyer feedback across entire store catalog, filter unanswered reviews, and publish official merchant responses.
+- **Order Fulfillment Desk (`/seller/orders`):**
+  - View buyer delivery snapshots, update fulfillment statuses, and assign courier providers (Blue Dart, Delhivery, DTDC) with AWB tracking numbers.
+- **Support RAG Policy Desk (`/seller/settings`):**
+  - Markdown editor for Return and Shipping policies, indexed for semantic RAG retrieval.
 
----
-
-## 📁 Repository Structure
-
-```text
-Vyapari-Autonomous-E-Commerce-Operations-Personalization-Platform/
-├── DESIGN.md                          # UI/UX design tokens and design principles
-├── Vyapari_Project_Specification.md   # Comprehensive product and technical spec
-├── README.md                          # Project overview and instructions
-├── memory.md                          # Engineering memory and design rationale
-│
-├── vyapari-backend/                   # FastAPI Backend
-│   ├── Dockerfile                     # Multi-stage Docker build
-│   ├── docker-compose.yml             # Full-stack local dev orchestration
-│   ├── requirements.txt               # Backend dependencies
-│   ├── alembic.ini                    # Database migration settings
-│   ├── .env.example                   # Environment variable template
-│   ├── scripts/
-│   │   └── init_db.sql                # PostgreSQL extension initialization
-│   └── app/
-│       ├── main.py                    # FastAPI application entrypoint
-│       ├── core/                      # Config, security, logging, RBAC dependencies
-│       ├── db/                        # Base models, async session, Alembic env
-│       ├── models/                    # SQLAlchemy ORM models (User, Product, Order, pgvector)
-│       ├── schemas/                   # Pydantic validation and serialization schemas
-│       ├── services/                  # Business logic (Auth, Order, Payment, Vector, Recs)
-│       ├── api/v1/                    # Version 1 REST API routers
-│       ├── tasks/                     # Celery application and background jobs
-│       ├── ml/                        # ML embedders and registry stubs
-│       └── tests/                     # Pytest suite with async SQLite test harness
-│
-└── vyapari-frontend/                  # Next.js 14+ Frontend
-    ├── package.json                   # Dependencies and scripts
-    ├── tsconfig.json                  # TypeScript compiler configuration
-    ├── next.config.ts                 # Next.js build configuration
-    ├── .env.example                   # Frontend environment template
-    ├── .env.local                     # Local dev environment config
-    └── app/
-        ├── layout.tsx                 # Root layout with SEO and font configurations
-        ├── globals.css                # Global design system tokens and utilities
-        ├── page.tsx                   # Cinematic Dark Landing Page
-        ├── page.module.css            # Landing page styles
-        ├── customer/
-        │   ├── login/                 # Customer login (Google OAuth + Email)
-        │   ├── signup/                # Two-step customer onboarding
-        │   ├── home/                  # Storefront, search, and category listing
-        │   └── auth.module.css        # Shared customer authentication styles
-        ├── seller/
-        │   ├── login/                 # Seller sign-in
-        │   ├── signup/                # Multi-step onboarding + KYC submission
-        │   └── dashboard/             # Seller overview, metrics & inventory
-        └── admin/
-            └── dashboard/             # Admin KYC review and approval queue
-```
+### C. Admin Governance Desk (`/admin/*`)
+- **Platform Executive Overview (`/admin`):**
+  - Live GMV metrics, gross transaction volumes, active merchant count, shopper registrations.
+- **User Governance (`/admin/users`):**
+  - Cross-platform user index with role-based filters and instant suspension/reactivation toggles.
+- **Merchant KYC Verification Desk (`/admin/sellers`):**
+  - Verification review workflow for merchant PAN, GSTIN, and settlement bank credentials.
+- **Catalog Governance (`/admin/products`):**
+  - Platform-wide catalog audit with compliance force-archive controls.
+- **System & AI Diagnostics (`/admin/system`):**
+  - Live PostgreSQL connection latency, pgvector extension verification, Redis cache health, and vector embedding coverage gauge with resync triggers.
 
 ---
 
-## 🚀 Getting Started
+## 3. Demo Credentials Reference
+
+All demo accounts use password: `Password@123`
+
+| Role | Email | Entity / Name | Focus Areas |
+|---|---|---|---|
+| **Customer** | `customer1@vyapari.com` | Aarav Sharma | NLQ search, autocomplete, 3-column PDP, wishlist, checkout, review submission |
+| **Customer** | `customer2@vyapari.com` | Priya Patel | Multi-item cart, order status tracking, address management |
+| **Seller** | `seller1@vyapari.com` | Rohan Mehra (*Aura Living India*) | Home & Lifestyle catalog, inventory forecasting, reviews desk |
+| **Seller** | `seller2@vyapari.com` | Ananya Singhania (*Volt Tech Studio*) | Audio & Electronics catalog, order fulfillment, AI listing studio |
+| **Seller** | `seller3@vyapari.com` | Vikramaditya Joshi (*AyurVeda Essentials*) | Wellness catalog, store settings, support RAG policies |
+| **Admin** | `admin@vyapari.com` | Vyapari Admin | Merchant KYC approvals, platform diagnostics, user governance |
+
+---
+
+## 4. Quickstart with Docker Compose
 
 ### Prerequisites
+- Docker Desktop installed and running
+- Git
 
-- **Docker & Docker Compose** (recommended for instant setup)
-- *OR* for local native development:
-  - **Python 3.11+**
-  - **Node.js 18+** & **npm 9+**
-  - **PostgreSQL 16** (with `pgvector` extension)
-  - **Redis 7**
-
----
-
-### Environment Configuration
-
-#### 1. Backend Configuration
-Create your `.env` file in `vyapari-backend/`:
+### 1. Clone & Configure
 ```bash
-cp vyapari-backend/.env.example vyapari-backend/.env
-```
-Key variables to check:
-```env
-APP_ENV=development
-SECRET_KEY=change_this_to_a_secure_random_string_32_chars_min
-DATABASE_URL=postgresql+asyncpg://vyapari_user:vyapari_pass@localhost:5432/vyapari_db
-REDIS_URL=redis://localhost:6379/0
-RAZORPAY_KEY_ID=rzp_test_placeholder
-RAZORPAY_KEY_SECRET=rzp_secret_placeholder
+git clone https://github.com/Kings-man-6969/Vyapari-Autonomous-E-Commerce-Operations-Personalization-Platform.git
+cd Vyapari-Autonomous-E-Commerce-Operations-Personalization-Platform
+cp .env.example .env
 ```
 
-#### 2. Frontend Configuration
-Create your `.env.local` file in `vyapari-frontend/`:
+### 2. Launch All Services
 ```bash
-cp vyapari-frontend/.env.example vyapari-frontend/.env.local
-```
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
----
-
-### Running with Docker Compose (Recommended)
-
-To start the complete platform (PostgreSQL with pgvector, Redis, FastAPI backend, and Next.js frontend):
-
-```bash
-cd vyapari-backend
 docker compose up --build
 ```
 
-Access the services:
-- **Customer Store & Landing**: [http://localhost:3000](http://localhost:3000)
-- **Seller Dashboard**: [http://localhost:3000/seller/dashboard](http://localhost:3000/seller/dashboard)
-- **Admin KYC Queue**: [http://localhost:3000/admin/dashboard](http://localhost:3000/admin/dashboard)
-- **FastAPI OpenAPI Interactive Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **API Health Check**: [http://localhost:8000/health](http://localhost:8000/health)
+### 3. Service Access Endpoints
+- **Web Application**: [http://localhost:3000](http://localhost:3000)
+- **Backend Core API Health**: [http://localhost:8000/health](http://localhost:8000/health)
+- **Recommendation Service Health**: [http://localhost:8001/health](http://localhost:8001/health)
+- **Seller Agent Service Health**: [http://localhost:8002/health](http://localhost:8002/health)
 
 ---
 
-### Running Backend & Frontend Locally
+## 5. Local Development (Without Docker)
 
-#### 1. Start Backend
+### Prerequisites
+- Node.js 18+
+- Python 3.11+
+- PostgreSQL 16 with pgvector extension enabled
+- Redis 7+
 
+### 1. Database Initialization
 ```bash
-cd vyapari-backend
-
-# 1. Create and activate virtual environment
-python -m venv .venv
-# On Windows:
-.venv\Scripts\activate
-# On Linux/macOS:
-source .venv/bin/activate
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Run database migrations
-alembic upgrade head
-
-# 4. Start the FastAPI development server
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+# Connect to local PostgreSQL instance
+psql -U postgres -d vyapari -f db/init.sql
+psql -U postgres -d vyapari -f db/seed.sql
 ```
 
-*(Optional) Start Celery Worker in a separate terminal:*
+### 2. Backend Core Gateway
 ```bash
-celery -A app.tasks.celery_app worker --loglevel=info
-```
-
-#### 2. Start Frontend
-
-```bash
-cd vyapari-frontend
-
-# 1. Install dependencies
-npm install --legacy-peer-deps
-
-# 2. Start the Next.js development server
+cd backend-core
+npm install
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Runs on `http://localhost:8000`.
 
----
-
-## 📡 API Reference
-
-Vyapari exposes a comprehensive RESTful API under `/api/v1`:
-
-### 🔐 Authentication (`/api/v1/auth`)
-| Method | Path | Description |
-| :--- | :--- | :--- |
-| `POST` | `/api/v1/auth/customer/signup` | Register a new customer account |
-| `POST` | `/api/v1/auth/seller/signup` | Register a new seller account (starts with KYC `pending`) |
-| `POST` | `/api/v1/auth/login` | Authenticate with email and password |
-| `POST` | `/api/v1/auth/refresh` | Obtain a new access token using a refresh token |
-| `GET` | `/api/v1/auth/oauth/google` | Initiate Google OAuth2 login flow |
-| `GET` | `/api/v1/auth/oauth/google/callback` | Google OAuth2 code exchange callback |
-
-### 🛍️ Customer Catalog & Cart (`/api/v1/catalog`, `/api/v1/customer`)
-| Method | Path | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/v1/catalog/categories` | Retrieve list of all categories |
-| `GET` | `/api/v1/catalog/products` | Paginated product listing with filters & search |
-| `GET` | `/api/v1/catalog/products/{id}` | Get full product detail (variants & images) |
-| `GET` | `/api/v1/catalog/products/{id}/reviews` | Fetch verified reviews for a product |
-| `POST` | `/api/v1/catalog/products/{id}/reviews` | Post a customer review (Customer role required) |
-| `GET` | `/api/v1/customer/cart` | Get current customer's shopping cart |
-| `POST` | `/api/v1/customer/cart/items` | Add item/variant to cart |
-| `PATCH` | `/api/v1/customer/cart/items/{id}` | Update quantity or toggle save-for-later |
-| `DELETE` | `/api/v1/customer/cart/items/{id}` | Remove item from cart |
-
-### 💳 Checkout & Orders (`/api/v1/customer/orders`)
-| Method | Path | Description |
-| :--- | :--- | :--- |
-| `POST` | `/api/v1/customer/orders/checkout` | Create order from cart & reserve stock |
-| `GET` | `/api/v1/customer/orders` | List order history for customer |
-| `GET` | `/api/v1/customer/orders/{id}` | Get details of a specific order |
-| `POST` | `/api/v1/customer/orders/{id}/cancel` | Cancel a pending/confirmed order |
-| `POST` | `/api/v1/customer/orders/{id}/pay` | Create Razorpay order for payment |
-| `POST` | `/api/v1/customer/orders/{id}/capture` | Verify Razorpay HMAC signature & capture payment |
-
-### 🏪 Seller Management (`/api/v1/seller`)
-| Method | Path | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/v1/seller/products` | List all seller products (KYC gated) |
-| `POST` | `/api/v1/seller/products` | Create a new product with auto-slugification |
-| `PATCH` | `/api/v1/seller/products/{id}` | Update product details/stock |
-| `DELETE` | `/api/v1/seller/products/{id}` | Soft-archive a product |
-| `GET` | `/api/v1/seller/orders` | Orders containing items sold by this seller |
-| `PATCH` | `/api/v1/seller/orders/{id}/status` | Update fulfillment state (processing, shipped, etc.) |
-| `GET` | `/api/v1/seller/analytics/revenue` | Revenue summary (total, order count, AOV) |
-| `GET` | `/api/v1/seller/analytics/top-products` | Top selling products by volume and revenue |
-
-### 🛡️ Admin KYC (`/api/v1/admin`)
-| Method | Path | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/v1/admin/sellers/pending` | Fetch queue of pending KYC submissions |
-| `POST` | `/api/v1/admin/sellers/{id}/kyc` | Approve or reject seller KYC submission |
-
-### 🤖 AI/ML Recommendations (`/api/v1/ml/recommendations`)
-| Method | Path | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/v1/ml/recommendations/trending` | Trending products (order volume based fallback) |
-| `GET` | `/api/v1/ml/recommendations/bestsellers` | All-time bestsellers with optional category filter |
-| `GET` | `/api/v1/ml/recommendations/similar/{id}` | Similar products (pgvector similarity slot) |
-
----
-
-## 🧠 Database & ML Readiness
-
-Vyapari is engineered to avoid retroactive migrations when deploying machine learning models:
-1. **`product_embeddings` & `user_embeddings`**: Tables pre-configured with 768-dimensional `Vector(768)` columns (compatible with `sentence-transformers/all-mpnet-base-v2`).
-2. **`user_events`**: Append-only event tracking (`view`, `click`, `cart_add`, `wishlist_add`, `purchase`, `review`, `search`) capturing interactions from Day 1 to train future recommendation models.
-3. **`model_registry`**: Version tracking table supporting zero-downtime model cutovers and rollback.
-4. **`vector_store_service.py`**: Storage abstraction enabling instant switching between pgvector and external vector databases.
-
----
-
-## 🧪 Testing
-
-The backend includes an asynchronous testing suite utilizing `pytest`, `pytest-asyncio`, `httpx`, and in-memory SQLite fixtures.
-
-To execute tests:
+### 3. Frontend Web App
 ```bash
-cd vyapari-backend
-pytest app/tests/ -v
+cd frontend
+npm install
+npm run dev
+```
+Runs on `http://localhost:3000`.
+
+### 4. Recommendation Microservice
+```bash
+cd service-recommendation
+python -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+pip install -r requirements.txt
+uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload
+```
+
+### 5. Seller Agent Microservice
+```bash
+cd service-seller-agent
+python -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+pip install -r requirements.txt
+uvicorn src.main:app --host 0.0.0.0 --port 8002 --reload
 ```
 
 ---
 
-## 🤝 Contributing & Development Guidelines
+## 6. Automated Testing
 
-1. **Code Style**:
-   - Python: Follow PEP 8 with explicit type hints and Ruff/Black standards.
-   - TypeScript/React: Next.js App Router conventions with explicit interfaces.
-2. **Design Integrity**: Always use CSS Custom Properties declared in `app/globals.css` instead of hardcoded hex colors.
-3. **Database Integrity**: Never modify models without generating a matching Alembic migration (`alembic revision --autogenerate -m "description"`).
+### Backend Unit & Security Tests
+```bash
+cd backend-core
+npm test
+```
+Validates JWT authentication, bearer token extraction, and role authorization guards.
+
+### Frontend Build Validation
+```bash
+cd frontend
+npm run build
+```
+Validates zero JSX/CSS compile errors and builds production bundle assets.
 
 ---
 
-## 📄 License
+## 7. Documentation Inventory
 
-Vyapari is released under the **MIT License**.
+| Document | Purpose |
+|---|---|
+| [README.md](file:///c:/Users/gungu/Vyapari-Autonomous-E-Commerce-Operations-Personalization-Platform/README.md) | Platform overview, system architecture, quickstart instructions, and credentials. |
+| [product_bible.md](file:///c:/Users/gungu/Vyapari-Autonomous-E-Commerce-Operations-Personalization-Platform/product_bible.md) | Authoritative 80KB UX specification, user journeys, edge-case contracts, and API schemas. |
+| [DESIGN.md](file:///c:/Users/gungu/Vyapari-Autonomous-E-Commerce-Operations-Personalization-Platform/DESIGN.md) | Design system tokens, color palettes, typography scales, and responsive layout rules. |
+| [walkthrough.md](file:///c:/Users/gungu/Vyapari-Autonomous-E-Commerce-Operations-Personalization-Platform/walkthrough.md) | Comprehensive implementation walkthrough, verification test outputs, and feature audits. |

@@ -1,0 +1,159 @@
+# ==============================================================================
+# VYAPARI PLATFORM — Complete Docker Compose Stack
+# Target: Production-ready local development & orchestration
+# Notice: 'version' tag omitted per Docker Compose v2+ standard
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # Database: PostgreSQL 16 with pgvector extension enabled
+  # ----------------------------------------------------------------------------
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: vyapari-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vyapari}
+      POSTGRES_USER: ${POSTGRES_USER:-vyapari_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vyapari_secure_password}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vyapari_admin} -d ${POSTGRES_DB:-vyapari}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # Cache & Session Store: Redis 7 Alpine
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: vyapari-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # Python Sub-Service: Team A — Recommendation & Semantic Search (FastAPI)
+  # ----------------------------------------------------------------------------
+  service-recommendation:
+    build:
+      context: ./service-recommendation
+      dockerfile: Dockerfile
+    container_name: vyapari-recommendation
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      PORT: 8001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vyapari_admin}:${POSTGRES_PASSWORD:-vyapari_secure_password}@db:5432/${POSTGRES_DB:-vyapari}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ----------------------------------------------------------------------------
+  # Python Sub-Service: Team B — Agentic Seller Operations (FastAPI + Gemini)
+  # ----------------------------------------------------------------------------
+  service-seller-agent:
+    build:
+      context: ./service-seller-agent
+      dockerfile: Dockerfile
+    container_name: vyapari-seller-agent
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      PORT: 8002
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vyapari_admin}:${POSTGRES_PASSWORD:-vyapari_secure_password}@db:5432/${POSTGRES_DB:-vyapari}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8002/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ----------------------------------------------------------------------------
+  # Core Backend: Node.js + Express (API Gateway, Auth, Commerce, Approvals)
+  # ----------------------------------------------------------------------------
+  backend-core:
+    build:
+      context: ./backend-core
+      dockerfile: Dockerfile
+    container_name: vyapari-backend-core
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: 8000
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vyapari_admin}:${POSTGRES_PASSWORD:-vyapari_secure_password}@db:5432/${POSTGRES_DB:-vyapari}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-vyapari}
+      POSTGRES_USER: ${POSTGRES_USER:-vyapari_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vyapari_secure_password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-vyapari_jwt_access_secret_sample_key_change_in_production_384b}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-vyapari_jwt_refresh_secret_sample_key_change_in_production_384b}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-rzp_test_placeholder_key_id}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-rzp_test_placeholder_key_secret}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-rzp_webhook_placeholder_secret}
+      RECOMMENDATION_SERVICE_URL: http://service-recommendation:8001
+      SELLER_AGENT_SERVICE_URL: http://service-seller-agent:8002
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      service-recommendation:
+        condition: service_started
+      service-seller-agent:
+        condition: service_started
+
+  # ----------------------------------------------------------------------------
+  # Client Web Application: React 18 + Vite (SPA)
+  # ----------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: vyapari-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api}
+    depends_on:
+      backend-core:
+        condition: service_started
+
+volumes:
+  pgdata:
+  redisdata:
