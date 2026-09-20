@@ -1,0 +1,15 @@
+{
+  "pythonPath": "C:\\Users\\gungu\\AppData\\Local\\Programs\\Python\\Python310\\python.exe",
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": [
+        "backend-core-py",
+        "service-seller-agent",
+        "service-recommendation"
+      ]
+    }
+  ],
+  "reportMissingImports": "none",
+  "reportMissingTypeStubs": "none"
+}

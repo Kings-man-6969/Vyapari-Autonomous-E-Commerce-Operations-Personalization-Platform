@@ -162,11 +162,11 @@ psql -U postgres -d vyapari -f db/init.sql
 psql -U postgres -d vyapari -f db/seed.sql
 ```
 
-### 2. Backend Core Gateway
+### 2. Backend Core Gateway (Python FastAPI)
 ```bash
-cd backend-core
-npm install
-npm run dev
+cd backend-core-py
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 Runs on `http://localhost:8000`.
 
@@ -200,12 +200,12 @@ uvicorn src.main:app --host 0.0.0.0 --port 8002 --reload
 
 ## 6. Automated Testing
 
-### Backend Unit & Security Tests
+### Backend Unit & Endpoint Tests
 ```bash
-cd backend-core
-npm test
+cd backend-core-py
+python -m unittest discover -s tests -p "test_*.py"
 ```
-Validates JWT authentication, bearer token extraction, and role authorization guards.
+Validates all 15 routers, JWT authentication, role guards, NLQ query parsing, and business logic.
 
 ### Frontend Build Validation
 ```bash

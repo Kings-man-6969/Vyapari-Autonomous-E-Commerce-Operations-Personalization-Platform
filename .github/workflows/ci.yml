@@ -1,0 +1,91 @@
+name: Vyapari CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # Job 1: Backend Core Test Suite (FastAPI + P0 Guarantees)
+  # ----------------------------------------------------------------------------
+  test-backend-core:
+    name: Backend Core Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        working-directory: ./backend-core-py
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Unit and P0 Correctness Tests
+        working-directory: ./backend-core-py
+        run: |
+          python -m unittest discover -s tests -p "test_*.py"
+
+  # ----------------------------------------------------------------------------
+  # Job 2: AI Microservices Tests (Seller Agent & Recommendation)
+  # ----------------------------------------------------------------------------
+  test-ai-services:
+    name: AI Microservices Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Test Seller Agent Service
+        working-directory: ./service-seller-agent
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m unittest discover -s tests -p "test_*.py"
+
+      - name: Test Recommendation Service
+        working-directory: ./service-recommendation
+        run: |
+          pip install -r requirements.txt
+          python -m unittest discover -s tests -p "test_*.py"
+
+  # ----------------------------------------------------------------------------
+  # Job 3: Frontend Build & Type Validation (React 18 + Vite SPA)
+  # ----------------------------------------------------------------------------
+  build-frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Build Production SPA Bundle
+        working-directory: ./frontend
+        run: npm run build

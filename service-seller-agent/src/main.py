@@ -2,10 +2,25 @@ import os
 import json
 import logging
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import asyncpg
+import httpx
 from dotenv import load_dotenv
+
+try:
+    from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception
+except ImportError:
+    def retry(*args, **kwargs):
+        def decorator(f):
+            return f
+        return decorator
+    def stop_after_attempt(n): return None
+    def wait_random_exponential(*args, **kwargs): return None
+    def retry_if_exception(f): return None
+
+from src.quota import check_and_increment_quota
 
 load_dotenv()
 
@@ -22,6 +37,30 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://vyapari_admin:vyapari_sec
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
+# Immutable Prompt Versions for Audit Log Tracking
+PROMPT_VERSIONS = {
+    "listing": "listing_v1.2",
+    "inventory": "inventory_v1.1",
+    "support": "support_v1.1"
+}
+
+# Error Classification for Gemini Call Retries
+class RetryableGeminiError(Exception):
+    """Transient LLM provider error eligible for exponential backoff retry."""
+    pass
+
+def should_retry_gemini(exc: BaseException) -> bool:
+    if isinstance(exc, RetryableGeminiError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in {429, 500, 502, 503, 504}
+    if isinstance(exc, (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.NetworkError)):
+        return True
+    name = type(exc).__name__
+    if any(k in name for k in ["ResourceExhausted", "InternalServerError", "ServiceUnavailable", "DeadlineExceeded", "TooManyRequests"]):
+        return True
+    return False
+
 # Initialize Gemini Client if key exists
 _gemini_client = None
 if GEMINI_API_KEY:
@@ -33,15 +72,24 @@ if GEMINI_API_KEY:
     except Exception as e:
         logger.warning(f"Failed to initialize Gemini SDK: {e}")
 
+@retry(
+    retry=retry_if_exception(should_retry_gemini),
+    stop=stop_after_attempt(3),
+    wait=wait_random_exponential(min=1, max=10),
+    reraise=False
+)
 async def call_llm(prompt: str, system_instruction: str = "") -> str:
-    """Invokes Gemini with fallback to deterministic intelligence template if API key is not configured."""
+    """Invokes Gemini with exponential backoff & jitter; fallback to deterministic intelligence template."""
     if _gemini_client:
         try:
             full_prompt = f"System: {system_instruction}\nUser: {prompt}" if system_instruction else prompt
             response = _gemini_client.generate_content(full_prompt)
             return response.text
         except Exception as e:
-            logger.error(f"Gemini call failed ({e}), falling back to deterministic agent template")
+            if should_retry_gemini(e):
+                logger.warning(f"Transient Gemini failure ({e}), triggering exponential backoff retry...")
+                raise RetryableGeminiError(str(e)) from e
+            logger.error(f"Non-retryable Gemini call failed ({e}), falling back to deterministic agent template")
     
     # Deterministic fallback response to keep the local test and demonstration functioning
     return ""
@@ -96,11 +144,20 @@ async def health():
 
 @app.post("/agents/generate-listing")
 async def generate_listing(req: ListingGenRequest):
+    # 1. Budget Quota Enforcement
+    allowed, reason, retry_after = await check_and_increment_quota(req.seller_id, estimated_tokens=1500)
+    if not allowed:
+        return JSONResponse(
+            status_code=429,
+            content={"code": "DAILY_AI_QUOTA_EXCEEDED", "message": reason},
+            headers={"Retry-After": str(retry_after)}
+        )
+
     pool = await get_db_pool()
     if not pool:
         raise HTTPException(status_code=503, detail="Database pool unavailable")
     
-    # Prompt for Gemini
+    # 2. Prompt for Gemini
     system_prompt = (
         "You are an expert e-commerce catalog specialist. Output ONLY valid JSON with keys: "
         "'title' (max 80 chars), 'description' (2-3 compelling paragraphs), 'tags' (array of strings), "
@@ -176,16 +233,40 @@ async def generate_listing(req: ListingGenRequest):
                 json.dumps(approval_payload)
             )
 
+            # 4. Record Immutable Audit Log with Prompt Versioning
+            await conn.execute(
+                """
+                INSERT INTO agent_audit_log (seller_id, agent_type, prompt_version, action_type, reference_id, task_id, input_tokens, output_tokens)
+                VALUES ($1::uuid, 'listing_agent', $2, 'generate_listing', $3::uuid, $4::uuid, $5, $6);
+                """,
+                req.seller_id,
+                PROMPT_VERSIONS["listing"],
+                draft_id,
+                task_id,
+                len(user_prompt.split()),
+                len(json.dumps(data).split())
+            )
+
             return {
                 "success": True,
                 "task_id": str(task_id),
                 "draft_id": str(draft_id),
                 "approval_id": str(queue_row["id"]),
+                "prompt_version": PROMPT_VERSIONS["listing"],
                 "generated": data
             }
 
 @app.post("/agents/inventory-advisory")
 async def generate_inventory_advisory(req: InventoryAdvisoryRequest):
+    # 1. Budget Quota Enforcement
+    allowed, reason, retry_after = await check_and_increment_quota(req.seller_id, estimated_tokens=500)
+    if not allowed:
+        return JSONResponse(
+            status_code=429,
+            content={"code": "DAILY_AI_QUOTA_EXCEEDED", "message": reason},
+            headers={"Retry-After": str(retry_after)}
+        )
+
     pool = await get_db_pool()
     if not pool:
         raise HTTPException(status_code=503, detail="Database pool unavailable")
@@ -244,11 +325,26 @@ async def generate_inventory_advisory(req: InventoryAdvisoryRequest):
                 json.dumps({"days_left": days_left, "reorder": recommended_reorder, "reasoning": reasoning}),
             )
 
+            # Record Immutable Audit Log with Prompt Versioning
+            await conn.execute(
+                """
+                INSERT INTO agent_audit_log (seller_id, agent_type, prompt_version, action_type, reference_id, task_id, input_tokens, output_tokens)
+                VALUES ($1::uuid, 'inventory_advisor', $2, 'inventory_advisory', $3::uuid, $4::uuid, $5, $6);
+                """,
+                req.seller_id,
+                PROMPT_VERSIONS["inventory"],
+                adv_id,
+                task_id,
+                50,
+                len(reasoning.split())
+            )
+
             return {
                 "success": True,
                 "task_id": str(task_id),
                 "advisory_id": str(adv_id),
                 "approval_id": str(queue_row["id"]),
+                "prompt_version": PROMPT_VERSIONS["inventory"],
                 "days_of_stock_left": days_left,
                 "demand_trend": trend,
                 "recommended_reorder_qty": recommended_reorder,
@@ -257,6 +353,15 @@ async def generate_inventory_advisory(req: InventoryAdvisoryRequest):
 
 @app.post("/agents/support-reply")
 async def generate_support_reply(req: SupportReplyRequest):
+    # 1. Budget Quota Enforcement
+    allowed, reason, retry_after = await check_and_increment_quota(req.seller_id, estimated_tokens=800)
+    if not allowed:
+        return JSONResponse(
+            status_code=429,
+            content={"code": "DAILY_AI_QUOTA_EXCEEDED", "message": reason},
+            headers={"Retry-After": str(retry_after)}
+        )
+
     pool = await get_db_pool()
     if not pool:
         raise HTTPException(status_code=503, detail="Database pool unavailable")
@@ -322,11 +427,26 @@ async def generate_support_reply(req: SupportReplyRequest):
                 json.dumps({"intent": intent, "customer_query": req.customer_query, "draft_response": draft, "risk_level": risk_level})
             )
 
+            # Record Immutable Audit Log with Prompt Versioning
+            await conn.execute(
+                """
+                INSERT INTO agent_audit_log (seller_id, agent_type, prompt_version, action_type, reference_id, task_id, input_tokens, output_tokens)
+                VALUES ($1::uuid, 'support_rag', $2, 'support_reply', $3::uuid, $4::uuid, $5, $6);
+                """,
+                req.seller_id,
+                PROMPT_VERSIONS["support"],
+                reply_id,
+                task_id,
+                len(req.customer_query.split()),
+                len(draft.split())
+            )
+
             return {
                 "success": True,
                 "task_id": str(task_id),
                 "reply_id": str(reply_id),
                 "approval_id": str(queue_row["id"]),
+                "prompt_version": PROMPT_VERSIONS["support"],
                 "intent": intent,
                 "risk_level": risk_level,
                 "draft_response": draft
