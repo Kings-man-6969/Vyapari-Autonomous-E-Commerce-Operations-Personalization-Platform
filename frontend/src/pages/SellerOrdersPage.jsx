@@ -4,11 +4,8 @@ import {
   Package, 
   Truck, 
   CheckCircle2, 
-  Clock, 
-  Search, 
   AlertCircle, 
   X,
-  ExternalLink,
   MapPin
 } from 'lucide-react';
 import api from '../services/api';
@@ -22,7 +19,7 @@ export const SellerOrdersPage = () => {
   // Fulfill modal state
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [trackingNumber, setTrackingNumber] = useState('');
-  const [carrier, setCarrier] = useState('Bluedart');
+  const [carrier, setCarrier] = useState('delhivery');
   const [fulfillStatus, setFulfillStatus] = useState('shipped');
   const [submitting, setSubmitting] = useState(false);
 
@@ -47,7 +44,7 @@ export const SellerOrdersPage = () => {
   const openFulfillModal = (order) => {
     setSelectedOrder(order);
     setTrackingNumber(order.tracking_number || '');
-    setCarrier(order.carrier || 'Bluedart');
+    setCarrier(order.carrier || 'delhivery');
     setFulfillStatus(order.status === 'processing' ? 'shipped' : order.status);
   };
 
@@ -85,11 +82,11 @@ export const SellerOrdersPage = () => {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
-            Fulfillment Orders
+          <h1 className="heading-whisper" style={{ fontSize: '26px' }}>
+            Merchant Fulfillment Desk
           </h1>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: '4px' }}>
-            Process customer purchases, generate shipping labels, and dispatch consignments
+          <p style={{ color: 'var(--color-tide-pool)', fontSize: '13px', marginTop: '4px' }}>
+            Process customer purchases, assign courier logistics, and dispatch consignments
           </p>
         </div>
       </div>
@@ -97,46 +94,51 @@ export const SellerOrdersPage = () => {
       {actionMsg.text && (
         <div style={{
           padding: '12px 16px',
-          borderRadius: 'var(--radius-sm)',
+          borderRadius: '8px',
           marginBottom: '20px',
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          backgroundColor: actionMsg.type === 'success' ? 'var(--color-success-bg)' : 'var(--color-error-bg)',
-          color: actionMsg.type === 'success' ? 'var(--color-success)' : 'var(--color-error)',
-          fontSize: 'var(--font-size-sm)'
+          backgroundColor: actionMsg.type === 'success' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(244, 63, 94, 0.12)',
+          color: actionMsg.type === 'success' ? 'var(--color-icy-steel)' : 'var(--color-error)',
+          border: actionMsg.type === 'success' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(244, 63, 94, 0.3)',
+          fontSize: '13px'
         }}>
-          {actionMsg.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+          {actionMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
           <span>{actionMsg.text}</span>
         </div>
       )}
 
       {/* Filter Tabs */}
       <div style={{
-        background: '#ffffff',
-        border: '1px solid var(--color-border-card)',
-        borderRadius: 'var(--radius-md)',
-        padding: '14px 20px',
+        background: 'var(--color-forest-floor)',
+        border: '1px solid var(--color-iron-veil)',
+        borderRadius: '12px',
+        padding: '12px 18px',
         marginBottom: '20px',
         display: 'flex',
-        gap: '8px'
+        gap: '8px',
+        overflowX: 'auto'
       }}>
-        {['all', 'processing', 'shipped', 'delivered', 'cancelled'].map((st) => (
+        {['all', 'paid', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'].map((st) => (
           <button
             key={st}
             onClick={() => setStatusFilter(st)}
             style={{
               padding: '6px 14px',
-              borderRadius: 'var(--radius-full)',
-              fontSize: 'var(--font-size-xs)',
+              borderRadius: 'var(--radius-pills)',
+              fontSize: '12px',
               fontWeight: 600,
-              textTransform: 'capitalize',
-              backgroundColor: statusFilter === st ? 'var(--color-primary)' : 'var(--color-surface-subtle)',
-              color: statusFilter === st ? '#ffffff' : 'var(--color-text-secondary)',
-              transition: 'all var(--transition-fast)'
+              textTransform: 'uppercase',
+              letterSpacing: '0.03em',
+              backgroundColor: statusFilter === st ? '#ffffff' : 'var(--color-deep-canopy)',
+              color: statusFilter === st ? '#02090a' : 'var(--color-tide-pool)',
+              border: statusFilter === st ? '1px solid #ffffff' : '1px solid var(--color-iron-veil)',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
             }}
           >
-            {st}
+            {st.replace(/_/g, ' ')}
           </button>
         ))}
       </div>
@@ -150,10 +152,10 @@ export const SellerOrdersPage = () => {
         </div>
       ) : filteredOrders.length === 0 ? (
         <div className="table-card" style={{ textAlign: 'center', padding: '60px 24px' }}>
-          <Package size={40} color="var(--color-text-muted)" style={{ marginBottom: '16px' }} />
-          <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '6px' }}>No orders found</h3>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            There are currently no orders under this status.
+          <Package size={36} color="var(--color-ash-label)" style={{ margin: '0 auto 16px' }} />
+          <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#ffffff', marginBottom: '6px' }}>No orders found</h3>
+          <p style={{ color: 'var(--color-tide-pool)', fontSize: '13px' }}>
+            There are currently no orders under this status filter.
           </p>
         </div>
       ) : (
@@ -161,11 +163,11 @@ export const SellerOrdersPage = () => {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Order ID</th>
+                <th>Order Ref</th>
                 <th>Date</th>
-                <th>Customer & Address</th>
+                <th>Destination</th>
                 <th>Items Ordered</th>
-                <th>Total Value</th>
+                <th>Subtotal</th>
                 <th>Status</th>
                 <th>Fulfillment</th>
               </tr>
@@ -176,53 +178,52 @@ export const SellerOrdersPage = () => {
                 return (
                   <tr key={ord.id}>
                     <td>
-                      <span style={{ fontWeight: 700, fontSize: 'var(--font-size-xs)', fontFamily: 'monospace' }}>
+                      <span style={{ fontWeight: 600, fontSize: '12px', fontFamily: 'monospace', color: '#ffffff' }}>
                         #{ord.id.slice(0, 8).toUpperCase()}
                       </span>
                     </td>
                     <td>
-                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--color-ash-label)' }}>
                         {new Date(ord.created_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
                       </span>
                     </td>
                     <td>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 'var(--font-size-xs)' }}>
+                        <div style={{ fontWeight: 500, fontSize: '12px', color: '#ffffff' }}>
                           {ord.customer_name || 'Customer'}
                         </div>
-                        <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                        <div style={{ fontSize: '11px', color: 'var(--color-tide-pool)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
                           <MapPin size={11} />
                           <span>{ord.shipping_city || 'City'}, {ord.shipping_state || 'State'}</span>
                         </div>
                       </div>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                         {items.map((item, idx) => (
-                          <div key={idx} style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{item.quantity}x</span> {item.product_title}
+                          <div key={idx} style={{ fontSize: '12px', color: 'var(--color-tide-pool)' }}>
+                            <span style={{ fontWeight: 600, color: '#ffffff' }}>{item.quantity}x</span> {item.product_title}
                           </div>
                         ))}
                       </div>
                     </td>
                     <td>
-                      <div style={{ fontWeight: 700, fontSize: 'var(--font-size-sm)' }}>
+                      <div style={{ fontWeight: 600, fontSize: '13px', color: '#ffffff' }}>
                         ₹{parseFloat(ord.seller_subtotal || ord.total_amount).toLocaleString('en-IN')}
                       </div>
                     </td>
                     <td>
                       <span className={`status-pill status-pill-${ord.status}`}>
-                        {ord.status}
+                        {ord.status.replace(/_/g, ' ')}
                       </span>
                     </td>
                     <td>
                       <button
                         onClick={() => openFulfillModal(ord)}
-                        className="btn-outline"
-                        style={{ padding: '6px 12px', fontSize: 'var(--font-size-xs)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                        className="btn-small"
                       >
-                        <Truck size={14} />
-                        <span>Update Status</span>
+                        <Truck size={13} color="var(--color-icy-steel)" />
+                        <span>Dispatch</span>
                       </button>
                     </td>
                   </tr>
@@ -233,63 +234,64 @@ export const SellerOrdersPage = () => {
         </div>
       )}
 
-      {/* Fulfill Modal */}
+      {/* Dispatch Modal */}
       {selectedOrder && (
         <div className="modal-overlay">
           <div className="modal-dialog">
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Truck size={20} color="var(--color-primary)" />
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>
-                  Update Order #{selectedOrder.id.slice(0, 8).toUpperCase()}
+                <Truck size={18} color="var(--color-icy-steel)" />
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#ffffff' }}>
+                  Dispatch Order #{selectedOrder.id.slice(0, 8).toUpperCase()}
                 </h3>
               </div>
-              <button onClick={() => setSelectedOrder(null)} style={{ color: 'var(--color-text-secondary)' }}>
-                <X size={20} />
+              <button onClick={() => setSelectedOrder(null)} style={{ color: 'var(--color-ash-label)', cursor: 'pointer' }}>
+                <X size={18} />
               </button>
             </div>
             <form onSubmit={handleUpdateFulfillment}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">Update Order State</label>
+                  <label className="form-label">Order Lifecycle State</label>
                   <select
                     className="select-field"
                     value={fulfillStatus}
                     onChange={(e) => setFulfillStatus(e.target.value)}
                   >
-                    <option value="processing">Processing (In Packing)</option>
-                    <option value="shipped">Shipped (Dispatched with Courier)</option>
+                    <option value="processing">Processing (In Merchant Packing)</option>
+                    <option value="shipped">Shipped (Handed to Logistics Partner)</option>
+                    <option value="out_for_delivery">Out for Delivery</option>
                     <option value="delivered">Delivered (Completed)</option>
                     <option value="cancelled">Cancelled</option>
                   </select>
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Logistics Carrier</label>
+                  <label className="form-label">Logistics Provider</label>
                   <select
                     className="select-field"
                     value={carrier}
                     onChange={(e) => setCarrier(e.target.value)}
                   >
-                    <option value="Bluedart">Blue Dart Express</option>
-                    <option value="Delhivery">Delhivery Surface</option>
-                    <option value="DTDC">DTDC Air</option>
-                    <option value="IndiaPost">India Post Speed Post</option>
-                    <option value="Shadowfax">Shadowfax Hyperlocal</option>
+                    <option value="delhivery">Delhivery Express</option>
+                    <option value="bluedart">Blue Dart Aviation</option>
+                    <option value="dtdc">DTDC Express</option>
+                    <option value="india_post">India Post Speed Post</option>
+                    <option value="self">Local Merchant Courier</option>
                   </select>
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Airway Bill / Tracking Number (AWB)</label>
+                  <label className="form-label">Airway Bill / Tracking Reference (AWB)</label>
                   <input
                     type="text"
                     className="input-field"
-                    placeholder="e.g., BLU98273910IN"
+                    placeholder="e.g., DEL98273910IN"
                     value={trackingNumber}
                     onChange={(e) => setTrackingNumber(e.target.value)}
                   />
-                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-                    Customer will receive this tracking code on their order timeline.
+                  <span style={{ fontSize: '11px', color: 'var(--color-tide-pool)', marginTop: '4px', display: 'block' }}>
+                    Tracking code is surfaced on customer order timeline.
                   </span>
                 </div>
               </div>
@@ -299,7 +301,7 @@ export const SellerOrdersPage = () => {
                   Cancel
                 </button>
                 <button type="submit" className="btn-primary" disabled={submitting}>
-                  <span>{submitting ? 'Saving...' : 'Update Fulfillment'}</span>
+                  <span>{submitting ? 'Updating...' : 'Confirm Dispatch'}</span>
                 </button>
               </div>
             </form>

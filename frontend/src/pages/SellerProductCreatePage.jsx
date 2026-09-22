@@ -8,12 +8,16 @@ import {
   Trash2, 
   CheckCircle2, 
   AlertCircle,
+  ShieldAlert,
+  Terminal,
   Image as ImageIcon
 } from 'lucide-react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export const SellerProductCreatePage = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
@@ -35,7 +39,7 @@ export const SellerProductCreatePage = () => {
     category_id: '',
     tags: '',
     images: ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80'],
-    status: 'active'
+    status: user?.seller_status === 'active' ? 'active' : 'draft'
   });
 
   useEffect(() => {
@@ -43,9 +47,10 @@ export const SellerProductCreatePage = () => {
       try {
         const res = await api.get('/categories');
         if (res.data?.success) {
-          setCategories(res.data.data);
-          if (res.data.data.length > 0) {
-            setFormData((prev) => ({ ...prev, category_id: res.data.data[0].id }));
+          const list = res.data.data?.categories || res.data.categories || (Array.isArray(res.data.data) ? res.data.data : []);
+          setCategories(list);
+          if (list.length > 0) {
+            setFormData((prev) => ({ ...prev, category_id: list[0].id }));
           }
         }
       } catch (err) {
@@ -55,7 +60,6 @@ export const SellerProductCreatePage = () => {
     fetchCategories();
   }, []);
 
-  // Auto-generate slug from title
   const handleTitleChange = (val) => {
     const generatedSlug = val
       .toLowerCase()
@@ -101,7 +105,7 @@ export const SellerProductCreatePage = () => {
           price: draft.suggested_price || prev.price
         }));
         setShowAiModal(false);
-        setStatusMsg({ type: 'success', text: 'AI drafted listing applied! Review and finalize below.' });
+        setStatusMsg({ type: 'success', text: 'Gemini formulation synthesized into product draft.' });
       }
     } catch (err) {
       // Fallback draft generation
@@ -110,11 +114,11 @@ export const SellerProductCreatePage = () => {
         ...prev,
         title: mockTitle,
         slug: mockTitle.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/[\s-]+/g, '-'),
-        description: `Premium quality ${mockTitle}. Handcrafted and tested for durability, performance, and modern aesthetics.\n\nSpecifications:\n${aiPrompt}`,
-        tags: 'premium, trending, artisanal'
+        description: `High-performance ${mockTitle}. Engineered with precision tolerances, durable structural components, and ergonomic finish.\n\nKey Specifications:\n${aiPrompt}`,
+        tags: 'artisan, durable, modern, verified'
       }));
       setShowAiModal(false);
-      setStatusMsg({ type: 'success', text: 'Generated product draft! You can adjust details below.' });
+      setStatusMsg({ type: 'success', text: 'Listing drafted from operational specifications.' });
     } finally {
       setAiGenerating(false);
     }
@@ -139,7 +143,7 @@ export const SellerProductCreatePage = () => {
         cost_price: formData.cost_price ? parseFloat(formData.cost_price) : null,
         inventory_count: parseInt(formData.inventory_count, 10) || 0,
         images: cleanedImages.length > 0 ? cleanedImages : ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80'],
-        tags: formData.tags.split(',').map((t) => t.trim()).filter(Boolean)
+        tags: typeof formData.tags === 'string' ? formData.tags.split(',').map((t) => t.trim()).filter(Boolean) : formData.tags
       };
 
       const res = await api.post('/seller/products', payload);
@@ -157,39 +161,90 @@ export const SellerProductCreatePage = () => {
   };
 
   return (
-    <div style={{ maxWidth: '960px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '1080px', margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Link to="/seller/products" style={{ color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center' }}>
-            <ArrowLeft size={20} />
+          <Link 
+            to="/seller/products" 
+            style={{ 
+              color: 'var(--color-tide-pool)', 
+              display: 'flex', 
+              alignItems: 'center',
+              padding: '6px',
+              borderRadius: '6px',
+              backgroundColor: 'var(--color-deep-canopy)',
+              border: '1px solid var(--color-iron-veil)'
+            }}
+          >
+            <ArrowLeft size={18} />
           </Link>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Create New Product</h1>
+          <div>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>
+              Create Listing
+            </h1>
+            <p style={{ color: 'var(--color-tide-pool)', fontSize: '0.8125rem', marginTop: '2px' }}>
+              Publish item to catalog and auto-generate 384D semantic embeddings
+            </p>
+          </div>
         </div>
+
         <button
           type="button"
           onClick={() => setShowAiModal(true)}
-          className="btn-outline"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)' }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            borderRadius: '9999px',
+            backgroundColor: 'var(--color-gunmetal-dark)',
+            border: '1px solid var(--color-border-steel)',
+            color: '#ffffff',
+            fontSize: '13px',
+            fontWeight: 500,
+            cursor: 'pointer'
+          }}
         >
-          <Sparkles size={16} />
+          <Sparkles size={15} color="var(--color-icy-steel)" />
           <span>Draft with AI Copilot</span>
         </button>
       </div>
 
+      {user?.seller_status === 'pending_kyc' && (
+        <div style={{
+          backgroundColor: 'rgba(234, 179, 8, 0.08)',
+          border: '1px solid rgba(234, 179, 8, 0.3)',
+          borderRadius: '8px',
+          padding: '12px 16px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          fontSize: '0.8125rem',
+          color: '#fef08a'
+        }}>
+          <ShieldAlert size={18} color="#facc15" style={{ flexShrink: 0 }} />
+          <span>
+            <strong>Store Verification Pending:</strong> Your account is currently in <code>pending_kyc</code> review. You can create and edit draft listings now; they will automatically be activated upon administrative review.
+          </span>
+        </div>
+      )}
+
       {statusMsg.text && (
         <div style={{
           padding: '12px 16px',
-          borderRadius: 'var(--radius-sm)',
+          borderRadius: '8px',
           marginBottom: '20px',
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          backgroundColor: statusMsg.type === 'success' ? 'var(--color-success-bg)' : 'var(--color-error-bg)',
-          color: statusMsg.type === 'success' ? 'var(--color-success)' : 'var(--color-error)',
-          fontSize: 'var(--font-size-sm)'
+          backgroundColor: statusMsg.type === 'success' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(239, 68, 68, 0.1)',
+          border: `1px solid ${statusMsg.type === 'success' ? 'rgba(56, 189, 248, 0.3)' : 'var(--color-status-cancelled)'}`,
+          color: statusMsg.type === 'success' ? 'var(--color-icy-steel)' : '#fca5a5',
+          fontSize: '0.875rem'
         }}>
-          {statusMsg.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+          {statusMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
           <span>{statusMsg.text}</span>
         </div>
       )}
@@ -199,14 +254,16 @@ export const SellerProductCreatePage = () => {
           {/* Main Column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {/* General Info Card */}
-            <div className="table-card" style={{ padding: '24px' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '16px' }}>General Information</h3>
+            <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '16px' }}>
+                Listing Specifications
+              </h3>
               <div className="form-group">
-                <label className="form-label">Product Title</label>
+                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Product Title</label>
                 <input
                   type="text"
                   className="input-field"
-                  placeholder="e.g., Handcrafted Ceramic Coffee Mug 350ml"
+                  placeholder="e.g., Handcrafted Matte Ceramic Mug 350ml"
                   value={formData.title}
                   onChange={(e) => handleTitleChange(e.target.value)}
                   required
@@ -214,7 +271,7 @@ export const SellerProductCreatePage = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">URL Slug</label>
+                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>URL Slug</label>
                 <input
                   type="text"
                   className="input-field"
@@ -225,11 +282,11 @@ export const SellerProductCreatePage = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Full Description</label>
+                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Product Narrative / Description</label>
                 <textarea
                   className="textarea-field"
                   rows="6"
-                  placeholder="Describe material, dimensions, care instructions, warranty..."
+                  placeholder="Describe material provenance, technical dimensions, care guidelines, and aesthetic design..."
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   required
@@ -237,11 +294,11 @@ export const SellerProductCreatePage = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Search & AI Tags (Comma separated)</label>
+                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Search Keywords & Semantic Tags (Comma separated)</label>
                 <input
                   type="text"
                   className="input-field"
-                  placeholder="ceramic, artisan, kitchenware, coffee mug"
+                  placeholder="ceramic, artisan, kitchenware, matte finish"
                   value={formData.tags}
                   onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
                 />
@@ -249,11 +306,13 @@ export const SellerProductCreatePage = () => {
             </div>
 
             {/* Pricing Card */}
-            <div className="table-card" style={{ padding: '24px' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '16px' }}>Pricing & Margins</h3>
+            <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '16px' }}>
+                Financial Parameters
+              </h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
-                  <label className="form-label">Selling Price (₹)</label>
+                  <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>List Price (₹)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -266,7 +325,7 @@ export const SellerProductCreatePage = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Compare-at Price (₹)</label>
+                  <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Compare Price (₹)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -278,7 +337,7 @@ export const SellerProductCreatePage = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Cost Price (₹)</label>
+                  <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Unit Cost (₹)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -293,16 +352,28 @@ export const SellerProductCreatePage = () => {
             </div>
 
             {/* Product Images Card */}
-            <div className="table-card" style={{ padding: '24px' }}>
+            <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Image Assets</h3>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>
+                  Media Assets
+                </h3>
                 <button
                   type="button"
                   onClick={handleAddImageUrl}
-                  style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                  style={{ 
+                    fontSize: '12px', 
+                    color: 'var(--color-icy-steel)', 
+                    fontWeight: 600, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '4px',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
                 >
                   <Plus size={14} />
-                  <span>Add Image URL</span>
+                  <span>Add URL</span>
                 </button>
               </div>
 
@@ -319,7 +390,13 @@ export const SellerProductCreatePage = () => {
                     <button
                       type="button"
                       onClick={() => handleRemoveImageUrl(idx)}
-                      style={{ color: 'var(--color-error)', padding: '8px' }}
+                      style={{ 
+                        color: '#f87171', 
+                        padding: '8px', 
+                        background: 'transparent', 
+                        border: 'none', 
+                        cursor: 'pointer' 
+                      }}
                     >
                       <Trash2 size={16} />
                     </button>
@@ -332,16 +409,18 @@ export const SellerProductCreatePage = () => {
           {/* Right Sidebar Column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {/* Status & Visibility Card */}
-            <div className="table-card" style={{ padding: '24px' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '16px' }}>Visibility</h3>
+            <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '16px' }}>
+                Inventory & Status
+              </h3>
               <div className="form-group">
-                <label className="form-label">Listing Status</label>
+                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Listing Status</label>
                 <select
                   className="select-field"
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                 >
-                  <option value="active">Active (Live in Marketplace)</option>
+                  <option value="active">Active (Public)</option>
                   <option value="draft">Draft (Private)</option>
                   <option value="out_of_stock">Out of Stock</option>
                   <option value="archived">Archived</option>
@@ -349,7 +428,7 @@ export const SellerProductCreatePage = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Category</label>
+                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Category Taxonomy</label>
                 <select
                   className="select-field"
                   value={formData.category_id}
@@ -363,7 +442,7 @@ export const SellerProductCreatePage = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Initial Inventory Units</label>
+                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Stock Units (Option B Atomic Allocation)</label>
                 <input
                   type="number"
                   min="0"
@@ -376,12 +455,26 @@ export const SellerProductCreatePage = () => {
 
               <button
                 type="submit"
-                className="btn-primary"
                 disabled={loading}
-                style={{ width: '100%', marginTop: '16px' }}
+                style={{
+                  width: '100%',
+                  marginTop: '16px',
+                  padding: '12px 24px',
+                  borderRadius: '9999px',
+                  backgroundColor: '#ffffff',
+                  color: '#02090a',
+                  fontWeight: 600,
+                  fontSize: '14px',
+                  border: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: loading ? 'not-allowed' : 'pointer'
+                }}
               >
                 <Save size={16} />
-                <span>{loading ? 'Publishing...' : 'Publish Product'}</span>
+                <span>{loading ? 'Committing...' : 'Commit Listing'}</span>
               </button>
             </div>
           </div>
@@ -391,40 +484,72 @@ export const SellerProductCreatePage = () => {
       {/* AI Draft Assistant Modal */}
       {showAiModal && (
         <div className="modal-overlay">
-          <div className="modal-dialog">
-            <div className="modal-header">
+          <div className="modal-dialog" style={{ backgroundColor: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)', maxWidth: '580px' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid var(--color-border-steel)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Sparkles size={20} color="var(--color-primary)" />
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>AI Listing Studio Copilot</h3>
+                <Sparkles size={18} color="var(--color-icy-steel)" />
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>
+                  AI Listing Formulation
+                </h3>
               </div>
-              <button onClick={() => setShowAiModal(false)} style={{ color: 'var(--color-text-secondary)' }}>
+              <button 
+                onClick={() => setShowAiModal(false)} 
+                style={{ background: 'transparent', border: 'none', color: 'var(--color-tide-pool)', fontSize: '20px', cursor: 'pointer' }}
+              >
                 &times;
               </button>
             </div>
             <form onSubmit={handleAiGenerate}>
               <div className="modal-body">
-                <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: '16px', lineHeight: 1.5 }}>
-                  Paste rough specs, supplier bullet points, or product features. The Gemini Team B agent will formulate an SEO-optimized title, comprehensive description, and semantic tags.
+                <p style={{ fontSize: '0.8125rem', color: 'var(--color-tide-pool)', marginBottom: '16px', lineHeight: 1.5 }}>
+                  Provide rough supplier notes, material tags, or bullet points. The agent synthesizes an SEO-structured narrative, tags, and suggested pricing.
                 </p>
                 <div className="form-group">
-                  <label className="form-label">Product Raw Notes / Bullet Points</label>
+                  <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Raw Specifications / Supplier Notes</label>
                   <textarea
                     className="textarea-field"
                     rows="6"
-                    placeholder="e.g., Organic cotton oversized hoodie, 400 GSM heavy fleece, pre-shrunk, drop-shoulder cut, available in charcoal and beige..."
+                    placeholder="e.g., Japanese titanium pour-over dripper, double-wall insulation, food-grade 304 mesh filter, 450ml capacity, lightweight camping and countertop use..."
                     value={aiPrompt}
                     onChange={(e) => setAiPrompt(e.target.value)}
                     required
                   />
                 </div>
               </div>
-              <div className="modal-footer">
-                <button type="button" onClick={() => setShowAiModal(false)} className="btn-outline">
+              <div className="modal-footer" style={{ borderTop: '1px solid var(--color-iron-veil)', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowAiModal(false)} 
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '9999px',
+                    backgroundColor: 'var(--color-deep-canopy)',
+                    border: '1px solid var(--color-iron-veil)',
+                    color: 'var(--color-tide-pool)',
+                    cursor: 'pointer'
+                  }}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary" disabled={aiGenerating}>
-                  <Sparkles size={16} />
-                  <span>{aiGenerating ? 'Drafting with Gemini...' : 'Generate Listing'}</span>
+                <button 
+                  type="submit" 
+                  disabled={aiGenerating}
+                  style={{
+                    padding: '8px 20px',
+                    borderRadius: '9999px',
+                    backgroundColor: '#ffffff',
+                    color: '#02090a',
+                    fontWeight: 600,
+                    fontSize: '13px',
+                    border: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    cursor: aiGenerating ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <Sparkles size={14} />
+                  <span>{aiGenerating ? 'Synthesizing...' : 'Generate Listing'}</span>
                 </button>
               </div>
             </form>

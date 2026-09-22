@@ -91,7 +91,7 @@ async def add_to_cart(
         )
 
     product = await db.fetchrow(
-        "SELECT id, stock_qty, status, price FROM products WHERE id = $1", body.product_id
+        "SELECT id, stock_qty, status, price FROM products WHERE id::text = $1", body.product_id
     )
     if not product:
         raise HTTPException(
@@ -109,25 +109,29 @@ async def add_to_cart(
     # Upsert — mirrors ON CONFLICT (cart_id, product_id) DO UPDATE
     await db.execute(
         """INSERT INTO cart_items (cart_id, product_id, quantity)
-           VALUES ($1, $2, $3)
+           VALUES ($1, $2::uuid, $3)
            ON CONFLICT (cart_id, product_id)
            DO UPDATE SET quantity = LEAST(cart_items.quantity + EXCLUDED.quantity, $4),
                          updated_at = CURRENT_TIMESTAMP""",
         cart_id,
-        body.product_id,
+        product["id"],
         body.quantity,
         product["stock_qty"],
     )
 
-    # Fire-and-forget interaction log (mirrors .catch(() => {}))
-    pool = get_pool()
-    asyncio.ensure_future(
-        pool.execute(
-            "INSERT INTO user_interactions (user_id, product_id, event_type) VALUES ($1, $2, 'add_to_cart')",
-            user["id"],
-            body.product_id,
-        )
-    )
+    # Fire-and-forget interaction log (safely handled)
+    try:
+        pool = get_pool()
+        if pool:
+            asyncio.ensure_future(
+                pool.execute(
+                    "INSERT INTO user_interactions (user_id, product_id, event_type) VALUES ($1, $2, 'add_to_cart')",
+                    user["id"],
+                    product["id"],
+                )
+            )
+    except Exception:
+        pass
 
     return {"success": True, "message": "Item added to cart."}
 
@@ -150,7 +154,7 @@ async def update_cart_item(
 
     if body.quantity <= 0:
         await db.execute(
-            "DELETE FROM cart_items WHERE id = $1 AND cart_id = $2", id, cart_id
+            "DELETE FROM cart_items WHERE id::text = $1 AND cart_id = $2", id, cart_id
         )
         return {"success": True, "message": "Item removed from cart."}
 
@@ -158,7 +162,7 @@ async def update_cart_item(
         """SELECT ci.id, p.stock_qty
            FROM cart_items ci
            JOIN products p ON ci.product_id = p.id
-           WHERE ci.id = $1 AND ci.cart_id = $2""",
+           WHERE ci.id::text = $1 AND ci.cart_id = $2""",
         id,
         cart_id,
     )
@@ -171,7 +175,7 @@ async def update_cart_item(
 
     capped_qty = min(body.quantity, item["stock_qty"])
     await db.execute(
-        "UPDATE cart_items SET quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+        "UPDATE cart_items SET quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id::text = $2",
         capped_qty,
         id,
     )
@@ -185,7 +189,7 @@ async def remove_cart_item(
 ) -> dict:
     cart_id = await get_or_create_cart(user["id"], db)
     await db.execute(
-        "DELETE FROM cart_items WHERE id = $1 AND cart_id = $2", id, cart_id
+        "DELETE FROM cart_items WHERE id::text = $1 AND cart_id = $2", id, cart_id
     )
     return {"success": True, "message": "Item removed."}
 

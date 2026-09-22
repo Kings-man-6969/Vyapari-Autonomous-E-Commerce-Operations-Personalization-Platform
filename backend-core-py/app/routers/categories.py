@@ -44,8 +44,16 @@ async def get_categories(db=Depends(get_db)) -> dict:
             if sub.get("parent_id"):
                 sub["parent_id"] = str(sub["parent_id"])
 
-    # Mirror Node.js response: data (flat), categories (tree), flat (flat)
-    return {"success": True, "data": all_cats, "categories": tree, "flat": all_cats}
+    # Mirror Node.js and API response shape: data with categories tree and flat list, plus top-level compatibility
+    return {
+        "success": True,
+        "data": {
+            "categories": tree,
+            "flat": all_cats,
+        },
+        "categories": tree,
+        "flat": all_cats,
+    }
 
 
 @router.get("/{slug}")
@@ -62,7 +70,7 @@ async def get_category_by_slug(slug: str, db=Depends(get_db)) -> dict:
 
     products = await db.fetch(
         """SELECT p.id, p.title, p.slug, p.price, p.compare_at_price, p.images,
-                  p.stock_qty, p.status, sp.store_name
+                  p.stock_qty, p.stock_qty AS inventory_count, p.status, sp.store_name
            FROM products p
            JOIN seller_profiles sp ON p.seller_id = sp.user_id
            WHERE (p.category_id = $1 OR p.category_id IN (

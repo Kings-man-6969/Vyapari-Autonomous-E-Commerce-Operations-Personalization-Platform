@@ -5,7 +5,6 @@ import {
   Lock, 
   MapPin, 
   Package, 
-  Heart, 
   CheckCircle2, 
   AlertCircle, 
   Save, 
@@ -102,75 +101,76 @@ export const AccountPage = () => {
   };
 
   return (
-    <div className="container" style={{ padding: '40px 24px', maxWidth: '1000px' }}>
+    <div style={{ padding: '40px 24px 80px', maxWidth: '1080px', margin: '0 auto' }}>
       <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
-          Account Settings
+        <h1 style={{ fontSize: '1.85rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>
+          Account & Security
         </h1>
-        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: '4px' }}>
-          Manage your personal information, security credentials, and preferences
+        <p style={{ color: 'var(--color-tide-pool)', fontSize: '0.875rem', marginTop: '4px' }}>
+          Manage personal credentials, session security, and saved delivery endpoints
         </p>
       </div>
 
       {/* Account Navigation Tabs */}
-      <div className="tab-list">
+      <div className="tab-list" style={{ marginBottom: '24px' }}>
         <button
           onClick={() => setActiveTab('profile')}
           className={`tab-button ${activeTab === 'profile' ? 'active' : ''}`}
           style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
         >
-          <User size={16} />
-          <span>Personal Info</span>
+          <User size={15} />
+          <span>Profile Info</span>
         </button>
         <button
           onClick={() => setActiveTab('security')}
           className={`tab-button ${activeTab === 'security' ? 'active' : ''}`}
           style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
         >
-          <KeyRound size={16} />
-          <span>Password & Security</span>
+          <KeyRound size={15} />
+          <span>Security & Keys</span>
         </button>
         <Link
           to="/account/addresses"
           className="tab-button"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}
         >
-          <MapPin size={16} />
+          <MapPin size={15} />
           <span>Address Book</span>
         </Link>
         <Link
           to="/orders"
           className="tab-button"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}
         >
-          <Package size={16} />
-          <span>My Orders</span>
+          <Package size={15} />
+          <span>Orders</span>
         </Link>
       </div>
 
       {/* Tab: Personal Info */}
       {activeTab === 'profile' && (
-        <div className="table-card" style={{ padding: '32px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '28px', paddingBottom: '20px', borderBottom: '1px solid var(--color-border-card)' }}>
+        <div className="table-card" style={{ padding: '32px', backgroundColor: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '28px', paddingBottom: '20px', borderBottom: '1px solid var(--color-border-steel)' }}>
             <div style={{
-              width: '56px',
-              height: '56px',
+              width: '52px',
+              height: '52px',
               borderRadius: '50%',
-              backgroundColor: 'var(--color-primary-light)',
-              color: 'var(--color-primary)',
+              backgroundColor: 'var(--color-slate-chrome)',
+              border: '1px solid var(--color-border-chrome)',
+              color: 'var(--color-icy-steel)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '1.5rem',
-              fontWeight: 800
+              fontSize: '1.25rem',
+              fontWeight: 600
             }}>
               {name ? name[0].toUpperCase() : 'U'}
             </div>
             <div>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>{name || user?.name}</h2>
+              <h2 style={{ fontSize: '1.15rem', fontWeight: 500, color: '#ffffff' }}>{name || user?.name}</h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>{user?.email}</span>
-                <span className="badge badge-primary" style={{ textTransform: 'capitalize' }}>{user?.role}</span>
+                <span style={{ fontSize: '12px', color: 'var(--color-steel-mist)' }}>{user?.email}</span>
+                <span className="badge-agent" style={{ textTransform: 'capitalize', fontSize: '11px' }}>{user?.role}</span>
               </div>
             </div>
           </div>
@@ -178,23 +178,24 @@ export const AccountPage = () => {
           {profileMsg.text && (
             <div style={{
               padding: '12px 16px',
-              borderRadius: 'var(--radius-sm)',
+              borderRadius: '8px',
               marginBottom: '20px',
               display: 'flex',
               alignItems: 'center',
               gap: '10px',
-              backgroundColor: profileMsg.type === 'success' ? 'var(--color-success-bg)' : 'var(--color-error-bg)',
-              color: profileMsg.type === 'success' ? 'var(--color-success)' : 'var(--color-error)',
-              fontSize: 'var(--font-size-sm)'
+              backgroundColor: profileMsg.type === 'success' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(239, 68, 68, 0.1)',
+              border: `1px solid ${profileMsg.type === 'success' ? 'rgba(56, 189, 248, 0.3)' : 'var(--color-status-cancelled)'}`,
+              color: profileMsg.type === 'success' ? 'var(--color-icy-steel)' : '#fca5a5',
+              fontSize: '0.875rem'
             }}>
-              {profileMsg.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+              {profileMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
               <span>{profileMsg.text}</span>
             </div>
           )}
 
           <form onSubmit={handleUpdateProfile} style={{ maxWidth: '560px' }}>
             <div className="form-group">
-              <label className="form-label">Full Name</label>
+              <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Full Name</label>
               <input
                 type="text"
                 className="input-field"
@@ -205,20 +206,21 @@ export const AccountPage = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Email Address (Immutable)</label>
+              <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Email Address (Verified)</label>
               <input
                 type="email"
                 className="input-field"
                 value={user?.email || ''}
                 disabled
+                style={{ opacity: 0.6 }}
               />
-              <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-                Your email is verified and tied to your marketplace identity.
+              <span style={{ fontSize: '11px', color: 'var(--color-ash-label)', marginTop: '4px', display: 'block' }}>
+                Your email is tied to cryptographic refresh-token cookie rotation.
               </span>
             </div>
 
             <div className="form-group">
-              <label className="form-label">Phone Number</label>
+              <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Phone Number</label>
               <input
                 type="tel"
                 className="input-field"
@@ -230,11 +232,23 @@ export const AccountPage = () => {
 
             <button
               type="submit"
-              className="btn-primary"
               disabled={profileLoading}
-              style={{ marginTop: '8px' }}
+              style={{
+                marginTop: '12px',
+                padding: '10px 24px',
+                borderRadius: '9999px',
+                backgroundColor: '#ffffff',
+                color: '#02090a',
+                fontWeight: 600,
+                fontSize: '13px',
+                border: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: profileLoading ? 'not-allowed' : 'pointer'
+              }}
             >
-              <Save size={16} />
+              <Save size={14} />
               <span>{profileLoading ? 'Saving...' : 'Save Profile Details'}</span>
             </button>
           </form>
@@ -243,34 +257,35 @@ export const AccountPage = () => {
 
       {/* Tab: Security */}
       {activeTab === 'security' && (
-        <div className="table-card" style={{ padding: '32px' }}>
+        <div className="table-card" style={{ padding: '32px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
           <div style={{ marginBottom: '24px' }}>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Security & Authentication</h2>
-            <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: '4px' }}>
-              Ensure your account is protected with a secure password
+            <h2 style={{ fontSize: '1.15rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>Security & Authentication</h2>
+            <p style={{ color: 'var(--color-tide-pool)', fontSize: '0.875rem', marginTop: '4px' }}>
+              Ensure your account is protected with a secure password and rotate tokens safely
             </p>
           </div>
 
           {passwordMsg.text && (
             <div style={{
               padding: '12px 16px',
-              borderRadius: 'var(--radius-sm)',
+              borderRadius: '8px',
               marginBottom: '20px',
               display: 'flex',
               alignItems: 'center',
               gap: '10px',
-              backgroundColor: passwordMsg.type === 'success' ? 'var(--color-success-bg)' : 'var(--color-error-bg)',
-              color: passwordMsg.type === 'success' ? 'var(--color-success)' : 'var(--color-error)',
-              fontSize: 'var(--font-size-sm)'
+              backgroundColor: passwordMsg.type === 'success' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(239, 68, 68, 0.1)',
+              border: `1px solid ${passwordMsg.type === 'success' ? 'rgba(56, 189, 248, 0.3)' : 'var(--color-status-cancelled)'}`,
+              color: passwordMsg.type === 'success' ? 'var(--color-icy-steel)' : '#fca5a5',
+              fontSize: '0.875rem'
             }}>
-              {passwordMsg.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+              {passwordMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
               <span>{passwordMsg.text}</span>
             </div>
           )}
 
           <form onSubmit={handleChangePassword} style={{ maxWidth: '480px' }}>
             <div className="form-group">
-              <label className="form-label">Current Password</label>
+              <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Current Password</label>
               <input
                 type="password"
                 className="input-field"
@@ -282,7 +297,7 @@ export const AccountPage = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label">New Password</label>
+              <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>New Password</label>
               <input
                 type="password"
                 className="input-field"
@@ -294,7 +309,7 @@ export const AccountPage = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Confirm New Password</label>
+              <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Confirm New Password</label>
               <input
                 type="password"
                 className="input-field"
@@ -307,12 +322,24 @@ export const AccountPage = () => {
 
             <button
               type="submit"
-              className="btn-primary"
               disabled={passwordLoading}
-              style={{ marginTop: '8px' }}
+              style={{
+                marginTop: '12px',
+                padding: '10px 24px',
+                borderRadius: '9999px',
+                backgroundColor: '#ffffff',
+                color: '#02090a',
+                fontWeight: 600,
+                fontSize: '13px',
+                border: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: passwordLoading ? 'not-allowed' : 'pointer'
+              }}
             >
-              <Lock size={16} />
-              <span>{passwordLoading ? 'Updating Password...' : 'Update Password'}</span>
+              <Lock size={14} />
+              <span>{passwordLoading ? 'Updating...' : 'Update Password'}</span>
             </button>
           </form>
         </div>

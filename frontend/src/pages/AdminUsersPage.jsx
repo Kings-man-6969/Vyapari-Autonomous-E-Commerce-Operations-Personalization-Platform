@@ -70,14 +70,14 @@ export const AdminUsersPage = () => {
   });
 
   return (
-    <div>
+    <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>
             User Accounts Governance
           </h1>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: '4px' }}>
-            Manage shopper, seller, and administrator accounts, roles, and platform permissions
+          <p style={{ color: 'var(--color-tide-pool)', fontSize: '0.875rem', marginTop: '4px' }}>
+            Manage shopper, merchant, and governance roles, privileges, and access permissions
           </p>
         </div>
       </div>
@@ -85,26 +85,27 @@ export const AdminUsersPage = () => {
       {actionMsg.text && (
         <div style={{
           padding: '12px 16px',
-          borderRadius: 'var(--radius-sm)',
+          borderRadius: '8px',
           marginBottom: '20px',
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          backgroundColor: actionMsg.type === 'success' ? 'var(--color-success-bg)' : 'var(--color-error-bg)',
-          color: actionMsg.type === 'success' ? 'var(--color-success)' : 'var(--color-error)',
-          fontSize: 'var(--font-size-sm)'
+          backgroundColor: actionMsg.type === 'success' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(239, 68, 68, 0.1)',
+          border: `1px solid ${actionMsg.type === 'success' ? 'rgba(56, 189, 248, 0.3)' : 'var(--color-status-cancelled)'}`,
+          color: actionMsg.type === 'success' ? 'var(--color-icy-steel)' : '#fca5a5',
+          fontSize: '0.875rem'
         }}>
-          {actionMsg.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+          {actionMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
           <span>{actionMsg.text}</span>
         </div>
       )}
 
       {/* Filter and Search Bar */}
       <div style={{
-        background: '#ffffff',
-        border: '1px solid var(--color-border-card)',
-        borderRadius: 'var(--radius-md)',
-        padding: '16px 20px',
+        background: 'var(--color-forest-floor)',
+        border: '1px solid var(--color-iron-veil)',
+        borderRadius: '12px',
+        padding: '14px 20px',
         marginBottom: '20px',
         display: 'flex',
         alignItems: 'center',
@@ -119,13 +120,16 @@ export const AdminUsersPage = () => {
               onClick={() => setRoleFilter(r)}
               style={{
                 padding: '6px 14px',
-                borderRadius: 'var(--radius-full)',
-                fontSize: 'var(--font-size-xs)',
+                borderRadius: '9999px',
+                fontSize: '12px',
                 fontWeight: 600,
                 textTransform: 'capitalize',
-                backgroundColor: roleFilter === r ? 'var(--color-primary)' : 'var(--color-surface-subtle)',
-                color: roleFilter === r ? '#ffffff' : 'var(--color-text-secondary)',
-                transition: 'all var(--transition-fast)'
+                backgroundColor: roleFilter === r ? '#ffffff' : 'var(--color-deep-canopy)',
+                color: roleFilter === r ? '#02090a' : 'var(--color-tide-pool)',
+                border: '1px solid',
+                borderColor: roleFilter === r ? '#ffffff' : 'var(--color-iron-veil)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
               }}
             >
               {r}
@@ -137,12 +141,13 @@ export const AdminUsersPage = () => {
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
-          background: 'var(--color-surface-subtle)',
-          padding: '6px 12px',
-          borderRadius: 'var(--radius-sm)',
+          background: 'var(--color-abyssal-ink)',
+          border: '1px solid var(--color-iron-veil)',
+          padding: '6px 14px',
+          borderRadius: '9999px',
           width: '280px'
         }}>
-          <Search size={16} color="var(--color-text-secondary)" />
+          <Search size={14} color="var(--color-ash-label)" />
           <input
             type="text"
             placeholder="Search by name or email..."
@@ -152,38 +157,38 @@ export const AdminUsersPage = () => {
               border: 'none',
               background: 'transparent',
               outline: 'none',
-              fontSize: 'var(--font-size-xs)',
+              fontSize: '12px',
+              color: '#ffffff',
               width: '100%'
             }}
           />
         </div>
       </div>
 
-      {/* Users Table */}
+      {/* Table */}
       {loading ? (
-        <div className="table-card" style={{ padding: '24px' }}>
+        <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
           {[1, 2, 3, 4].map((n) => (
             <div key={n} style={{ height: '56px', marginBottom: '12px' }} className="skeleton" />
           ))}
         </div>
       ) : filteredUsers.length === 0 ? (
-        <div className="table-card" style={{ textAlign: 'center', padding: '60px 24px' }}>
-          <Users size={40} color="var(--color-text-muted)" style={{ marginBottom: '16px' }} />
-          <h3 style={{ fontSize: '1.125rem', fontWeight: 700 }}>No users found</h3>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            Try resetting your search query or filter.
+        <div className="table-card" style={{ textAlign: 'center', padding: '60px 24px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
+          <Users size={40} color="var(--color-ash-label)" style={{ marginBottom: '16px' }} />
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>No users match criteria</h3>
+          <p style={{ color: 'var(--color-tide-pool)', fontSize: '0.875rem' }}>
+            Adjust filter or search parameters to inspect platform accounts.
           </p>
         </div>
       ) : (
-        <div className="table-card table-responsive">
+        <div className="table-card table-responsive" style={{ backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
           <table className="data-table">
             <thead>
               <tr>
-                <th>User Identity</th>
+                <th>Account</th>
                 <th>Role</th>
-                <th>Associated Entity</th>
+                <th>Status</th>
                 <th>Joined</th>
-                <th>Account Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -194,50 +199,40 @@ export const AdminUsersPage = () => {
                   <tr key={u.id}>
                     <td>
                       <div>
-                        <span style={{ fontWeight: 700, fontSize: 'var(--font-size-sm)' }}>{u.name}</span>
-                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                          <Mail size={12} />
-                          <span>{u.email}</span>
-                        </div>
+                        <div style={{ fontWeight: 500, fontSize: '0.875rem', color: '#ffffff' }}>{u.name || 'Anonymous User'}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--color-ash-label)', marginTop: '2px' }}>{u.email}</div>
                       </div>
                     </td>
                     <td>
-                      <span className="badge badge-primary" style={{ textTransform: 'capitalize' }}>
+                      <span className="badge-agent" style={{ textTransform: 'capitalize', fontSize: '11px' }}>
                         {u.role}
                       </span>
                     </td>
                     <td>
-                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                        {u.store_name || (u.order_count !== undefined ? `${u.order_count} orders` : 'Shopper')}
+                      <span className={`status-pill ${isSuspended ? 'status-cancelled' : 'status-active'}`}>
+                        {u.status || 'active'}
                       </span>
                     </td>
                     <td>
-                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                        {new Date(u.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`status-pill ${isSuspended ? 'status-pill-suspended' : 'status-pill-active'}`}>
-                        {isSuspended ? 'Suspended' : 'Active'}
+                      <span style={{ fontSize: '12px', color: 'var(--color-tide-pool)' }}>
+                        {u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}
                       </span>
                     </td>
                     <td>
                       {u.role !== 'admin' && (
                         <button
                           onClick={() => handleToggleSuspend(u.id, u.status)}
-                          className="btn-outline"
                           style={{
-                            padding: '5px 10px',
+                            padding: '5px 12px',
                             fontSize: '11px',
-                            color: isSuspended ? 'var(--color-success)' : 'var(--color-error)',
-                            borderColor: isSuspended ? 'var(--color-success)' : 'var(--color-error)',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
+                            borderRadius: '6px',
+                            backgroundColor: isSuspended ? 'rgba(56, 189, 248, 0.12)' : 'rgba(239, 68, 68, 0.1)',
+                            border: `1px solid ${isSuspended ? 'rgba(56, 189, 248, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                            color: isSuspended ? 'var(--color-icy-steel)' : '#f87171',
+                            cursor: 'pointer'
                           }}
                         >
-                          {isSuspended ? <UserCheck size={12} /> : <UserX size={12} />}
-                          <span>{isSuspended ? 'Reactivate' : 'Suspend'}</span>
+                          {isSuspended ? 'Reactivate' : 'Suspend'}
                         </button>
                       )}
                     </td>

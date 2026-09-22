@@ -146,25 +146,23 @@ async def sync_product_embedding(product_id: str, text: str, db) -> None:
 
 @router.get("/facets")
 async def get_facets(db=Depends(get_db)) -> dict:
-    brands_rows, price_row, cats_rows = await asyncio_gather(
-        db.fetch("""
-            SELECT p.attributes->>'brand' AS name, count(1)::int AS count
-            FROM products p
-            WHERE p.status = 'active' AND p.attributes->>'brand' IS NOT NULL
-            GROUP BY 1 ORDER BY count DESC, name ASC LIMIT 30
-        """),
-        db.fetchrow("""
-            SELECT MIN(price)::int AS min_price, MAX(price)::int AS max_price
-            FROM products WHERE status = 'active'
-        """),
-        db.fetch("""
-            SELECT c.id, c.name, c.slug, count(p.id)::int AS count
-            FROM categories c
-            JOIN products p ON p.category_id = c.id
-            WHERE p.status = 'active'
-            GROUP BY c.id ORDER BY count DESC
-        """),
-    )
+    brands_rows = await db.fetch("""
+        SELECT p.attributes->>'brand' AS name, count(1)::int AS count
+        FROM products p
+        WHERE p.status = 'active' AND p.attributes->>'brand' IS NOT NULL
+        GROUP BY 1 ORDER BY count DESC, name ASC LIMIT 30
+    """)
+    price_row = await db.fetchrow("""
+        SELECT MIN(price)::int AS min_price, MAX(price)::int AS max_price
+        FROM products WHERE status = 'active'
+    """)
+    cats_rows = await db.fetch("""
+        SELECT c.id, c.name, c.slug, count(p.id)::int AS count
+        FROM categories c
+        JOIN products p ON p.category_id = c.id
+        WHERE p.status = 'active'
+        GROUP BY c.id ORDER BY count DESC
+    """)
     return {
         "success": True,
         "data": {
@@ -175,9 +173,6 @@ async def get_facets(db=Depends(get_db)) -> dict:
     }
 
 
-async def asyncio_gather(*coros):
-    import asyncio
-    return await asyncio.gather(*coros)
 
 
 @router.get("/suggest")
@@ -189,36 +184,34 @@ async def suggest(q: str | None = None, db=Depends(get_db)) -> dict:
     term_like = f"%{term}%"
     start_like = f"{term}%"
 
-    prods, brands, cats = await asyncio_gather(
-        db.fetch("""
-            SELECT p.id, p.title, p.price, p.compare_at_price, p.images,
-                   p.attributes->>'brand' AS brand,
-                   COALESCE((p.attributes->>'rating')::numeric, 4.5) AS rating,
-                   c.name AS category_name
-            FROM products p
-            LEFT JOIN categories c ON p.category_id = c.id
-            WHERE p.status = 'active'
-              AND (p.title ILIKE $1 OR p.attributes->>'brand' ILIKE $1 OR c.name ILIKE $1)
-            ORDER BY
-              CASE WHEN p.attributes->>'brand' ILIKE $2 THEN 1
-                   WHEN p.title ILIKE $2 THEN 2 ELSE 3 END,
-              p.price ASC
-            LIMIT 4
-        """, term_like, start_like),
-        db.fetch("""
-            SELECT p.attributes->>'brand' AS name, count(1)::int AS count
-            FROM products p
-            WHERE p.status = 'active' AND p.attributes->>'brand' ILIKE $1
-            GROUP BY 1 ORDER BY count DESC LIMIT 3
-        """, term_like),
-        db.fetch("""
-            SELECT c.id, c.name, c.slug, count(p.id)::int AS count
-            FROM categories c
-            JOIN products p ON p.category_id = c.id
-            WHERE p.status = 'active' AND c.name ILIKE $1
-            GROUP BY c.id ORDER BY count DESC LIMIT 3
-        """, term_like),
-    )
+    prods = await db.fetch("""
+        SELECT p.id, p.title, p.price, p.compare_at_price, p.images,
+               p.attributes->>'brand' AS brand,
+               COALESCE((p.attributes->>'rating')::numeric, 4.5) AS rating,
+               c.name AS category_name
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        WHERE p.status = 'active'
+          AND (p.title ILIKE $1 OR p.attributes->>'brand' ILIKE $1 OR c.name ILIKE $1)
+        ORDER BY
+          CASE WHEN p.attributes->>'brand' ILIKE $2 THEN 1
+               WHEN p.title ILIKE $2 THEN 2 ELSE 3 END,
+          p.price ASC
+        LIMIT 4
+    """, term_like, start_like)
+    brands = await db.fetch("""
+        SELECT p.attributes->>'brand' AS name, count(1)::int AS count
+        FROM products p
+        WHERE p.status = 'active' AND p.attributes->>'brand' ILIKE $1
+        GROUP BY 1 ORDER BY count DESC LIMIT 3
+    """, term_like)
+    cats = await db.fetch("""
+        SELECT c.id, c.name, c.slug, count(p.id)::int AS count
+        FROM categories c
+        JOIN products p ON p.category_id = c.id
+        WHERE p.status = 'active' AND c.name ILIKE $1
+        GROUP BY c.id ORDER BY count DESC LIMIT 3
+    """, term_like)
 
     suggestions: list[str] = []
     if brands and cats:
@@ -390,7 +383,7 @@ async def list_products(
     sql = f"""
         SELECT
             p.id, p.seller_id, p.category_id, p.title, p.slug, p.description,
-            p.price, p.compare_at_price, p.stock_qty, p.images, p.attributes,
+            p.price, p.compare_at_price, p.stock_qty, p.stock_qty AS inventory_count, p.images, p.attributes,
             p.status, p.created_at,
             c.name AS category_name, c.slug AS category_slug,
             sp.store_name, sp.rating_avg AS seller_rating
@@ -404,11 +397,8 @@ async def list_products(
 
     count_sql = f"SELECT COUNT(*) AS total FROM products p WHERE {where_clause}"
 
-    # Run data + count in parallel
-    data_rows, count_row = await asyncio_gather(
-        db.fetch(sql, *params),
-        db.fetchrow(count_sql, *params[:-2]),  # exclude limit/offset for count
-    )
+    data_rows = await db.fetch(sql, *params)
+    count_row = await db.fetchrow(count_sql, *params[:-2])
 
     total = int(count_row["total"])
 
@@ -465,6 +455,8 @@ async def get_product(id: str, user: dict | None = Depends(optional_auth), db=De
         )
 
     product = dict(product_row)
+    if "inventory_count" not in product:
+        product["inventory_count"] = product.get("stock_qty", 0)
 
     reviews = await db.fetch(
         """SELECT r.id, r.rating, r.title, r.comment, r.created_at,
@@ -519,14 +511,26 @@ async def create_product(
     slug = f"{base_slug}-{str(int(time.time() * 1000))[-4:]}"
     effective_status = "out_of_stock" if body.stock_qty == 0 else body.status
 
+    cat_id = None
+    if body.category_id and str(body.category_id).strip():
+        try:
+            import uuid
+            uuid.UUID(str(body.category_id).strip())
+            cat_id = str(body.category_id).strip()
+        except ValueError:
+            cat_id = None
+    if not cat_id:
+        first_cat = await db.fetchrow("SELECT id FROM categories LIMIT 1")
+        cat_id = str(first_cat["id"]) if first_cat else "10000000-0000-0000-0000-000000000001"
+
     row = await db.fetchrow(
         """INSERT INTO products
            (seller_id, category_id, title, slug, description, price, compare_at_price,
             stock_qty, images, attributes, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11)
+           VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11)
            RETURNING *""",
         user["id"],
-        body.category_id,
+        cat_id,
         body.title.strip(),
         slug,
         body.description,
@@ -588,7 +592,14 @@ async def update_product(
         float(current["compare_at_price"]) if current["compare_at_price"] else None
     )
     stock_qty = body.stock_qty if body.stock_qty is not None else current["stock_qty"]
-    category_id = body.category_id or current["category_id"]
+    cat_id = current["category_id"]
+    if body.category_id and str(body.category_id).strip():
+        try:
+            import uuid
+            uuid.UUID(str(body.category_id).strip())
+            cat_id = str(body.category_id).strip()
+        except ValueError:
+            pass
     images = body.images if body.images is not None else current["images"]
     attributes = body.attributes if body.attributes is not None else current["attributes"]
     status = body.status or current["status"]
@@ -598,7 +609,7 @@ async def update_product(
     updated = await db.fetchrow(
         """UPDATE products
            SET title = $1, description = $2, price = $3, compare_at_price = $4,
-               stock_qty = $5, category_id = $6, images = $7::jsonb,
+               stock_qty = $5, category_id = $6::uuid, images = $7::jsonb,
                attributes = $8::jsonb, status = $9, updated_at = CURRENT_TIMESTAMP
            WHERE id = $10
            RETURNING *""",
@@ -607,7 +618,7 @@ async def update_product(
         price,
         compare_at_price,
         stock_qty,
-        category_id,
+        cat_id,
         json.dumps(images),
         json.dumps(attributes) if isinstance(attributes, dict) else attributes,
         effective_status,

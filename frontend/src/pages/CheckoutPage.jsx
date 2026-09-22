@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ShieldCheck, Lock, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Lock, ArrowLeft, CheckCircle2, CreditCard, ShoppingBag, Zap, ChevronRight } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -11,24 +11,61 @@ export const CheckoutPage = () => {
   const navigate = useNavigate();
 
   const [address, setAddress] = useState({
-    full_name: user?.name || 'Aarav Sharma',
-    phone: user?.phone || '+91 9876543221',
-    line1: 'Flat 402, Lotus Orchid, Indiranagar',
-    city: 'Bengaluru',
-    state: 'Karnataka',
-    pincode: '560038'
+    full_name: user?.name || '',
+    phone: user?.phone || '',
+    line1: '',
+    city: '',
+    state: '',
+    pincode: ''
   });
 
+  useEffect(() => {
+    const fetchSavedAddress = async () => {
+      try {
+        const res = await api.get('/users/addresses');
+        if (res.data?.success && res.data.data?.length > 0) {
+          const def = res.data.data.find(a => a.is_default) || res.data.data[0];
+          setAddress({
+            full_name: def.full_name || user?.name || '',
+            phone: def.phone || user?.phone || '',
+            line1: def.line1 || '',
+            city: def.city || '',
+            state: def.state || '',
+            pincode: def.pincode || ''
+          });
+        } else if (user?.name || user?.phone) {
+          setAddress(prev => ({
+            ...prev,
+            full_name: prev.full_name || user?.name || '',
+            phone: prev.phone || user?.phone || ''
+          }));
+        }
+      } catch (e) {
+        // user may not have saved address
+      }
+    };
+    if (user) fetchSavedAddress();
+  }, [user]);
+
+  const [paymentMethod, setPaymentMethod] = useState('simulated_card');
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState('');
 
   if (items.length === 0) {
     return (
-      <div className="container" style={{ padding: '80px 24px', textAlign: 'center' }}>
-        <h2>Your cart is empty.</h2>
-        <Link to="/explore" className="btn-primary" style={{ marginTop: '16px', display: 'inline-block' }}>
-          Return to Explore
-        </Link>
+      <div style={{ backgroundColor: 'var(--color-obsidian-graphite)', minHeight: 'calc(100vh - 76px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 20px' }}>
+        <div style={{ textAlign: 'center', maxWidth: '440px', backgroundColor: 'var(--color-gunmetal-dark)', padding: '40px', borderRadius: '16px', border: '1px solid var(--color-border-steel)' }}>
+          <div style={{ width: '60px', height: '60px', borderRadius: '50%', backgroundColor: 'var(--color-titanium-brushed)', border: '1px solid var(--color-border-steel)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <ShoppingBag size={28} color="var(--color-ash-label)" />
+          </div>
+          <h2 className="heading-whisper" style={{ fontSize: '22px', marginBottom: '8px', color: '#ffffff' }}>Your Cart is Empty</h2>
+          <p style={{ color: 'var(--color-silver-glow)', opacity: 0.8, fontSize: '13px', marginBottom: '24px' }}>
+            Add items to your cart before proceeding to checkout.
+          </p>
+          <Link to="/explore" className="btn-primary" style={{ display: 'inline-block', padding: '12px 24px' }}>
+            Continue Shopping
+          </Link>
+        </div>
       </div>
     );
   }
@@ -73,206 +110,245 @@ export const CheckoutPage = () => {
   };
 
   return (
-    <div className="container" style={{ padding: '40px 24px', maxWidth: '1000px' }}>
-      <Link to="/cart" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: '24px' }}>
-        <ArrowLeft size={16} /> Back to Cart
-      </Link>
+    <div style={{ backgroundColor: 'var(--color-obsidian-graphite)', minHeight: 'calc(100vh - 76px)', padding: '48px 0' }}>
+      <div className="container" style={{ maxWidth: '1100px' }}>
+        <Link to="/cart" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--color-silver-glow)', marginBottom: '24px', opacity: 0.8 }}>
+          <ArrowLeft size={14} /> Back to Cart
+        </Link>
 
-      <h1 style={{ fontSize: 'var(--font-size-3xl)', fontWeight: 800, marginBottom: '32px' }}>
-        Checkout & Payment
-      </h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '32px', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <h1 className="heading-whisper" style={{ fontSize: '32px', color: '#ffffff', letterSpacing: '0.02em', margin: 0 }}>
+              Checkout
+            </h1>
+            <p style={{ fontSize: '13px', color: 'var(--color-silver-glow)', opacity: 0.7, marginTop: '6px' }}>
+              Review your address and payment details to place your order
+            </p>
+          </div>
 
-      {error && (
-        <div style={{
-          padding: '16px',
-          backgroundColor: 'var(--color-error-bg)',
-          color: 'var(--color-error)',
-          borderRadius: 'var(--radius-sm)',
-          marginBottom: '24px',
-          fontWeight: 600,
-          fontSize: 'var(--font-size-sm)'
-        }}>
-          {error}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: 'var(--radius-pills)', backgroundColor: 'var(--color-titanium-brushed)', border: '1px solid var(--color-border-steel)', fontSize: '11px', color: 'var(--color-icy-steel)', fontWeight: 600 }}>
+            <ShieldCheck size={13} />
+            <span>100% SECURE CHECKOUT</span>
+          </div>
         </div>
-      )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '40px' }}>
-        {/* Shipping Form */}
-        <form onSubmit={handlePlaceOrder} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700, marginBottom: '8px' }}>
-            1. Shipping Address
-          </h2>
-
-          <div>
-            <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '6px' }}>
-              Full Name
-            </label>
-            <input
-              type="text"
-              required
-              value={address.full_name}
-              onChange={(e) => setAddress({ ...address, full_name: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '12px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--color-border-subtle)',
-                fontSize: 'var(--font-size-sm)'
-              }}
-            />
+        {error && (
+          <div style={{
+            padding: '14px 18px',
+            backgroundColor: 'rgba(244, 63, 94, 0.12)',
+            color: 'var(--color-error)',
+            borderRadius: '10px',
+            border: '1px solid rgba(244, 63, 94, 0.3)',
+            marginBottom: '24px',
+            fontWeight: 500,
+            fontSize: '13px'
+          }}>
+            {error}
           </div>
+        )}
 
-          <div>
-            <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '6px' }}>
-              Phone Number
-            </label>
-            <input
-              type="tel"
-              required
-              value={address.phone}
-              onChange={(e) => setAddress({ ...address, phone: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '12px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--color-border-subtle)',
-                fontSize: 'var(--font-size-sm)'
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '6px' }}>
-              Street Address & Landmark
-            </label>
-            <input
-              type="text"
-              required
-              value={address.line1}
-              onChange={(e) => setAddress({ ...address, line1: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '12px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--color-border-subtle)',
-                fontSize: 'var(--font-size-sm)'
-              }}
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '6px' }}>
-                City
-              </label>
-              <input
-                type="text"
-                required
-                value={address.city}
-                onChange={(e) => setAddress({ ...address, city: e.target.value })}
-                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border-subtle)', fontSize: 'var(--font-size-sm)' }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '6px' }}>
-                State
-              </label>
-              <input
-                type="text"
-                required
-                value={address.state}
-                onChange={(e) => setAddress({ ...address, state: e.target.value })}
-                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border-subtle)', fontSize: 'var(--font-size-sm)' }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '6px' }}>
-                Pincode
-              </label>
-              <input
-                type="text"
-                required
-                value={address.pincode}
-                onChange={(e) => setAddress({ ...address, pincode: e.target.value })}
-                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border-subtle)', fontSize: 'var(--font-size-sm)' }}
-              />
-            </div>
-          </div>
-
-          {/* Payment Section */}
-          <div style={{ marginTop: '24px' }}>
-            <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700, marginBottom: '12px' }}>
-              2. Payment Method
-            </h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '40px', alignItems: 'start' }}>
+          {/* Shipping & Payment Form */}
+          <form onSubmit={handlePlaceOrder} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{
-              padding: '16px',
-              border: '2px solid var(--color-primary)',
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'var(--color-primary-light)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between'
+              backgroundColor: 'var(--color-gunmetal-dark)',
+              padding: '30px',
+              borderRadius: '16px',
+              border: '1px solid var(--color-border-steel)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
             }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 'var(--font-size-sm)' }}>
-                  Razorpay Payment Gateway (Test Mode)
+              <h2 className="heading-whisper" style={{ fontSize: '17px', color: '#ffffff', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--color-titanium-brushed)', border: '1px solid var(--color-border-chrome)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: 'var(--color-icy-steel)' }}>1</span>
+                <span>Delivery Address</span>
+              </h2>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div>
+                  <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '12px' }}>
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={address.full_name}
+                    onChange={(e) => setAddress({ ...address, full_name: e.target.value })}
+                    className="input-field"
+                    style={{ backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-border-steel)' }}
+                  />
                 </div>
-                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-                  INR Native • UPI, Cards, Netbanking (Simulated)
+
+                <div>
+                  <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '12px' }}>
+                    Mobile Number
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={address.phone}
+                    onChange={(e) => setAddress({ ...address, phone: e.target.value })}
+                    className="input-field"
+                    style={{ backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-border-steel)' }}
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '12px' }}>
+                    Address (House No, Building, Street, Area)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={address.line1}
+                    onChange={(e) => setAddress({ ...address, line1: e.target.value })}
+                    className="input-field"
+                    style={{ backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-border-steel)' }}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '12px' }}>
+                      City
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={address.city}
+                      onChange={(e) => setAddress({ ...address, city: e.target.value })}
+                      className="input-field"
+                      style={{ backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-border-steel)' }}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '12px' }}>
+                      State
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={address.state}
+                      onChange={(e) => setAddress({ ...address, state: e.target.value })}
+                      className="input-field"
+                      style={{ backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-border-steel)' }}
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '12px' }}>
+                      PIN Code
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={address.pincode}
+                      onChange={(e) => setAddress({ ...address, pincode: e.target.value })}
+                      className="input-field"
+                      style={{ backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-border-steel)' }}
+                    />
+                  </div>
                 </div>
               </div>
-              <CheckCircle2 size={20} color="var(--color-primary)" />
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={placing}
-            className="btn-primary"
-            style={{
-              marginTop: '24px',
-              padding: '16px',
-              fontSize: 'var(--font-size-base)',
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px'
-            }}
-          >
-            <Lock size={18} />
-            {placing ? 'Authorizing Payment & Locking Stock...' : `Pay ₹${totalAmount.toLocaleString('en-IN')}`}
-          </button>
-        </form>
+            {/* Payment Method Card */}
+            <div style={{
+              backgroundColor: 'var(--color-gunmetal-dark)',
+              padding: '30px',
+              borderRadius: '16px',
+              border: '1px solid var(--color-border-steel)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+            }}>
+              <h2 className="heading-whisper" style={{ fontSize: '17px', color: '#ffffff', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--color-titanium-brushed)', border: '1px solid var(--color-border-chrome)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: 'var(--color-icy-steel)' }}>2</span>
+                <span>Payment Method</span>
+              </h2>
 
-        {/* Order Review Column */}
-        <div style={{
-          backgroundColor: 'var(--color-surface-subtle)',
-          padding: '24px',
-          borderRadius: 'var(--radius-md)',
-          border: '1px solid var(--color-border-subtle)',
-          height: 'fit-content'
-        }}>
-          <h3 style={{ fontSize: 'var(--font-size-base)', fontWeight: 700, marginBottom: '16px' }}>
-            Items in Order ({items.length})
-          </h3>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-            {items.map((i) => (
-              <div key={i.cart_item_id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--font-size-sm)' }}>
-                <span style={{ color: 'var(--color-text-secondary)', flex: 1, paddingRight: '12px' }}>
-                  {i.quantity}x {i.title}
-                </span>
-                <span style={{ fontWeight: 600 }}>
-                  ₹{(parseFloat(i.price) * i.quantity).toLocaleString('en-IN')}
-                </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px',
+                  padding: '16px 20px',
+                  borderRadius: '12px',
+                  backgroundColor: 'var(--color-titanium-brushed)',
+                  border: '1px solid var(--color-border-chrome)',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s ease'
+                }}>
+                  <input
+                    type="radio"
+                    name="payment"
+                    value="simulated_card"
+                    checked={paymentMethod === 'simulated_card'}
+                    onChange={() => setPaymentMethod('simulated_card')}
+                    style={{ accentColor: 'var(--color-icy-steel)' }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: '#ffffff' }}>
+                      <CreditCard size={16} color="var(--color-icy-steel)" />
+                      <span>Razorpay (UPI, Credit/Debit Card, NetBanking)</span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: 'var(--color-silver-glow)', opacity: 0.7, marginTop: '2px', display: 'block' }}>
+                      Safe and encrypted checkout powered by Razorpay
+                    </span>
+                  </div>
+                </label>
               </div>
-            ))}
-          </div>
+            </div>
 
-          <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: '16px', display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: 'var(--font-size-lg)' }}>
-            <span>Total Payable</span>
-            <span style={{ color: 'var(--color-primary)' }}>₹{totalAmount.toLocaleString('en-IN')}</span>
+            <button
+              type="submit"
+              disabled={placing}
+              className="btn-primary"
+              style={{ width: '100%', padding: '16px', fontSize: '14px', fontWeight: 600 }}
+            >
+              {placing ? 'Placing your order...' : `Place Your Order • ₹${totalAmount.toLocaleString('en-IN')}`}
+            </button>
+          </form>
+
+          {/* Order Summary & Stock Lock Assurance */}
+          <div style={{
+            backgroundColor: 'var(--color-gunmetal-dark)',
+            padding: '32px',
+            borderRadius: '16px',
+            border: '1px solid var(--color-border-steel)',
+            boxShadow: '0 16px 40px rgba(0, 0, 0, 0.5)',
+            position: 'sticky',
+            top: '88px'
+          }}>
+            <h3 className="heading-whisper" style={{ fontSize: '18px', color: '#ffffff', marginBottom: '22px' }}>
+              Order Items ({items.length})
+            </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px', maxHeight: '280px', overflowY: 'auto' }}>
+              {items.map((i) => (
+                <div key={i.cart_item_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', paddingBottom: '12px', borderBottom: '1px solid var(--color-border-steel)' }}>
+                  <div style={{ flex: 1, paddingRight: '12px' }}>
+                    <p style={{ fontWeight: 500, color: '#ffffff', margin: 0, fontSize: '13px' }}>{i.title}</p>
+                    <span style={{ fontSize: '11px', color: 'var(--color-ash-label)' }}>Qty: {i.quantity}</span>
+                  </div>
+                  <span style={{ fontWeight: 600, color: '#ffffff' }}>
+                    ₹{(parseFloat(i.price) * i.quantity).toLocaleString('en-IN')}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: '16px', borderTop: '1px solid var(--color-border-steel)', marginBottom: '24px' }}>
+              <span style={{ fontSize: '15px', fontWeight: 500, color: '#ffffff' }}>Total Payable</span>
+              <span style={{ fontSize: '26px', fontWeight: 600, color: '#ffffff', letterSpacing: '0.01em' }}>
+                ₹{totalAmount.toLocaleString('en-IN')}
+              </span>
+            </div>
+
+            <div style={{ padding: '14px', backgroundColor: 'var(--color-titanium-brushed)', borderRadius: '10px', border: '1px solid var(--color-border-steel)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--color-icy-steel)', fontWeight: 600 }}>
+                <ShieldCheck size={14} />
+                <span>Buyer Protection Guarantee</span>
+              </div>
+              <p style={{ fontSize: '11px', color: 'var(--color-silver-glow)', opacity: 0.8, margin: 0, lineHeight: 1.5 }}>
+                Your order is protected from payment to delivery. 100% refund guarantee on damaged or missing shipments.
+              </p>
+            </div>
           </div>
         </div>
       </div>

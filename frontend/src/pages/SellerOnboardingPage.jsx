@@ -9,7 +9,8 @@ import {
   ArrowRight, 
   ArrowLeft, 
   ShieldCheck,
-  Clock
+  Clock,
+  ExternalLink
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -50,9 +51,10 @@ export const SellerOnboardingPage = () => {
           }
         }
         if (catRes.data?.success) {
-          setCategories(catRes.data.data);
-          if (catRes.data.data.length > 0) {
-            setFormData((prev) => ({ ...prev, primary_category_id: catRes.data.data[0].id }));
+          const list = catRes.data?.data?.categories || catRes.data?.categories || (Array.isArray(catRes.data?.data) ? catRes.data.data : []);
+          setCategories(list);
+          if (list.length > 0) {
+            setFormData((prev) => ({ ...prev, primary_category_id: list[0].id }));
           }
         }
       } catch (err) {
@@ -66,7 +68,7 @@ export const SellerOnboardingPage = () => {
     setErrorMsg('');
     if (step === 1) {
       if (!formData.store_name.trim() || !formData.business_address.trim()) {
-        setErrorMsg('Please enter your store name and business address.');
+        setErrorMsg('Please enter your store name and operational street address.');
         return;
       }
     } else if (step === 2) {
@@ -76,7 +78,7 @@ export const SellerOnboardingPage = () => {
       }
     } else if (step === 3) {
       if (!formData.bank_account_number.trim() || !formData.bank_ifsc.trim() || !formData.account_holder_name.trim()) {
-        setErrorMsg('All bank payout fields are required.');
+        setErrorMsg('All settlement bank credentials are required.');
         return;
       }
     }
@@ -105,48 +107,78 @@ export const SellerOnboardingPage = () => {
   // If already submitted and waiting verification
   if (onboardingStatus && onboardingStatus.onboarding_status === 'submitted') {
     return (
-      <div className="container" style={{ padding: '60px 24px', maxWidth: '680px' }}>
+      <div style={{ padding: '60px 24px', maxWidth: '680px', margin: '0 auto' }}>
         <div style={{
-          background: '#ffffff',
-          borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--color-border-card)',
+          background: 'var(--color-forest-floor)',
+          borderRadius: '16px',
+          border: '1px solid var(--color-iron-veil)',
           padding: '40px',
           textAlign: 'center',
-          boxShadow: 'var(--shadow-sm)'
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)'
         }}>
           <div style={{
-            width: '64px',
-            height: '64px',
+            width: '60px',
+            height: '60px',
             borderRadius: '50%',
-            backgroundColor: 'var(--color-warning-bg)',
-            color: 'var(--color-warning)',
+            backgroundColor: 'rgba(234, 179, 8, 0.1)',
+            border: '1px solid rgba(234, 179, 8, 0.3)',
+            color: '#facc15',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             margin: '0 auto 20px'
           }}>
-            <Clock size={32} />
+            <Clock size={28} />
           </div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '8px' }}>
-            KYC Application Under Review
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '8px' }}>
+            KYC Verification Pending
           </h2>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', lineHeight: 1.6, marginBottom: '24px' }}>
-            Your merchant onboarding application for <strong>{onboardingStatus.store_name || formData.store_name}</strong> is currently being reviewed by our Admin Governance Desk.
-            Regulatory verification usually completes within 24 hours.
+          <p style={{ color: 'var(--color-tide-pool)', fontSize: '0.875rem', lineHeight: 1.6, marginBottom: '24px' }}>
+            Your merchant onboarding credentials for <strong>{onboardingStatus.store_name || formData.store_name}</strong> have been submitted to the Admin Governance Desk for regulatory check.
           </p>
           <div style={{
-            background: 'var(--color-surface-subtle)',
+            background: 'var(--color-deep-canopy)',
+            border: '1px solid var(--color-iron-veil)',
             padding: '16px',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 'var(--font-size-xs)',
-            color: 'var(--color-text-secondary)',
-            marginBottom: '24px'
+            borderRadius: '8px',
+            fontSize: '12px',
+            color: 'var(--color-tide-pool)',
+            marginBottom: '28px'
           }}>
-            PAN: {onboardingStatus.pan_masked || 'XXXXXXXXXX'} &bull; Status: <span className="badge badge-warning">Pending Verification</span>
+            PAN: {onboardingStatus.pan_masked || 'XXXXXXXXXX'} &bull; Status: <span className="status-pill status-draft" style={{ marginLeft: '6px' }}>Pending Admin Approval</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
-            <Link to="/" className="btn-outline">
-              Return to Marketplace
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <Link 
+              to="/seller/dashboard" 
+              style={{
+                padding: '10px 22px',
+                borderRadius: '9999px',
+                backgroundColor: '#ffffff',
+                color: '#02090a',
+                fontSize: '13px',
+                fontWeight: 600,
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <span>Enter Workspace (Draft Mode)</span>
+              <ArrowRight size={14} />
+            </Link>
+            <Link 
+              to="/" 
+              style={{
+                padding: '10px 20px',
+                borderRadius: '9999px',
+                backgroundColor: 'transparent',
+                border: '1px solid var(--color-iron-veil)',
+                color: 'var(--color-tide-pool)',
+                fontSize: '13px',
+                textDecoration: 'none'
+              }}
+            >
+              Marketplace
             </Link>
           </div>
         </div>
@@ -155,42 +187,42 @@ export const SellerOnboardingPage = () => {
   }
 
   return (
-    <div className="container" style={{ padding: '50px 24px 80px', maxWidth: '720px' }}>
+    <div style={{ padding: '40px 24px 80px', maxWidth: '720px', margin: '0 auto' }}>
       <div style={{ textAlign: 'center', marginBottom: '36px' }}>
-        <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '8px' }}>
+        <h1 style={{ fontSize: '1.85rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '8px' }}>
           Seller Onboarding & KYC
         </h1>
-        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+        <p style={{ color: 'var(--color-tide-pool)', fontSize: '0.875rem' }}>
           Step {step} of 4: {
             step === 1 ? 'Store Details' :
-            step === 2 ? 'Tax & Business Registration' :
-            step === 3 ? 'Bank Payout Information' : 'Category & Agreement'
+            step === 2 ? 'Tax & PAN KYC' :
+            step === 3 ? 'Bank Settlement Account' : 'Category & Merchant Declaration'
           }
         </p>
       </div>
 
       {/* Progress Track */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '36px', position: 'relative' }}>
-        <div style={{ position: 'absolute', top: '16px', left: '10%', right: '10%', height: '2px', backgroundColor: 'var(--color-border-subtle)', zIndex: 1 }} />
+        <div style={{ position: 'absolute', top: '16px', left: '10%', right: '10%', height: '1px', backgroundColor: 'var(--color-iron-veil)', zIndex: 1 }} />
         {[1, 2, 3, 4].map((s) => (
           <div key={s} style={{ zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
             <div style={{
-              width: '34px',
-              height: '34px',
+              width: '32px',
+              height: '32px',
               borderRadius: '50%',
-              backgroundColor: s <= step ? 'var(--color-primary)' : '#ffffff',
-              border: s <= step ? 'none' : '2px solid var(--color-border-subtle)',
-              color: s <= step ? '#ffffff' : 'var(--color-text-secondary)',
+              backgroundColor: s <= step ? '#ffffff' : 'var(--color-forest-floor)',
+              border: s <= step ? 'none' : '1px solid var(--color-iron-veil)',
+              color: s <= step ? '#02090a' : 'var(--color-ash-label)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontWeight: 700,
-              fontSize: '13px'
+              fontWeight: 600,
+              fontSize: '12px'
             }}>
-              {s < step ? <CheckCircle2 size={18} /> : s}
+              {s < step ? <CheckCircle2 size={16} /> : s}
             </div>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: s === step ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>
-              {s === 1 ? 'Store' : s === 2 ? 'Tax KYC' : s === 3 ? 'Payout' : 'Confirm'}
+            <span style={{ fontSize: '11px', fontWeight: 500, color: s === step ? '#ffffff' : 'var(--color-ash-label)' }}>
+              {s === 1 ? 'Store' : s === 2 ? 'Tax KYC' : s === 3 ? 'Payout' : 'Declaration'}
             </span>
           </div>
         ))}
@@ -199,32 +231,33 @@ export const SellerOnboardingPage = () => {
       {errorMsg && (
         <div style={{
           padding: '12px 16px',
-          borderRadius: 'var(--radius-sm)',
+          borderRadius: '8px',
           marginBottom: '24px',
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          backgroundColor: 'var(--color-error-bg)',
-          color: 'var(--color-error)',
-          fontSize: 'var(--font-size-sm)'
+          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+          border: '1px solid var(--color-status-cancelled)',
+          color: '#fca5a5',
+          fontSize: '0.875rem'
         }}>
-          <AlertCircle size={18} />
+          <AlertCircle size={16} />
           <span>{errorMsg}</span>
         </div>
       )}
 
       {/* Form Container */}
-      <div className="table-card" style={{ padding: '32px' }}>
+      <div className="table-card" style={{ padding: '32px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
         {/* Step 1: Store Information */}
         {step === 1 && (
           <div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Store size={20} color="var(--color-primary)" />
-              <span>Store & Brand Identity</span>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Store size={18} color="var(--color-icy-steel)" />
+              <span>Storefront Brand Identity</span>
             </h3>
 
             <div className="form-group">
-              <label className="form-label">Store / Brand Name</label>
+              <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Store / Brand Name</label>
               <input
                 type="text"
                 className="input-field"
@@ -236,22 +269,22 @@ export const SellerOnboardingPage = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Store Description</label>
+              <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Store Narrative & Provenance</label>
               <textarea
                 className="textarea-field"
                 rows="3"
-                placeholder="Describe your craft, brand heritage, or catalog offerings..."
+                placeholder="Describe your craft, brand philosophy, or catalog offerings..."
                 value={formData.store_description}
                 onChange={(e) => setFormData({ ...formData, store_description: e.target.value })}
               />
             </div>
 
             <div className="form-group">
-              <label className="form-label">Registered Business Address</label>
+              <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Registered Operational Street Address</label>
               <input
                 type="text"
                 className="input-field"
-                placeholder="Full operational registered street address"
+                placeholder="Complete registered facility address"
                 value={formData.business_address}
                 onChange={(e) => setFormData({ ...formData, business_address: e.target.value })}
                 required
@@ -263,13 +296,13 @@ export const SellerOnboardingPage = () => {
         {/* Step 2: Tax KYC */}
         {step === 2 && (
           <div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <FileText size={20} color="var(--color-secondary)" />
-              <span>Regulatory Tax Registration</span>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FileText size={18} color="var(--color-icy-steel)" />
+              <span>Tax & Regulatory Verification</span>
             </h3>
 
             <div className="form-group">
-              <label className="form-label">Permanent Account Number (PAN)</label>
+              <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Permanent Account Number (PAN)</label>
               <input
                 type="text"
                 className="input-field"
@@ -278,13 +311,13 @@ export const SellerOnboardingPage = () => {
                 onChange={(e) => setFormData({ ...formData, pan: e.target.value.toUpperCase() })}
                 required
               />
-              <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-                Required for Indian taxation compliance and TDS reporting.
+              <span style={{ fontSize: '11px', color: 'var(--color-ash-label)', marginTop: '4px', display: 'block' }}>
+                Required under Indian commerce regulations for TDS and merchant identity check.
               </span>
             </div>
 
             <div className="form-group">
-              <label className="form-label">GSTIN (Optional for Composition / Excluded Categories)</label>
+              <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>GSTIN (Optional for Composition / Excluded Sellers)</label>
               <input
                 type="text"
                 className="input-field"
@@ -299,17 +332,17 @@ export const SellerOnboardingPage = () => {
         {/* Step 3: Payout Coordinates */}
         {step === 3 && (
           <div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <CreditCard size={20} color="#6366F1" />
-              <span>Settlement Bank Account</span>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <CreditCard size={18} color="var(--color-icy-steel)" />
+              <span>Settlement Account Details</span>
             </h3>
 
             <div className="form-group">
-              <label className="form-label">Account Holder Name</label>
+              <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Beneficiary Account Holder Name</label>
               <input
                 type="text"
                 className="input-field"
-                placeholder="As per bank passbook / statement"
+                placeholder="As per bank statement or cancelled cheque"
                 value={formData.account_holder_name}
                 onChange={(e) => setFormData({ ...formData, account_holder_name: e.target.value })}
                 required
@@ -317,7 +350,7 @@ export const SellerOnboardingPage = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Bank Account Number</label>
+              <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Bank Account Number</label>
               <input
                 type="password"
                 className="input-field"
@@ -329,7 +362,7 @@ export const SellerOnboardingPage = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Bank IFSC Code</label>
+              <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Bank IFSC Code</label>
               <input
                 type="text"
                 className="input-field"
@@ -345,13 +378,13 @@ export const SellerOnboardingPage = () => {
         {/* Step 4: Category & Submit */}
         {step === 4 && (
           <div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <ShieldCheck size={20} color="var(--color-success)" />
-              <span>Primary Category & Verification Consent</span>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <ShieldCheck size={18} color="var(--color-icy-steel)" />
+              <span>Taxonomy & Regulatory Declaration</span>
             </h3>
 
             <div className="form-group">
-              <label className="form-label">Primary Product Category</label>
+              <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Primary Catalog Taxonomy</label>
               <select
                 className="select-field"
                 value={formData.primary_category_id}
@@ -363,17 +396,32 @@ export const SellerOnboardingPage = () => {
               </select>
             </div>
 
-            <div style={{ background: 'var(--color-surface-subtle)', padding: '16px', borderRadius: 'var(--radius-sm)', marginBottom: '20px', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-              <p><strong>Merchant Declaration:</strong> I hereby certify that the tax details and bank coordinates provided are authentic and belong to my registered business entity. I agree to abide by the Vyapari Merchant Terms of Service and Code of Conduct.</p>
+            <div style={{ background: 'var(--color-deep-canopy)', border: '1px solid var(--color-iron-veil)', padding: '16px', borderRadius: '8px', marginBottom: '20px', fontSize: '12px', color: 'var(--color-tide-pool)', lineHeight: 1.6 }}>
+              <p><strong>Merchant Regulatory Declaration:</strong> I certify that all supplied taxation credentials and bank coordinates belong to my registered business entity. I agree to adhere to the Vyapari Merchant Code of Conduct and standard fulfillment SLA guidelines.</p>
             </div>
           </div>
         )}
 
         {/* Navigation buttons */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--color-border-card)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--color-iron-veil)' }}>
           {step > 1 ? (
-            <button type="button" onClick={() => setStep((prev) => prev - 1)} className="btn-outline">
-              <ArrowLeft size={16} />
+            <button 
+              type="button" 
+              onClick={() => setStep((prev) => prev - 1)} 
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 18px',
+                borderRadius: '9999px',
+                backgroundColor: 'transparent',
+                border: '1px solid var(--color-iron-veil)',
+                color: 'var(--color-tide-pool)',
+                fontSize: '13px',
+                cursor: 'pointer'
+              }}
+            >
+              <ArrowLeft size={15} />
               <span>Previous</span>
             </button>
           ) : (
@@ -381,19 +429,47 @@ export const SellerOnboardingPage = () => {
           )}
 
           {step < 4 ? (
-            <button type="button" onClick={handleNext} className="btn-primary">
+            <button 
+              type="button" 
+              onClick={handleNext} 
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '10px 22px',
+                borderRadius: '9999px',
+                backgroundColor: '#ffffff',
+                color: '#02090a',
+                fontSize: '13px',
+                fontWeight: 600,
+                border: 'none',
+                cursor: 'pointer'
+              }}
+            >
               <span>Continue</span>
-              <ArrowRight size={16} />
+              <ArrowRight size={15} />
             </button>
           ) : (
             <button
               type="button"
               onClick={handleSubmit}
-              className="btn-primary"
               disabled={loading}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 24px',
+                borderRadius: '9999px',
+                backgroundColor: '#ffffff',
+                color: '#02090a',
+                fontSize: '13px',
+                fontWeight: 600,
+                border: 'none',
+                cursor: loading ? 'not-allowed' : 'pointer'
+              }}
             >
               <span>{loading ? 'Submitting Application...' : 'Submit KYC Application'}</span>
-              <CheckCircle2 size={16} />
+              <CheckCircle2 size={15} />
             </button>
           )}
         </div>

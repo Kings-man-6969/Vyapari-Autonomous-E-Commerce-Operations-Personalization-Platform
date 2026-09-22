@@ -45,6 +45,8 @@ async def get_notifications(
             "notifications": notifications,
             "unread_count": int(unread_count or 0),
         },
+        "notifications": notifications,
+        "unread_count": int(unread_count or 0),
     }
 
 
@@ -55,7 +57,7 @@ async def mark_notification_read(
     db=Depends(get_db),
 ) -> dict:
     await db.execute(
-        "UPDATE notifications SET is_read = true WHERE id = $1 AND user_id = $2",
+        "UPDATE notifications SET is_read = true WHERE id::text = $1 AND user_id = $2",
         notif_id,
         user["id"],
     )

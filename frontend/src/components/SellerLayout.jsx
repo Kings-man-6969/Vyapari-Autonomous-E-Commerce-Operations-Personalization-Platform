@@ -12,12 +12,15 @@ import {
   Settings, 
   Store,
   ArrowUpRight,
-  Star
+  Star,
+  ShieldAlert,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const SellerLayout = ({ children }) => {
   const { user } = useAuth();
+  const sellerStatus = user?.seller_status || (user?.role === 'seller' ? 'active' : 'pending_kyc');
 
   const navItems = [
     { to: '/seller/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -27,22 +30,47 @@ export const SellerLayout = ({ children }) => {
     { to: '/seller/reviews', label: 'Customer Reviews', icon: Star },
     { to: '/seller/inventory', label: 'Inventory Velocity', icon: TrendingUp },
     { to: '/seller/ai/listing', label: 'AI Listing Studio', icon: Sparkles },
-    { to: '/seller/ai/chat', label: 'AI Operations Chat', icon: MessageSquare },
+    { to: '/seller/ai', label: 'AI Operations Chat', icon: MessageSquare },
     { to: '/seller/approvals', label: 'Approval Queue', icon: FileCheck2 },
     { to: '/seller/settings', label: 'Store Settings', icon: Settings },
   ];
 
   return (
     <div className="console-container">
-      {/* Persistent Seller Sidebar */}
+      {/* Persistent Dark Seller Sidebar */}
       <aside className="console-sidebar">
         <div className="console-sidebar-header">
           <span className="console-sidebar-title">Merchant Operations</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-            <Store size={16} color="var(--color-secondary)" />
-            <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 700, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user?.store_name || user?.name || 'Seller Store'}
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+            <div style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '6px',
+              backgroundColor: 'var(--color-gunmetal-dark)',
+              border: '1px solid var(--color-border-steel)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-icy-steel)'
+            }}>
+              <Store size={15} />
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <span style={{ fontSize: '13px', fontWeight: 600, color: '#ffffff', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user?.store_name || user?.name || 'Seller Store'}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                {sellerStatus === 'active' ? (
+                  <span style={{ fontSize: '10px', color: 'var(--color-icy-steel)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                    <ShieldCheck size={11} /> Verified Active
+                  </span>
+                ) : (
+                  <span style={{ fontSize: '10px', color: 'var(--color-warning)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                    <ShieldAlert size={11} /> KYC Pending
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -56,14 +84,14 @@ export const SellerLayout = ({ children }) => {
                 className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
                 end={item.to === '/seller/dashboard'}
               >
-                <Icon size={18} />
+                <Icon size={17} />
                 <span>{item.label}</span>
               </NavLink>
             );
           })}
         </nav>
 
-        <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--color-border-card)' }}>
+        <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--color-iron-veil)' }}>
           <Link
             to={user?.seller_id ? `/stores/${user.seller_id}` : '/explore'}
             target="_blank"
@@ -74,14 +102,15 @@ export const SellerLayout = ({ children }) => {
               justifyContent: 'space-between',
               padding: '10px 14px',
               borderRadius: 'var(--radius-sm)',
-              fontSize: 'var(--font-size-xs)',
-              fontWeight: 600,
-              color: 'var(--color-text-secondary)',
-              backgroundColor: 'var(--color-surface-subtle)'
+              fontSize: '12px',
+              fontWeight: 500,
+              color: 'var(--color-tide-pool)',
+              backgroundColor: 'var(--color-forest-floor)',
+              border: '1px solid var(--color-iron-veil)'
             }}
           >
-            <span>View Public Storefront</span>
-            <ArrowUpRight size={14} />
+            <span>Public Storefront</span>
+            <ArrowUpRight size={14} color="var(--color-ash-label)" />
           </Link>
         </div>
       </aside>

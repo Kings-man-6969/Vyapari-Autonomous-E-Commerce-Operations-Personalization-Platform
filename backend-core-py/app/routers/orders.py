@@ -19,6 +19,9 @@ from pydantic import BaseModel, ConfigDict
 from app.auth.dependencies import require_auth
 from app.db import get_db, get_pool
 
+import re
+from app.utils import to_valid_uuid
+
 router = APIRouter()
 
 
@@ -43,11 +46,13 @@ async def list_orders(user: dict = Depends(require_auth), db=Depends(get_db)) ->
 
 @router.get("/{id}")
 async def get_order(id: str, user: dict = Depends(require_auth), db=Depends(get_db)) -> dict:
+    is_uuid = bool(re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", id, re.IGNORECASE))
+    where_cond = "o.id = $1::uuid" if is_uuid else "o.id::text = $1"
     order_row = await db.fetchrow(
-        """SELECT o.*, p.status AS payment_status, p.provider_ref, p.payment_gateway
+        f"""SELECT o.*, p.status AS payment_status, p.provider_ref, p.payment_gateway
            FROM orders o
            LEFT JOIN payments p ON o.id = p.order_id
-           WHERE o.id = $1::uuid AND (o.user_id = $2 OR $3 = 'admin')""",
+           WHERE {where_cond} AND (o.user_id = $2 OR $3 = 'admin')""",
         id,
         user["id"],
         user["role"],
@@ -58,22 +63,20 @@ async def get_order(id: str, user: dict = Depends(require_auth), db=Depends(get_
             detail={"code": "ORDER_NOT_FOUND", "message": "Order not found."},
         )
 
-    items_rows, history_rows = await _gather(
-        db.fetch(
-            """SELECT oi.*, p.title, p.images, sp.store_name
-               FROM order_items oi
-               JOIN products p ON oi.product_id = p.id
-               JOIN seller_profiles sp ON oi.seller_id = sp.user_id
-               WHERE oi.order_id = $1""",
-            id,
-        ),
-        db.fetch(
-            """SELECT id, status, note, changed_at
-               FROM order_status_history
-               WHERE order_id = $1
-               ORDER BY changed_at ASC""",
-            id,
-        ),
+    items_rows = await db.fetch(
+        """SELECT oi.*, p.title, p.images, sp.store_name
+           FROM order_items oi
+           JOIN products p ON oi.product_id = p.id
+           JOIN seller_profiles sp ON oi.seller_id = sp.user_id
+           WHERE oi.order_id = $1""",
+        id,
+    )
+    history_rows = await db.fetch(
+        """SELECT id, status, note, changed_at
+           FROM order_status_history
+           WHERE order_id = $1
+           ORDER BY changed_at ASC""",
+        id,
     )
 
     return {
@@ -157,11 +160,17 @@ async def create_order(
             validated_items = []
 
             for item in body.items:
+                clean_p_id = to_valid_uuid(item.product_id)
+                if not clean_p_id:
+                    raise HTTPException(
+                        status_code=404,
+                        detail={"code": "PRODUCT_NOT_FOUND", "message": f"Product {item.product_id} no longer exists."},
+                    )
                 # SELECT ... FOR UPDATE — critical stock lock
                 product = await conn.fetchrow(
                     "SELECT id, title, price, stock_qty, status, seller_id "
                     "FROM products WHERE id = $1::uuid FOR UPDATE",
-                    item.product_id,
+                    clean_p_id,
                 )
 
                 if not product:
@@ -284,7 +293,7 @@ async def confirm_payment(
         async with conn.transaction():
             order_row = await conn.fetchrow(
                 "UPDATE orders SET status = 'paid', updated_at = CURRENT_TIMESTAMP "
-                "WHERE id = $1 RETURNING *",
+                "WHERE id = $1::uuid RETURNING *",
                 id,
             )
             if not order_row:
@@ -297,14 +306,14 @@ async def confirm_payment(
 
             await conn.execute(
                 "UPDATE payments SET status = 'success', provider_ref = $1, updated_at = CURRENT_TIMESTAMP "
-                "WHERE order_id = $2",
+                "WHERE order_id = $2::uuid",
                 razorpay_payment_id,
                 id,
             )
 
             await conn.execute(
                 "INSERT INTO order_status_history (order_id, status, note) "
-                "VALUES ($1, 'paid', 'Payment verified via Razorpay')",
+                "VALUES ($1::uuid, 'paid', 'Payment verified via Razorpay')",
                 id,
             )
 
@@ -322,7 +331,7 @@ async def confirm_payment(
 
             # Purchase interactions
             item_rows = await conn.fetch(
-                "SELECT product_id FROM order_items WHERE order_id = $1", id
+                "SELECT product_id FROM order_items WHERE order_id = $1::uuid", id
             )
             for row in item_rows:
                 await conn.execute(
@@ -338,6 +347,3 @@ async def confirm_payment(
     }
 
 
-async def _gather(*coros):
-    import asyncio
-    return await asyncio.gather(*coros)

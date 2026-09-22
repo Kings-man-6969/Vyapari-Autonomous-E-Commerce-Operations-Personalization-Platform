@@ -645,6 +645,19 @@ class TestAllVyapariEndpoints(unittest.TestCase):
         r_settings = self.client.get("/api/seller/settings", headers=seller_headers)
         self.assertEqual(r_settings.status_code, 200)
 
+        # Product update with empty string category_id (regression test for asyncpg UUID cast)
+        r_update_empty_cat = self.client.put(
+            "/api/seller/products/11111111-0000-0000-0000-000000000001",
+            headers=seller_headers,
+            json={
+                "title": "Updated Silk Saree",
+                "category_id": "",
+                "status": "active"
+            }
+        )
+        self.assertEqual(r_update_empty_cat.status_code, 200)
+        self.assertTrue(r_update_empty_cat.json()["success"])
+
     # ------------------------------------------------------------------------
     # 8. Approvals Endpoints
     # ------------------------------------------------------------------------

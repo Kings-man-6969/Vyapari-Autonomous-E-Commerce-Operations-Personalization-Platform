@@ -10,7 +10,8 @@ import {
   CheckCircle2, 
   AlertCircle,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  SlidersHorizontal
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -63,24 +64,53 @@ export const SellerProductsPage = () => {
   });
 
   return (
-    <div>
+    <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>
             Product Catalog
           </h1>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: '4px' }}>
-            Manage listings, track stock levels, and publish new products to the marketplace
+          <p style={{ color: 'var(--color-tide-pool)', fontSize: '0.875rem', marginTop: '4px' }}>
+            Manage merchant listings, monitor pgvector indexing, and calibrate stock runway
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <Link to="/seller/ai/listing" className="btn-outline" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-            <Sparkles size={16} color="var(--color-primary)" />
+          <Link 
+            to="/seller/ai/listing" 
+            style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: '6px',
+              padding: '8px 16px',
+              borderRadius: '9999px',
+              backgroundColor: 'var(--color-gunmetal-dark)',
+              border: '1px solid var(--color-border-steel)',
+              color: '#ffffff',
+              fontSize: '13px',
+              fontWeight: 500,
+              textDecoration: 'none'
+            }}
+          >
+            <Sparkles size={15} color="var(--color-icy-steel)" />
             <span>AI Listing Studio</span>
           </Link>
-          <Link to="/seller/products/new" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-            <Plus size={16} />
+          <Link 
+            to="/seller/products/new" 
+            style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: '6px',
+              padding: '8px 18px',
+              borderRadius: '9999px',
+              backgroundColor: '#ffffff',
+              color: '#02090a',
+              fontSize: '13px',
+              fontWeight: 600,
+              textDecoration: 'none'
+            }}
+          >
+            <Plus size={15} />
             <span>Add Product</span>
           </Link>
         </div>
@@ -89,26 +119,27 @@ export const SellerProductsPage = () => {
       {actionMsg.text && (
         <div style={{
           padding: '12px 16px',
-          borderRadius: 'var(--radius-sm)',
+          borderRadius: '8px',
           marginBottom: '20px',
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          backgroundColor: actionMsg.type === 'success' ? 'var(--color-success-bg)' : 'var(--color-error-bg)',
-          color: actionMsg.type === 'success' ? 'var(--color-success)' : 'var(--color-error)',
-          fontSize: 'var(--font-size-sm)'
+          backgroundColor: actionMsg.type === 'success' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(239, 68, 68, 0.1)',
+          border: `1px solid ${actionMsg.type === 'success' ? 'rgba(56, 189, 248, 0.3)' : 'var(--color-status-cancelled)'}`,
+          color: actionMsg.type === 'success' ? 'var(--color-icy-steel)' : '#fca5a5',
+          fontSize: '0.875rem'
         }}>
-          {actionMsg.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+          {actionMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
           <span>{actionMsg.text}</span>
         </div>
       )}
 
       {/* Filter Bar */}
       <div style={{
-        background: '#ffffff',
-        border: '1px solid var(--color-border-card)',
-        borderRadius: 'var(--radius-md)',
-        padding: '16px 20px',
+        background: 'var(--color-forest-floor)',
+        border: '1px solid var(--color-iron-veil)',
+        borderRadius: '12px',
+        padding: '14px 20px',
         marginBottom: '20px',
         display: 'flex',
         alignItems: 'center',
@@ -117,20 +148,23 @@ export const SellerProductsPage = () => {
         gap: '16px'
       }}>
         {/* Status Tabs */}
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {['all', 'active', 'draft', 'out_of_stock', 'archived'].map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
               style={{
                 padding: '6px 14px',
-                borderRadius: 'var(--radius-full)',
-                fontSize: 'var(--font-size-xs)',
+                borderRadius: '9999px',
+                fontSize: '12px',
                 fontWeight: 600,
                 textTransform: 'capitalize',
-                backgroundColor: statusFilter === status ? 'var(--color-primary)' : 'var(--color-surface-subtle)',
-                color: statusFilter === status ? '#ffffff' : 'var(--color-text-secondary)',
-                transition: 'all var(--transition-fast)'
+                backgroundColor: statusFilter === status ? '#ffffff' : 'var(--color-deep-canopy)',
+                color: statusFilter === status ? '#02090a' : 'var(--color-tide-pool)',
+                border: '1px solid',
+                borderColor: statusFilter === status ? '#ffffff' : 'var(--color-iron-veil)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
               }}
             >
               {status.replace('_', ' ')}
@@ -143,58 +177,76 @@ export const SellerProductsPage = () => {
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
-          background: 'var(--color-surface-subtle)',
-          padding: '6px 12px',
-          borderRadius: 'var(--radius-sm)',
+          background: 'var(--color-abyssal-ink)',
+          border: '1px solid var(--color-iron-veil)',
+          padding: '6px 14px',
+          borderRadius: '9999px',
           width: '280px'
         }}>
-          <Search size={16} color="var(--color-text-secondary)" />
+          <Search size={14} color="var(--color-ash-label)" />
           <input
             type="text"
-            placeholder="Filter by title..."
+            placeholder="Filter catalog by title..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
               border: 'none',
               background: 'transparent',
               outline: 'none',
-              fontSize: 'var(--font-size-xs)',
+              fontSize: '12px',
+              color: '#ffffff',
               width: '100%'
             }}
           />
         </div>
       </div>
 
-      {/* Table */}
+      {/* Catalog Table */}
       {loading ? (
-        <div className="table-card" style={{ padding: '24px' }}>
+        <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
           {[1, 2, 3, 4].map((n) => (
             <div key={n} style={{ height: '56px', marginBottom: '12px' }} className="skeleton" />
           ))}
         </div>
       ) : filteredProducts.length === 0 ? (
-        <div className="table-card" style={{ textAlign: 'center', padding: '60px 24px' }}>
-          <Boxes size={40} color="var(--color-text-muted)" style={{ marginBottom: '16px' }} />
-          <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '6px' }}>No products found</h3>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginBottom: '20px' }}>
+        <div className="table-card" style={{ textAlign: 'center', padding: '60px 24px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
+          <Boxes size={40} color="var(--color-ash-label)" style={{ marginBottom: '16px' }} />
+          <h3 style={{ fontSize: '1.125rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '6px' }}>
+            No listings found
+          </h3>
+          <p style={{ color: 'var(--color-tide-pool)', fontSize: '0.875rem', marginBottom: '20px' }}>
             {statusFilter !== 'all' || searchQuery
-              ? 'Try resetting your status filter or search query.'
-              : 'Add your first product to start generating sales on Vyapari.'}
+              ? 'Try adjusting your status filter or keyword parameters.'
+              : 'Add your first product to generate embeddings and activate merchant sales.'}
           </p>
-          <Link to="/seller/products/new" className="btn-primary">
+          <Link 
+            to="/seller/products/new" 
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 20px',
+              borderRadius: '9999px',
+              backgroundColor: '#ffffff',
+              color: '#02090a',
+              fontSize: '13px',
+              fontWeight: 600,
+              textDecoration: 'none'
+            }}
+          >
             <Plus size={16} />
             <span>Create New Listing</span>
           </Link>
         </div>
       ) : (
-        <div className="table-card table-responsive">
+        <div className="table-card table-responsive" style={{ backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
           <table className="data-table">
             <thead>
               <tr>
-                <th>Product</th>
+                <th>Listing</th>
                 <th>Category</th>
                 <th>Price</th>
-                <th>Stock</th>
+                <th>Inventory</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -210,42 +262,42 @@ export const SellerProductsPage = () => {
                         <img
                           src={imgUrl}
                           alt={p.title}
-                          style={{ width: '48px', height: '48px', borderRadius: 'var(--radius-xs)', objectFit: 'cover', border: '1px solid var(--color-border-subtle)' }}
+                          style={{ width: '46px', height: '46px', borderRadius: '6px', objectFit: 'cover', border: '1px solid var(--color-iron-veil)' }}
                           onError={(e) => {
                             e.target.src = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
                           }}
                         />
                         <div>
-                          <Link to={`/products/${p.id}`} target="_blank" style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-primary)' }}>
+                          <Link to={`/products/${p.id}`} target="_blank" style={{ fontWeight: 500, fontSize: '0.875rem', color: '#ffffff', textDecoration: 'none' }}>
                             {p.title}
                           </Link>
-                          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                          <div style={{ fontSize: '11px', color: 'var(--color-ash-label)', marginTop: '2px' }}>
                             SKU: {p.sku || p.id.slice(0, 8)}
                           </div>
                         </div>
                       </div>
                     </td>
                     <td>
-                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                      <span style={{ fontSize: '0.8125rem', color: 'var(--color-tide-pool)' }}>
                         {p.category_name || 'General'}
                       </span>
                     </td>
                     <td>
-                      <div style={{ fontWeight: 700, fontSize: 'var(--font-size-sm)' }}>
+                      <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#ffffff' }}>
                         ₹{parseFloat(p.price).toLocaleString('en-IN')}
                       </div>
                     </td>
                     <td>
                       <span style={{
                         fontWeight: 600,
-                        fontSize: 'var(--font-size-sm)',
-                        color: p.inventory_count <= 5 ? 'var(--color-error)' : 'var(--color-text-primary)'
+                        fontSize: '0.8125rem',
+                        color: p.inventory_count <= 5 ? '#fca5a5' : 'var(--color-tide-pool)'
                       }}>
                         {p.inventory_count} units
                       </span>
                     </td>
                     <td>
-                      <span className={`status-pill status-pill-${p.status}`}>
+                      <span className={`status-pill status-${p.status}`}>
                         {p.status.replace('_', ' ')}
                       </span>
                     </td>
@@ -256,43 +308,47 @@ export const SellerProductsPage = () => {
                           title="Edit Product"
                           style={{
                             padding: '6px',
-                            borderRadius: 'var(--radius-xs)',
-                            border: '1px solid var(--color-border-subtle)',
-                            color: 'var(--color-text-secondary)',
+                            borderRadius: '6px',
+                            border: '1px solid var(--color-iron-veil)',
+                            color: 'var(--color-tide-pool)',
                             display: 'flex',
-                            alignItems: 'center'
+                            alignItems: 'center',
+                            backgroundColor: 'var(--color-deep-canopy)'
                           }}
                         >
-                          <Edit3 size={14} />
+                          <Edit3 size={13} />
                         </Link>
                         <button
                           onClick={() => handleArchiveToggle(p.id, p.status)}
                           title={p.status === 'archived' ? 'Reactivate listing' : 'Archive listing'}
                           style={{
                             padding: '6px',
-                            borderRadius: 'var(--radius-xs)',
-                            border: '1px solid var(--color-border-subtle)',
-                            color: p.status === 'archived' ? 'var(--color-success)' : 'var(--color-warning)',
+                            borderRadius: '6px',
+                            border: '1px solid var(--color-border-steel)',
+                            color: p.status === 'archived' ? 'var(--color-icy-steel)' : '#fbbf24',
                             display: 'flex',
-                            alignItems: 'center'
+                            alignItems: 'center',
+                            backgroundColor: 'var(--color-slate-chrome)',
+                            cursor: 'pointer'
                           }}
                         >
-                          <Archive size={14} />
+                          <Archive size={13} />
                         </button>
                         <Link
                           to={`/products/${p.id}`}
                           target="_blank"
-                          title="View Live Page"
+                          title="View Live PDP"
                           style={{
                             padding: '6px',
-                            borderRadius: 'var(--radius-xs)',
-                            border: '1px solid var(--color-border-subtle)',
-                            color: 'var(--color-text-secondary)',
+                            borderRadius: '6px',
+                            border: '1px solid var(--color-iron-veil)',
+                            color: 'var(--color-tide-pool)',
                             display: 'flex',
-                            alignItems: 'center'
+                            alignItems: 'center',
+                            backgroundColor: 'var(--color-deep-canopy)'
                           }}
                         >
-                          <Eye size={14} />
+                          <Eye size={13} />
                         </Link>
                       </div>
                     </td>

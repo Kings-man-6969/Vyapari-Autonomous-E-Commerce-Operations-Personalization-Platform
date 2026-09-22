@@ -1,4 +1,5 @@
 import json
+import math
 import re
 import time
 import uuid
@@ -291,10 +292,70 @@ async def reject_seller(
 @router.get("/products")
 async def list_admin_products(
     status: str = Query(None),
+    search: str = Query(None),
+    seller: str = Query(None),
+    category: str = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(25, ge=1, le=100),
+    sort_by: str = Query("created_at"),
+    sort_order: str = Query("desc"),
     user: dict = _admin_guard,
     db=Depends(get_db),
 ) -> dict:
-    sql = """
+    where_clauses = ["1=1"]
+    params = []
+
+    if status and status != "all":
+        params.append(status)
+        where_clauses.append(f"p.status = ${len(params)}")
+
+    if search and search.strip():
+        s = f"%{search.strip()}%"
+        params.append(s)
+        where_clauses.append(
+            f"(p.title ILIKE ${len(params)} OR p.slug ILIKE ${len(params)} OR sp.store_name ILIKE ${len(params)} OR c.name ILIKE ${len(params)})"
+        )
+
+    if seller and seller.strip() and seller != "all":
+        params.append(f"%{seller.strip()}%")
+        where_clauses.append(f"(sp.store_name ILIKE ${len(params)} OR sp.user_id::text ILIKE ${len(params)})")
+
+    if category and category.strip() and category != "all":
+        params.append(f"%{category.strip()}%")
+        where_clauses.append(f"(c.name ILIKE ${len(params)} OR c.slug ILIKE ${len(params)} OR c.id::text ILIKE ${len(params)})")
+
+    where_sql = " AND ".join(where_clauses)
+
+    count_sql = f"""
+      SELECT COUNT(*)
+      FROM products p
+      LEFT JOIN seller_profiles sp ON p.seller_id = sp.user_id
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE {where_sql}
+    """
+    raw_total = await db.fetchval(count_sql, *params)
+    total = int(raw_total) if raw_total is not None else 0
+
+    # Sort columns mapping
+    order_col = "p.created_at"
+    if sort_by == "price":
+        order_col = "p.price"
+    elif sort_by in ("stock", "stock_qty", "inventory"):
+        order_col = "p.stock_qty"
+    elif sort_by == "title":
+        order_col = "p.title"
+    elif sort_by == "status":
+        order_col = "p.status"
+
+    direction = "ASC" if sort_order.lower() == "asc" else "DESC"
+
+    offset = (page - 1) * limit
+    params.append(limit)
+    limit_idx = len(params)
+    params.append(offset)
+    offset_idx = len(params)
+
+    sql = f"""
       SELECT 
         p.id, p.title, p.slug, p.price, p.stock_qty, p.stock_qty AS inventory_count,
         p.images, p.status, p.created_at,
@@ -304,15 +365,10 @@ async def list_admin_products(
       LEFT JOIN seller_profiles sp ON p.seller_id = sp.user_id
       LEFT JOIN users u ON p.seller_id = u.id
       LEFT JOIN categories c ON p.category_id = c.id
-      WHERE 1=1
+      WHERE {where_sql}
+      ORDER BY {order_col} {direction}
+      LIMIT ${limit_idx} OFFSET ${offset_idx}
     """
-    params = []
-
-    if status and status != "all":
-        params.append(status)
-        sql += f" AND p.status = ${len(params)}"
-
-    sql += " ORDER BY p.created_at DESC LIMIT 150"
 
     rows = await db.fetch(sql, *params)
     results = []
@@ -330,7 +386,54 @@ async def list_admin_products(
                 pass
         results.append(d)
 
-    return {"success": True, "data": results}
+    if total == 0 and results:
+        total = len(results)
+
+    # Summary counts across all products for admin status badges
+    summary_counts = {
+        "all": total,
+        "active": total,
+        "archived": 0,
+        "draft": 0,
+        "out_of_stock": 0,
+    }
+    try:
+        summary = await db.fetchrow("""
+          SELECT 
+            COUNT(*) AS total_all,
+            COUNT(*) FILTER (WHERE status = 'active') AS total_active,
+            COUNT(*) FILTER (WHERE status = 'archived') AS total_archived,
+            COUNT(*) FILTER (WHERE status = 'draft') AS total_draft,
+            COUNT(*) FILTER (WHERE status = 'out_of_stock') AS total_out_of_stock
+          FROM products
+        """)
+        if summary and hasattr(summary, "get"):
+            summary_counts = {
+                "all": int(summary.get("total_all") or total),
+                "active": int(summary.get("total_active") or 0),
+                "archived": int(summary.get("total_archived") or 0),
+                "draft": int(summary.get("total_draft") or 0),
+                "out_of_stock": int(summary.get("total_out_of_stock") or 0),
+            }
+    except Exception:
+        pass
+
+    pages = max(1, math.ceil(total / limit)) if total else 1
+
+    return {
+        "success": True,
+        "data": results,
+        "pagination": {
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "pages": pages,
+        },
+        "counts": summary_counts,
+        "total": total,
+        "page": page,
+        "pages": pages,
+    }
 
 
 class ModerateProductBody(BaseModel):
@@ -398,6 +501,47 @@ async def update_product_status(
     db=Depends(get_db),
 ) -> dict:
     return await _moderate_product(product_id, body, db)
+
+
+class BulkModerateBody(BaseModel):
+    product_ids: list[str]
+    status: str
+    reason: str | None = None
+
+
+@router.post("/products/bulk-moderate")
+async def bulk_moderate_products(
+    body: BulkModerateBody,
+    user: dict = _admin_guard,
+    db=Depends(get_db),
+) -> dict:
+    valid = ["active", "draft", "out_of_stock", "archived"]
+    if body.status not in valid:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_STATUS", "message": "Invalid product status."},
+        )
+
+    uuids = []
+    for pid in body.product_ids:
+        try:
+            uuids.append(uuid.UUID(pid))
+        except Exception:
+            continue
+
+    if not uuids:
+        return {"success": True, "message": "No valid product IDs provided.", "updated_count": 0}
+
+    await db.execute(
+        "UPDATE products SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = ANY($2::uuid[])",
+        body.status,
+        uuids,
+    )
+    return {
+        "success": True,
+        "message": f"Successfully updated {len(uuids)} products to {body.status}.",
+        "updated_count": len(uuids),
+    }
 
 
 # ----------------------------------------------------------------------------

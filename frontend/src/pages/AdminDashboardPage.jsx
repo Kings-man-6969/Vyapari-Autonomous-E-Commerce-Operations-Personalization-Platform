@@ -8,9 +8,9 @@ import {
   Store, 
   FileCheck2, 
   Cpu, 
-  AlertTriangle,
   ArrowRight,
-  Boxes
+  Boxes,
+  Activity
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -44,70 +44,78 @@ export const AdminDashboardPage = () => {
   }, []);
 
   return (
-    <div>
+    <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
-            Platform Governance Desk
+          <h1 className="heading-whisper" style={{ fontSize: '28px', color: '#ffffff', letterSpacing: '0.02em', margin: 0 }}>
+            Admin Dashboard
           </h1>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: '4px' }}>
-            Multi-vendor marketplace health, compliance review, and AI vector telemetry
+          <p style={{ color: 'var(--color-silver-glow)', opacity: 0.75, fontSize: '13px', marginTop: '6px' }}>
+            Manage sellers, verify KYC applications, moderate products, and monitor platform activity.
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <Link to="/admin/sellers" className="btn-outline" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-            <FileCheck2 size={16} />
-            <span>KYC Desk ({metrics?.pending_kyc || 0})</span>
+          <Link 
+            to="/admin/sellers" 
+            className="btn-outline"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 18px', fontSize: '12px' }}
+          >
+            <FileCheck2 size={15} color="var(--color-icy-steel)" />
+            <span>Seller Verification ({metrics?.pending_kyc || 0})</span>
           </Link>
-          <Link to="/admin/system" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#6366F1' }}>
-            <Cpu size={16} />
-            <span>System Health</span>
+          <Link 
+            to="/admin/system" 
+            className="btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 20px', fontSize: '12px' }}
+          >
+            <Cpu size={15} />
+            <span>System Status</span>
           </Link>
         </div>
       </div>
 
       {/* Metrics Row */}
-      <div className="metrics-grid">
-        <div className="stat-card">
-          <span className="stat-card-label">Platform Gross GMV</span>
-          <span className="stat-card-value">
+      <div className="metrics-grid" style={{ marginBottom: '28px' }}>
+        <div className="stat-card" style={{ backgroundColor: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)' }}>
+          <span className="stat-card-label">Total Sales (GMV)</span>
+          <span className="stat-card-value" style={{ color: '#ffffff', fontWeight: 330 }}>
             ₹{loading ? '...' : parseFloat(metrics?.total_revenue || 0).toLocaleString('en-IN')}
           </span>
-          <span className="stat-card-meta">
-            <TrendingUp size={14} color="var(--color-success)" />
-            Settled orders revenue
+          <span className="stat-card-meta" style={{ color: 'var(--color-silver-glow)', opacity: 0.75 }}>
+            <TrendingUp size={13} color="var(--color-icy-steel)" />
+            Total platform revenue
           </span>
         </div>
 
-        <div className="stat-card">
-          <span className="stat-card-label">Total Transactions</span>
-          <span className="stat-card-value">
+        <div className="stat-card" style={{ backgroundColor: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)' }}>
+          <span className="stat-card-label">Total Orders</span>
+          <span className="stat-card-value" style={{ color: '#ffffff', fontWeight: 330 }}>
             {loading ? '...' : metrics?.total_orders || 0}
           </span>
-          <span className="stat-card-meta">
-            <ShoppingBag size={14} color="var(--color-primary)" />
-            Processed orders
+          <span className="stat-card-meta" style={{ color: 'var(--color-silver-glow)', opacity: 0.75 }}>
+            <ShoppingBag size={13} color="var(--color-icy-steel)" />
+            Orders processed
           </span>
         </div>
 
-        <div className="stat-card">
-          <span className="stat-card-label">Verified Merchants</span>
-          <span className="stat-card-value">
+        <div className="stat-card" style={{ backgroundColor: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)' }}>
+          <span className="stat-card-label">Active Sellers</span>
+          <span className="stat-card-value" style={{ color: '#ffffff', fontWeight: 330 }}>
             {loading ? '...' : metrics?.active_sellers || 0}
           </span>
-          <span className="stat-card-meta">
-            <Store size={14} color="var(--color-secondary)" />
-            KYC-compliant sellers
+          <span className="stat-card-meta" style={{ color: 'var(--color-silver-glow)', opacity: 0.75 }}>
+            <Store size={13} color="var(--color-icy-steel)" />
+            Verified sellers
           </span>
         </div>
 
-        <div className="stat-card">
-          <span className="stat-card-label">Customer Accounts</span>
-          <span className="stat-card-value">
+        <div className="stat-card" style={{ backgroundColor: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)' }}>
+          <span className="stat-card-label">Total Customers</span>
+          <span className="stat-card-value" style={{ color: '#ffffff', fontWeight: 330 }}>
             {loading ? '...' : metrics?.total_customers || 0}
           </span>
-          <span className="stat-card-meta">
-            <Users size={14} color="#6366F1" />
+          <span className="stat-card-meta" style={{ color: 'var(--color-silver-glow)', opacity: 0.75 }}>
+            <Users size={13} color="var(--color-icy-steel)" />
             Registered buyers
           </span>
         </div>
@@ -116,64 +124,100 @@ export const AdminDashboardPage = () => {
       {/* Quick Governance Links */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-        gap: '20px',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+        gap: '24px',
         marginBottom: '32px'
       }}>
-        <div className="table-card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-warning-bg)', color: 'var(--color-warning)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ padding: '28px', backgroundColor: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px' }}>
+            <div style={{ width: '42px', height: '42px', borderRadius: '10px', backgroundColor: 'var(--color-titanium-brushed)', border: '1px solid var(--color-border-chrome)', color: '#facc15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <FileCheck2 size={20} />
             </div>
             <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Merchant KYC Desk</h3>
-              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>Review regulatory tax and bank submissions</p>
+              <h3 className="heading-whisper" style={{ fontSize: '17px', color: '#ffffff', margin: 0 }}>Seller Verification</h3>
+              <p style={{ fontSize: '11px', color: 'var(--color-ash-label)', margin: '2px 0 0 0' }}>Review seller identity and tax documents</p>
             </div>
           </div>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: '16px', lineHeight: 1.5 }}>
-            Inspect seller applicant permanent account numbers (PAN), GST certificates, and settlement coordinates.
+          <p style={{ fontSize: '13px', color: 'var(--color-silver-glow)', opacity: 0.75, marginBottom: '20px', lineHeight: 1.6 }}>
+            Review seller applications, PAN cards, GST numbers, and bank details before approving stores for public selling.
           </p>
-          <Link to="/admin/sellers" className="btn-outline" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-            <span>Open Verification Desk</span>
-            <ArrowRight size={14} />
+          <Link 
+            to="/admin/sellers" 
+            className="btn-outline"
+            style={{ 
+              width: '100%', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '6px',
+              padding: '10px 16px',
+              fontSize: '12px'
+            }}
+          >
+            <span>Review Applications</span>
+            <ArrowRight size={13} />
           </Link>
         </div>
 
-        <div className="table-card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ padding: '28px', backgroundColor: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px' }}>
+            <div style={{ width: '42px', height: '42px', borderRadius: '10px', backgroundColor: 'var(--color-titanium-brushed)', border: '1px solid var(--color-border-chrome)', color: 'var(--color-icy-steel)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Boxes size={20} />
             </div>
             <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Catalog Governance</h3>
-              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>Cross-vendor product listings moderation</p>
+              <h3 className="heading-whisper" style={{ fontSize: '17px', color: '#ffffff', margin: 0 }}>Product Moderation</h3>
+              <p style={{ fontSize: '11px', color: 'var(--color-ash-label)', margin: '2px 0 0 0' }}>Manage cross-vendor catalog listings</p>
             </div>
           </div>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: '16px', lineHeight: 1.5 }}>
-            Audit listings for regulatory compliance, counterfeit items, or policy breaches with instant archival controls.
+          <p style={{ fontSize: '13px', color: 'var(--color-silver-glow)', opacity: 0.75, marginBottom: '20px', lineHeight: 1.6 }}>
+            Review live products for policy compliance, quality, and authenticity. Archive or approve items anytime.
           </p>
-          <Link to="/admin/products" className="btn-outline" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+          <Link 
+            to="/admin/products" 
+            className="btn-outline"
+            style={{ 
+              width: '100%', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '6px',
+              padding: '10px 16px',
+              fontSize: '12px'
+            }}
+          >
             <span>Moderate Products</span>
-            <ArrowRight size={14} />
+            <ArrowRight size={13} />
           </Link>
         </div>
 
-        <div className="table-card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-sm)', backgroundColor: '#EEF2FF', color: '#6366F1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ padding: '28px', backgroundColor: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px' }}>
+            <div style={{ width: '42px', height: '42px', borderRadius: '10px', backgroundColor: 'var(--color-titanium-brushed)', border: '1px solid var(--color-border-chrome)', color: 'var(--color-icy-steel)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Cpu size={20} />
             </div>
             <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>AI & Vector Health</h3>
-              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>pgvector & microservice telemetry</p>
+              <h3 className="heading-whisper" style={{ fontSize: '17px', color: '#ffffff', margin: 0 }}>System Health</h3>
+              <p style={{ fontSize: '11px', color: 'var(--color-ash-label)', margin: '2px 0 0 0' }}>Database, services & search uptime</p>
             </div>
           </div>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: '16px', lineHeight: 1.5 }}>
-            Verify vector embedding coverage across the catalog, inspect database latency, and sync embeddings.
+          <p style={{ fontSize: '13px', color: 'var(--color-silver-glow)', opacity: 0.75, marginBottom: '20px', lineHeight: 1.6 }}>
+            Verify product search coverage, monitor PostgreSQL database connection pool, and ensure services are running.
           </p>
-          <Link to="/admin/system" className="btn-outline" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-            <span>View Diagnostics</span>
-            <ArrowRight size={14} />
+          <Link 
+            to="/admin/system" 
+            className="btn-outline"
+            style={{ 
+              width: '100%', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '6px',
+              padding: '10px 16px',
+              fontSize: '12px'
+            }}
+          >
+            <span>View Status</span>
+            <ArrowRight size={13} />
           </Link>
         </div>
       </div>

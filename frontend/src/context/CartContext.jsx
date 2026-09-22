@@ -39,7 +39,10 @@ export const CartProvider = ({ children }) => {
   }, [user, isAuthenticated]);
 
   const addToCart = async (productId, quantity = 1) => {
-    await api.post('/cart/items', { product_id: productId, quantity });
+    const resolvedId = typeof productId === 'object' && productId !== null 
+      ? (productId.id || productId.product_id) 
+      : productId;
+    await api.post('/cart/items', { product_id: resolvedId, quantity });
     await fetchCart();
   };
 

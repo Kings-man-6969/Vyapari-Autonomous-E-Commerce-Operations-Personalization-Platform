@@ -41,7 +41,7 @@ export const AdminSellersPage = () => {
     try {
       const res = await api.put(`/admin/sellers/${sellerId}/verify`);
       if (res.data?.success) {
-        setActionMsg({ type: 'success', text: 'Merchant KYC verified. Seller can now publish active listings.' });
+        setActionMsg({ type: 'success', text: 'Merchant KYC approved. Seller status promoted to active.' });
         setSelectedSeller(null);
         fetchSellers();
       }
@@ -66,19 +66,19 @@ export const AdminSellersPage = () => {
   };
 
   const filteredSellers = sellers.filter((s) => {
-    if (filter === 'pending') return s.onboarding_status === 'submitted' || s.onboarding_status === 'pending';
-    if (filter === 'verified') return s.onboarding_status === 'verified';
+    if (filter === 'pending') return s.onboarding_status === 'submitted' || s.onboarding_status === 'pending' || s.seller_status === 'pending_kyc';
+    if (filter === 'verified') return s.onboarding_status === 'verified' || s.seller_status === 'active';
     return true;
   });
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px' }}>
+    <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>
             Merchant KYC & Verification Desk
           </h1>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: '4px' }}>
+          <p style={{ color: 'var(--color-tide-pool)', fontSize: '0.875rem', marginTop: '4px' }}>
             Review regulatory tax registrations, business certificates, and bank settlement coordinates
           </p>
         </div>
@@ -87,26 +87,27 @@ export const AdminSellersPage = () => {
       {actionMsg.text && (
         <div style={{
           padding: '12px 16px',
-          borderRadius: 'var(--radius-sm)',
+          borderRadius: '8px',
           marginBottom: '20px',
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          backgroundColor: actionMsg.type === 'success' ? 'var(--color-success-bg)' : 'var(--color-error-bg)',
-          color: actionMsg.type === 'success' ? 'var(--color-success)' : 'var(--color-error)',
-          fontSize: 'var(--font-size-sm)'
+          backgroundColor: actionMsg.type === 'success' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(239, 68, 68, 0.1)',
+          border: `1px solid ${actionMsg.type === 'success' ? 'rgba(56, 189, 248, 0.3)' : 'var(--color-status-cancelled)'}`,
+          color: actionMsg.type === 'success' ? 'var(--color-icy-steel)' : '#fca5a5',
+          fontSize: '0.875rem'
         }}>
-          {actionMsg.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+          {actionMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
           <span>{actionMsg.text}</span>
         </div>
       )}
 
       {/* Filter Tabs */}
       <div style={{
-        background: '#ffffff',
-        border: '1px solid var(--color-border-card)',
-        borderRadius: 'var(--radius-md)',
-        padding: '14px 20px',
+        background: 'var(--color-forest-floor)',
+        border: '1px solid var(--color-iron-veil)',
+        borderRadius: '12px',
+        padding: '12px 20px',
         marginBottom: '20px',
         display: 'flex',
         gap: '8px'
@@ -116,14 +117,17 @@ export const AdminSellersPage = () => {
             key={f}
             onClick={() => setFilter(f)}
             style={{
-              padding: '6px 14px',
-              borderRadius: 'var(--radius-full)',
-              fontSize: 'var(--font-size-xs)',
+              padding: '6px 16px',
+              borderRadius: '9999px',
+              fontSize: '12px',
               fontWeight: 600,
               textTransform: 'capitalize',
-              backgroundColor: filter === f ? 'var(--color-primary)' : 'var(--color-surface-subtle)',
-              color: filter === f ? '#ffffff' : 'var(--color-text-secondary)',
-              transition: 'all var(--transition-fast)'
+              backgroundColor: filter === f ? '#ffffff' : 'var(--color-deep-canopy)',
+              color: filter === f ? '#02090a' : 'var(--color-tide-pool)',
+              border: '1px solid',
+              borderColor: filter === f ? '#ffffff' : 'var(--color-iron-veil)',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
             }}
           >
             {f === 'pending' ? 'Pending Review' : f}
@@ -133,74 +137,76 @@ export const AdminSellersPage = () => {
 
       {/* Table */}
       {loading ? (
-        <div className="table-card" style={{ padding: '24px' }}>
+        <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
           {[1, 2, 3].map((n) => (
             <div key={n} style={{ height: '60px', marginBottom: '12px' }} className="skeleton" />
           ))}
         </div>
       ) : filteredSellers.length === 0 ? (
-        <div className="table-card" style={{ textAlign: 'center', padding: '60px 24px' }}>
-          <FileCheck2 size={40} color="var(--color-text-muted)" style={{ marginBottom: '16px' }} />
-          <h3 style={{ fontSize: '1.125rem', fontWeight: 700 }}>No seller applicants</h3>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            All merchant KYC applications have been reviewed.
+        <div className="table-card" style={{ textAlign: 'center', padding: '60px 24px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
+          <FileCheck2 size={40} color="var(--color-ash-label)" style={{ marginBottom: '16px' }} />
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>
+            No merchant applicants found
+          </h3>
+          <p style={{ color: 'var(--color-tide-pool)', fontSize: '0.875rem' }}>
+            All merchant KYC applications have been reviewed and adjudicated.
           </p>
         </div>
       ) : (
-        <div className="table-card table-responsive">
+        <div className="table-card table-responsive" style={{ backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
           <table className="data-table">
             <thead>
               <tr>
                 <th>Store & Owner</th>
                 <th>Tax Registration</th>
-                <th>Bank Coordinates</th>
+                <th>Settlement Account</th>
                 <th>Catalog Items</th>
                 <th>KYC Status</th>
-                <th>Actions</th>
+                <th>Adjudication</th>
               </tr>
             </thead>
             <tbody>
               {filteredSellers.map((s) => {
-                const isPending = s.onboarding_status === 'submitted' || s.onboarding_status === 'pending';
-                const isVerified = s.onboarding_status === 'verified';
+                const isPending = s.onboarding_status === 'submitted' || s.onboarding_status === 'pending' || s.seller_status === 'pending_kyc';
+                const isVerified = s.onboarding_status === 'verified' || s.seller_status === 'active';
                 return (
                   <tr key={s.id}>
                     <td>
                       <div>
-                        <span style={{ fontWeight: 700, fontSize: 'var(--font-size-sm)' }}>{s.store_name}</span>
-                        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#ffffff' }}>{s.store_name}</span>
+                        <div style={{ fontSize: '11px', color: 'var(--color-ash-label)', marginTop: '2px' }}>
                           Owner: {s.owner_name} &bull; {s.owner_email}
                         </div>
                       </div>
                     </td>
                     <td>
                       <div>
-                        <div style={{ fontSize: 'var(--font-size-xs)', fontFamily: 'monospace', fontWeight: 600 }}>
+                        <div style={{ fontSize: '12px', fontFamily: 'monospace', fontWeight: 500, color: '#ffffff' }}>
                           PAN: {s.pan || 'NOT_PROVIDED'}
                         </div>
-                        <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>
+                        <div style={{ fontSize: '11px', color: 'var(--color-ash-label)', fontFamily: 'monospace' }}>
                           GST: {s.gstin || 'EXEMPT'}
                         </div>
                       </div>
                     </td>
                     <td>
                       <div>
-                        <div style={{ fontSize: 'var(--font-size-xs)' }}>
+                        <div style={{ fontSize: '12px', color: 'var(--color-tide-pool)' }}>
                           {s.account_holder_name || s.owner_name}
                         </div>
-                        <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>
+                        <div style={{ fontSize: '11px', color: 'var(--color-ash-label)', fontFamily: 'monospace' }}>
                           IFSC: {s.bank_ifsc || 'N/A'}
                         </div>
                       </div>
                     </td>
                     <td>
-                      <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600 }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#ffffff' }}>
                         {s.product_count || 0} products
                       </span>
                     </td>
                     <td>
-                      <span className={`status-pill ${isVerified ? 'status-pill-verified' : isPending ? 'status-pill-pending' : 'status-pill-rejected'}`}>
-                        {s.onboarding_status || 'pending'}
+                      <span className={`status-pill ${isVerified ? 'status-active' : isPending ? 'status-draft' : 'status-cancelled'}`}>
+                        {isVerified ? 'verified (active)' : isPending ? 'pending_kyc' : 'rejected'}
                       </span>
                     </td>
                     <td>
@@ -209,16 +215,37 @@ export const AdminSellersPage = () => {
                           <>
                             <button
                               onClick={() => handleVerify(s.id)}
-                              className="btn-primary"
-                              style={{ padding: '6px 12px', fontSize: 'var(--font-size-xs)', backgroundColor: 'var(--color-success)' }}
+                              style={{
+                                padding: '6px 14px',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                borderRadius: '9999px',
+                                backgroundColor: '#ffffff',
+                                color: '#02090a',
+                                border: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                cursor: 'pointer'
+                              }}
                             >
                               <CheckCircle2 size={13} />
-                              <span>Verify</span>
+                              <span>Approve</span>
                             </button>
                             <button
                               onClick={() => handleReject(s.id)}
-                              className="btn-outline"
-                              style={{ padding: '6px 12px', fontSize: 'var(--font-size-xs)', color: 'var(--color-error)' }}
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: '12px',
+                                borderRadius: '9999px',
+                                backgroundColor: 'transparent',
+                                border: '1px solid rgba(239, 68, 68, 0.4)',
+                                color: '#f87171',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                cursor: 'pointer'
+                              }}
                             >
                               <XCircle size={13} />
                               <span>Reject</span>
@@ -226,9 +253,9 @@ export const AdminSellersPage = () => {
                           </>
                         )}
                         {isVerified && (
-                          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ fontSize: '12px', color: 'var(--color-icy-steel)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <ShieldCheck size={14} />
-                            Active Merchant
+                            Verified Merchant
                           </span>
                         )}
                       </div>

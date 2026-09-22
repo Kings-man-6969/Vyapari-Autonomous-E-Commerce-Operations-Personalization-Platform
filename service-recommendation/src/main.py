@@ -80,6 +80,12 @@ async def get_db_pool():
 @app.on_event("startup")
 async def startup():
     logger.info("Recommendation Service starting up...")
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(None, get_embedder)
+    except Exception as e:
+        logger.warning(f"Background embedder pre-warm failed: {e}")
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -208,6 +214,13 @@ async def get_similar_products(product_id: str, limit: int = Query(6, ge=1, le=2
     if not pool:
         raise HTTPException(status_code=503, detail="Database pool unavailable")
     
+    import uuid
+    try:
+        clean_id = str(uuid.UUID(str(product_id).strip()))
+    except (ValueError, AttributeError):
+        async with pool.acquire() as conn:
+            return await _fetch_popular_products(conn, limit)
+
     query = """
         WITH target AS (
             SELECT embedding FROM product_embeddings WHERE product_id = $1::uuid

@@ -2,6 +2,8 @@
 
 Vyapari is a production-grade, multi-role autonomous e-commerce platform benchmarked against Amazon, Flipkart, and Shopify. Built with a dual-AI microservice architecture, it combines real-time pgvector dense semantic search with agentic generative AI seller copilots, resilient transaction concurrency, and an intuitive multi-device responsive interface.
 
+> 📖 **Comprehensive Documentation**: For the complete architectural decisions, data models, security controls, operational runbooks, and deep-dive specifications, refer to [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md).
+
 ---
 
 ## 1. System Architecture
@@ -19,8 +21,8 @@ Vyapari is orchestrated as a 6-tier containerized ecosystem coordinated via Dock
                                                 │ HTTP / REST
                                                 ▼ (Port 8000)
                                   ┌───────────────────────────┐
-                                  │    Backend Core (Node.js) │
-                                  │    Express API Gateway    │
+                                  │   Backend Core (FastAPI)  │
+                                  │    Python API Gateway     │
                                   └──────┬──────┬──────┬──────┘
                                          │      │      │
                 ┌────────────────────────┘      │      └────────────────────────┐
@@ -37,7 +39,7 @@ Vyapari is orchestrated as a 6-tier containerized ecosystem coordinated via Dock
 | Service | Technology | Port | Responsibilities |
 |---|---|---|---|
 | **Frontend** | React 18, Vite, Lucide Icons, Vanilla CSS | `3000` | Multi-role UI/UX (Customer, Seller, Admin), responsive 3-column PDP, search autocomplete popover, mobile sticky bottom purchase bar, sliding faceted drawer. |
-| **Backend Core** | Node.js, Express, `pg` Pool, JWT | `8000` | API Gateway, role authorization, ACID transaction management with `SELECT ... FOR UPDATE`, Natural Language Query parser, Razorpay simulated checkout. |
+| **Backend Core** | Python 3.11, FastAPI, asyncpg Pool, JWT | `8000` | API Gateway, role authorization, ACID transaction management with `SELECT ... FOR UPDATE`, Natural Language Query parser, Razorpay simulated checkout. |
 | **Recommendation Service** | Python 3.11, FastAPI, SentenceTransformers | `8001` | Dense vector embeddings generation via `all-MiniLM-L6-v2` (384-dim), pgvector cosine similarity search (`1 - (pe.embedding <=> $1::vector)`), personalized recommendations. |
 | **Seller Agent Service** | Python 3.11, FastAPI, Google Gemini | `8002` | Automated listing generation, inventory velocity advisory, merchant copilot chat, Support RAG policy retrieval. |
 | **Database** | PostgreSQL 16 + pgvector v0.8.6 | `5432` | Relational tables, HNSW vector indexes (`vector_cosine_ops`), audit trails, order state machines, review reply threads. |
@@ -220,7 +222,9 @@ Validates zero JSX/CSS compile errors and builds production bundle assets.
 
 | Document | Purpose |
 |---|---|
-| [README.md](file:///c:/Users/gungu/Vyapari-Autonomous-E-Commerce-Operations-Personalization-Platform/README.md) | Platform overview, system architecture, quickstart instructions, and credentials. |
-| [product_bible.md](file:///c:/Users/gungu/Vyapari-Autonomous-E-Commerce-Operations-Personalization-Platform/product_bible.md) | Authoritative 80KB UX specification, user journeys, edge-case contracts, and API schemas. |
-| [DESIGN.md](file:///c:/Users/gungu/Vyapari-Autonomous-E-Commerce-Operations-Personalization-Platform/DESIGN.md) | Design system tokens, color palettes, typography scales, and responsive layout rules. |
-| [walkthrough.md](file:///c:/Users/gungu/Vyapari-Autonomous-E-Commerce-Operations-Personalization-Platform/walkthrough.md) | Comprehensive implementation walkthrough, verification test outputs, and feature audits. |
+| [README.md](./README.md) | Platform overview, system architecture, quickstart instructions, and credentials. |
+| [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md) | Comprehensive master documentation, system mechanics, schemas, and operational runbooks. |
+| [product_bible.md](./product_bible.md) | Authoritative 80KB UX specification, user journeys, edge-case contracts, and API schemas. |
+| [DESIGN.md](./DESIGN.md) | Design system tokens, color palettes, typography scales, and responsive layout rules. |
+| [walkthrough.md](./walkthrough.md) | Comprehensive implementation walkthrough, verification test outputs, and feature audits. |
+| [docs/contracts.md](./docs/contracts.md) | Canonical system contracts, state machines, and concurrency policies. |

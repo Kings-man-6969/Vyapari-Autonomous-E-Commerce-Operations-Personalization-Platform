@@ -1,12 +1,16 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, Star, Heart, Zap } from 'lucide-react';
+import { ShoppingBag, Star, Heart } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
+import { useAuth } from '../context/AuthContext';
 
 export const ProductCard = ({ product }) => {
   const { addToCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
+  const { isCustomer, isAuthenticated } = useAuth();
+  // Only customers (not sellers or admins) can interact with cart/wishlist
+  const canShop = isCustomer || !isAuthenticated;
   const inWish = isInWishlist(product.id);
 
   const images = Array.isArray(product.images) 
@@ -14,8 +18,9 @@ export const ProductCard = ({ product }) => {
     : (typeof product.images === 'string' ? JSON.parse(product.images || '[]') : []);
   const mainImage = images[0] || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
 
-  const isOutOfStock = product.status === 'out_of_stock' || product.stock_qty <= 0;
-  const isLowStock = !isOutOfStock && product.stock_qty <= 5;
+  const stock = product.inventory_count !== undefined ? product.inventory_count : (product.stock_qty !== undefined ? product.stock_qty : 0);
+  const isOutOfStock = product.status === 'out_of_stock' || stock <= 0;
+  const isLowStock = !isOutOfStock && stock <= 5;
 
   let attrs = {};
   try {
@@ -32,8 +37,7 @@ export const ProductCard = ({ product }) => {
   const compareNum = product.compare_at_price ? parseFloat(product.compare_at_price) : 0;
   const discountPercent = compareNum > priceNum ? Math.round(((compareNum - priceNum) / compareNum) * 100) : 0;
 
-  const badge = attrs.badge || (discountPercent >= 20 ? `${discountPercent}% OFF` : (parseFloat(rating) >= 4.8 ? 'Top Rated' : null));
-  const fastDelivery = attrs.fast_delivery || 'FREE Delivery in 2 Days';
+  const badge = attrs.badge || (discountPercent >= 20 ? `${discountPercent}% OFF` : (parseFloat(rating) >= 4.8 ? 'Curated' : null));
 
   const handleWishlistClick = (e) => {
     e.preventDefault();
@@ -41,46 +45,56 @@ export const ProductCard = ({ product }) => {
     toggleWishlist(product);
   };
 
+  const handleAddToCart = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isOutOfStock) {
+      addToCart(product.id, 1);
+    }
+  };
+
   return (
     <div className="product-card" style={{ 
       position: 'relative', 
       display: 'flex', 
       flexDirection: 'column', 
-      borderRadius: 'var(--radius-md)', 
+      borderRadius: '12px', 
       overflow: 'hidden', 
-      border: '1px solid var(--color-border-card)', 
-      backgroundColor: '#ffffff',
-      transition: 'box-shadow var(--transition-normal), transform var(--transition-fast)'
+      border: '1px solid var(--color-border-steel)', 
+      backgroundColor: 'var(--color-gunmetal-dark)',
+      boxShadow: 'var(--shadow-card)',
+      transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
     }}>
-      {/* Wishlist Button */}
-      <button
-        onClick={handleWishlistClick}
-        aria-label={inWish ? 'Remove from wishlist' : 'Add to wishlist'}
-        style={{
-          position: 'absolute',
-          top: '12px',
-          right: '12px',
-          zIndex: 3,
-          width: '34px',
-          height: '34px',
-          borderRadius: '50%',
-          backgroundColor: 'rgba(255, 255, 255, 0.92)',
-          backdropFilter: 'blur(6px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
-          border: '1px solid rgba(0,0,0,0.04)',
-          cursor: 'pointer',
-          transition: 'transform 0.15s ease'
-        }}
-      >
-        <Heart 
-          size={16} 
-          color={inWish ? 'var(--color-primary)' : 'var(--color-text-secondary)'} 
-          fill={inWish ? 'var(--color-primary)' : 'none'} 
-        />
-      </button>
+      {/* Wishlist Button — customers only */}
+      {canShop && (
+        <button
+          onClick={handleWishlistClick}
+          aria-label={inWish ? 'Remove from wishlist' : 'Add to wishlist'}
+          style={{
+            position: 'absolute',
+            top: '12px',
+            right: '12px',
+            zIndex: 3,
+            width: '34px',
+            height: '34px',
+            borderRadius: '50%',
+            backgroundColor: 'rgba(18, 21, 27, 0.85)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '1px solid var(--color-border-steel)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <Heart 
+            size={15} 
+            color={inWish ? 'var(--color-pure-white)' : 'var(--color-steel-mist)'} 
+            fill={inWish ? '#ffffff' : 'none'} 
+          />
+        </button>
+      )}
 
       {/* Badge (Top-Left) */}
       {badge && (
@@ -89,27 +103,28 @@ export const ProductCard = ({ product }) => {
           top: '12px',
           left: '12px',
           zIndex: 3,
-          backgroundColor: badge.includes('OFF') ? '#dc2626' : (badge.includes('Choice') ? '#0f172a' : 'var(--color-primary)'),
-          color: '#ffffff',
+          backgroundColor: 'rgba(9, 10, 13, 0.88)',
+          backdropFilter: 'blur(8px)',
+          color: 'var(--color-brushed-aluminum)',
+          border: '1px solid var(--color-border-chrome)',
           padding: '3px 8px',
           borderRadius: '4px',
-          fontSize: '11px',
+          fontSize: '10px',
           fontWeight: 700,
-          letterSpacing: '0.3px',
-          textTransform: 'uppercase',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          letterSpacing: '0.05em',
+          textTransform: 'uppercase'
         }}>
           {badge}
         </div>
       )}
 
-      {/* Image Container with Subtle Background */}
+      {/* Image Container with Dark Obsidian Backdrop */}
       <Link to={`/products/${product.id}`} style={{ 
         display: 'block', 
         position: 'relative', 
         overflow: 'hidden', 
-        paddingTop: '95%',
-        backgroundColor: '#f8fafc'
+        paddingTop: '92%',
+        backgroundColor: 'var(--color-obsidian-graphite)'
       }}>
         <img
           src={mainImage}
@@ -121,8 +136,8 @@ export const ProductCard = ({ product }) => {
             width: '100%',
             height: '100%',
             objectFit: 'contain',
-            padding: '12px',
-            transition: 'transform 0.3s ease'
+            padding: '16px',
+            transition: 'transform 0.4s ease'
           }}
           onError={(e) => {
             e.target.src = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
@@ -133,12 +148,15 @@ export const ProductCard = ({ product }) => {
             position: 'absolute',
             bottom: '10px',
             left: '10px',
-            backgroundColor: 'rgba(15, 23, 42, 0.85)',
-            color: '#ffffff',
+            backgroundColor: 'rgba(244, 63, 94, 0.18)',
+            color: 'var(--color-error)',
+            border: '1px solid rgba(244, 63, 94, 0.35)',
             padding: '3px 8px',
             borderRadius: '4px',
-            fontSize: '11px',
-            fontWeight: 600
+            fontSize: '10px',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em'
           }}>
             Out of Stock
           </div>
@@ -148,126 +166,110 @@ export const ProductCard = ({ product }) => {
             position: 'absolute',
             bottom: '10px',
             left: '10px',
-            backgroundColor: '#d97706',
-            color: '#ffffff',
+            backgroundColor: 'rgba(245, 158, 11, 0.18)',
+            color: 'var(--color-warning)',
+            border: '1px solid rgba(245, 158, 11, 0.35)',
             padding: '3px 8px',
             borderRadius: '4px',
-            fontSize: '11px',
-            fontWeight: 600
+            fontSize: '10px',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em'
           }}>
-            Only {product.stock_qty} left
+            Low Stock ({stock} left)
           </div>
         )}
       </Link>
 
-      {/* Body Content */}
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-        {/* Brand & Store */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-          <span style={{ 
-            fontSize: '11px', 
-            textTransform: 'uppercase', 
-            letterSpacing: '0.5px',
-            color: 'var(--color-text-secondary)', 
-            fontWeight: 700 
-          }}>
+      {/* Card Content Details */}
+      <div className="card-content" style={{ padding: '16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+        {/* Brand & Rating Row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-slate-caption)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             {brand}
           </span>
-          <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-            {product.category_name}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--color-brushed-aluminum)' }}>
+            <Star size={12} fill="var(--color-silver-glow)" stroke="none" />
+            <span style={{ fontWeight: 600 }}>{rating}</span>
+            <span style={{ color: 'var(--color-slate-caption)', fontSize: '10px' }}>({reviewsCount})</span>
+          </div>
         </div>
 
-        {/* Product Title */}
-        <Link to={`/products/${product.id}`} style={{
-          fontSize: '14px',
-          fontWeight: 600,
-          lineHeight: '1.4',
-          marginBottom: '8px',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-          color: 'var(--color-text-primary)'
-        }}>
-          {product.title}
+        {/* Title */}
+        <Link to={`/products/${product.id}`} style={{ textDecoration: 'none' }}>
+          <h3 className="card-title" style={{
+            fontSize: '14px',
+            fontWeight: 450,
+            color: '#ffffff',
+            lineHeight: 1.4,
+            marginBottom: '12px',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            minHeight: '39px'
+          }}>
+            {product.title}
+          </h3>
         </Link>
 
-        {/* Star Rating & Review Count */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
-          <div style={{ 
-            display: 'inline-flex', 
-            alignItems: 'center', 
-            gap: '3px', 
-            backgroundColor: '#fef3c7', 
-            padding: '2px 6px', 
-            borderRadius: '4px', 
-            fontSize: '11px', 
-            fontWeight: 700,
-            color: '#b45309'
-          }}>
-            <Star size={11} fill="#b45309" color="#b45309" />
-            <span>{rating}</span>
-          </div>
-          <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-            ({reviewsCount.toLocaleString()})
-          </span>
-        </div>
-
-        {/* Fast Delivery Pill */}
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '4px', 
-          fontSize: '11px', 
-          color: '#15803d', 
-          fontWeight: 600,
-          marginBottom: '12px'
-        }}>
-          <Zap size={12} fill="#15803d" />
-          <span>{fastDelivery}</span>
-        </div>
-
-        {/* Price & CTA Row */}
-        <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '17px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+        {/* Price & Action Row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid var(--color-border-steel)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+              <span className="card-price" style={{ fontSize: '16px', fontWeight: 600, color: '#ffffff' }}>
                 ₹{priceNum.toLocaleString('en-IN')}
               </span>
               {compareNum > priceNum && (
-                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', textDecoration: 'line-through' }}>
+                <span style={{ fontSize: '11px', color: 'var(--color-slate-caption)', textDecoration: 'line-through' }}>
                   ₹{compareNum.toLocaleString('en-IN')}
                 </span>
               )}
             </div>
             {discountPercent > 0 && (
-              <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: 700 }}>
-                {discountPercent}% savings
+              <span style={{ fontSize: '10px', color: 'var(--color-icy-steel)', fontWeight: 600 }}>
+                Save {discountPercent}%
               </span>
             )}
           </div>
 
-          <button
-            onClick={() => addToCart(product.id, 1)}
-            disabled={isOutOfStock}
-            title={isOutOfStock ? 'Item out of stock' : 'Add to cart'}
-            style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '8px',
-              backgroundColor: isOutOfStock ? 'var(--color-surface-subtle)' : 'var(--color-primary)',
-              color: isOutOfStock ? 'var(--color-text-muted)' : '#ffffff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: isOutOfStock ? 'not-allowed' : 'pointer',
-              border: 'none',
-              transition: 'background-color 0.2s ease, transform 0.1s ease'
-            }}
-          >
-            <ShoppingBag size={17} />
-          </button>
+          {/* Add to cart — customers only */}
+          {canShop && (
+            <button
+              onClick={handleAddToCart}
+              disabled={isOutOfStock}
+              aria-label="Add to cart"
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                backgroundColor: isOutOfStock ? 'transparent' : '#ffffff',
+                color: '#090a0d',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: isOutOfStock ? 'not-allowed' : 'pointer',
+                border: isOutOfStock ? '1px solid var(--color-border-steel)' : 'none',
+                boxShadow: isOutOfStock ? 'none' : '0 2px 10px rgba(255, 255, 255, 0.15)',
+                opacity: isOutOfStock ? 0.4 : 1,
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                if (!isOutOfStock) {
+                  e.currentTarget.style.backgroundColor = '#f1f5f9';
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isOutOfStock) {
+                  e.currentTarget.style.backgroundColor = '#ffffff';
+                  e.currentTarget.style.transform = 'scale(1)';
+                }
+              }}
+            >
+              <ShoppingBag size={15} />
+            </button>
+          )}
         </div>
       </div>
     </div>

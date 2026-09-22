@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Sparkles, User, Store } from 'lucide-react';
+import { User, Store, ShoppingBag, ShieldCheck, UserPlus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const RegisterPage = () => {
@@ -46,20 +46,60 @@ export const RegisterPage = () => {
   };
 
   return (
-    <div className="container" style={{ padding: '64px 24px', maxWidth: '480px' }}>
+    <div style={{
+      backgroundColor: 'var(--color-obsidian-graphite)',
+      minHeight: 'calc(100vh - 76px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '52px 20px',
+      position: 'relative'
+    }}>
+      {/* Background Titanium Ambient Sheen */}
       <div style={{
-        backgroundColor: '#ffffff',
-        padding: '36px',
-        borderRadius: 'var(--radius-lg)',
-        border: '1px solid var(--color-border-card)',
-        boxShadow: 'var(--shadow-sm)'
+        position: 'absolute',
+        top: '20%',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: '500px',
+        height: '350px',
+        background: 'radial-gradient(circle, rgba(56, 189, 248, 0.05) 0%, rgba(203, 213, 225, 0.02) 40%, transparent 70%)',
+        pointerEvents: 'none',
+        zIndex: 0
+      }} />
+
+      <div style={{
+        width: '100%',
+        maxWidth: '500px',
+        backgroundColor: 'var(--color-gunmetal-dark)',
+        padding: '44px 38px',
+        borderRadius: '16px',
+        border: '1px solid var(--color-border-steel)',
+        boxShadow: '0 24px 50px rgba(0,0,0,0.6)',
+        position: 'relative',
+        zIndex: 1
       }}>
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-          <h1 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800 }}>
-            Create Your Account
+          <div style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '12px',
+            backgroundColor: 'var(--color-titanium-brushed)',
+            border: '1px solid var(--color-border-chrome)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--color-icy-steel)',
+            marginBottom: '18px',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.4)'
+          }}>
+            <UserPlus size={22} />
+          </div>
+          <h1 className="heading-whisper" style={{ fontSize: '26px', color: '#ffffff', letterSpacing: '0.02em', marginBottom: '8px' }}>
+            Create Account
           </h1>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: '4px' }}>
-            Join the autonomous commerce platform
+          <p style={{ color: 'var(--color-silver-glow)', opacity: 0.75, fontSize: '13px', margin: 0 }}>
+            Join the autonomous commerce platform ecosystem
           </p>
         </div>
 
@@ -68,10 +108,11 @@ export const RegisterPage = () => {
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
           gap: '8px',
-          padding: '4px',
-          backgroundColor: 'var(--color-surface-subtle)',
-          borderRadius: 'var(--radius-sm)',
-          marginBottom: '24px'
+          padding: '6px',
+          backgroundColor: 'var(--color-obsidian-graphite)',
+          borderRadius: '10px',
+          border: '1px solid var(--color-border-steel)',
+          marginBottom: '26px'
         }}>
           <button
             type="button"
@@ -80,17 +121,20 @@ export const RegisterPage = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '6px',
+              gap: '8px',
               padding: '10px',
-              borderRadius: 'var(--radius-xs)',
-              fontSize: 'var(--font-size-xs)',
-              fontWeight: 700,
-              backgroundColor: role === 'customer' ? '#ffffff' : 'transparent',
-              color: role === 'customer' ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-              boxShadow: role === 'customer' ? 'var(--shadow-xs)' : 'none'
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 600,
+              backgroundColor: role === 'customer' ? 'var(--color-titanium-brushed)' : 'transparent',
+              color: role === 'customer' ? '#ffffff' : 'var(--color-silver-glow)',
+              border: role === 'customer' ? '1px solid var(--color-border-chrome)' : '1px solid transparent',
+              boxShadow: role === 'customer' ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
             }}
           >
-            <User size={14} /> Customer
+            <User size={14} color={role === 'customer' ? 'var(--color-icy-steel)' : 'currentColor'} /> Customer
           </button>
           <button
             type="button"
@@ -99,29 +143,33 @@ export const RegisterPage = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '6px',
+              gap: '8px',
               padding: '10px',
-              borderRadius: 'var(--radius-xs)',
-              fontSize: 'var(--font-size-xs)',
-              fontWeight: 700,
-              backgroundColor: role === 'seller' ? '#ffffff' : 'transparent',
-              color: role === 'seller' ? 'var(--color-secondary)' : 'var(--color-text-secondary)',
-              boxShadow: role === 'seller' ? 'var(--shadow-xs)' : 'none'
+              borderRadius: '8px',
+              fontSize: '12px',
+              fontWeight: 600,
+              backgroundColor: role === 'seller' ? 'var(--color-titanium-brushed)' : 'transparent',
+              color: role === 'seller' ? '#ffffff' : 'var(--color-silver-glow)',
+              border: role === 'seller' ? '1px solid var(--color-border-chrome)' : '1px solid transparent',
+              boxShadow: role === 'seller' ? '0 2px 8px rgba(0,0,0,0.3)' : 'none',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
             }}
           >
-            <Store size={14} /> Seller / Merchant
+            <Store size={14} color={role === 'seller' ? 'var(--color-icy-steel)' : 'currentColor'} /> Seller / Merchant
           </button>
         </div>
 
         {error && (
           <div style={{
-            padding: '12px',
-            backgroundColor: 'var(--color-error-bg)',
+            padding: '12px 16px',
+            backgroundColor: 'rgba(244, 63, 94, 0.12)',
             color: 'var(--color-error)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 'var(--font-size-xs)',
-            fontWeight: 600,
-            marginBottom: '20px'
+            borderRadius: '8px',
+            border: '1px solid rgba(244, 63, 94, 0.3)',
+            fontSize: '12px',
+            fontWeight: 500,
+            marginBottom: '22px'
           }}>
             {error}
           </div>
@@ -129,21 +177,22 @@ export const RegisterPage = () => {
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '6px' }}>
+            <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '12px' }}>
               Full Name
             </label>
             <input
               type="text"
               required
-              placeholder="e.g. Vikram Malhotra"
+              placeholder="e.g. Aarav Sharma"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border-subtle)', fontSize: 'var(--font-size-sm)' }}
+              className="input-field"
+              style={{ backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-border-steel)' }}
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '6px' }}>
+            <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '12px' }}>
               Email Address
             </label>
             <input
@@ -152,50 +201,58 @@ export const RegisterPage = () => {
               placeholder="name@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border-subtle)', fontSize: 'var(--font-size-sm)' }}
+              className="input-field"
+              style={{ backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-border-steel)' }}
+            />
+          </div>
+
+          <div>
+            <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '12px' }}>
+              Phone Number
+            </label>
+            <input
+              type="tel"
+              placeholder="+91 98765 43210"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="input-field"
+              style={{ backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-border-steel)' }}
             />
           </div>
 
           {role === 'seller' && (
             <div>
-              <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '6px' }}>
-                Store / Brand Name
+              <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '12px' }}>
+                Store / Merchant Brand Name
               </label>
               <input
                 type="text"
                 required
-                placeholder="e.g. Urban Kicks & Threads"
+                placeholder="e.g. Volt Tech Studio"
                 value={storeName}
                 onChange={(e) => setStoreName(e.target.value)}
-                style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border-subtle)', fontSize: 'var(--font-size-sm)' }}
+                className="input-field"
+                style={{ backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-border-steel)' }}
               />
+              <span style={{ fontSize: '11px', color: 'var(--color-silver-glow)', opacity: 0.7, marginTop: '4px', display: 'block' }}>
+                Merchants gain instant autonomous studio access; KYC review required for public ledger publishing.
+              </span>
             </div>
           )}
 
           <div>
-            <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '6px' }}>
-              Phone Number
-            </label>
-            <input
-              type="tel"
-              placeholder="+91 9876543210"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border-subtle)', fontSize: 'var(--font-size-sm)' }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '6px' }}>
-              Password
+            <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '12px' }}>
+              Password (min. 8 characters)
             </label>
             <input
               type="password"
               required
-              placeholder="Minimum 8 characters"
+              minLength={8}
+              placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={{ width: '100%', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border-subtle)', fontSize: 'var(--font-size-sm)' }}
+              className="input-field"
+              style={{ backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-border-steel)' }}
             />
           </div>
 
@@ -203,16 +260,16 @@ export const RegisterPage = () => {
             type="submit"
             disabled={loading}
             className="btn-primary"
-            style={{ width: '100%', padding: '14px', marginTop: '8px' }}
+            style={{ width: '100%', padding: '14px', marginTop: '8px', fontSize: '14px' }}
           >
-            {loading ? 'Creating Account...' : (role === 'seller' ? 'Launch Store & Console' : 'Sign Up as Customer')}
+            {loading ? 'Registering Account...' : (role === 'seller' ? 'Establish Seller Store' : 'Create Customer Account')}
           </button>
         </form>
 
-        <div style={{ textAlign: 'center', marginTop: '24px', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+        <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '12px', color: 'var(--color-silver-glow)', opacity: 0.8 }}>
           Already have an account?{' '}
-          <Link to="/login" style={{ fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'underline' }}>
-            Log in
+          <Link to="/login" style={{ fontWeight: 600, color: 'var(--color-icy-steel)', textDecoration: 'underline' }}>
+            Sign in
           </Link>
         </div>
       </div>

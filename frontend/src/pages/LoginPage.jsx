@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Sparkles, Lock, Mail } from 'lucide-react';
+import { Lock, Mail, User, Store, ShieldCheck, ShoppingBag, KeyRound, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const LoginPage = () => {
@@ -19,7 +19,6 @@ export const LoginPage = () => {
 
     try {
       const user = await login(email, password);
-      // Role-based redirection per contract §10
       if (user.role === 'seller') {
         navigate('/seller/dashboard');
       } else if (user.role === 'admin') {
@@ -40,93 +39,111 @@ export const LoginPage = () => {
   };
 
   return (
-    <div className="container" style={{ padding: '64px 24px', maxWidth: '440px' }}>
+    <div style={{
+      backgroundColor: 'var(--color-obsidian-graphite)',
+      minHeight: 'calc(100vh - 76px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '52px 20px',
+      position: 'relative'
+    }}>
+      {/* Background Titanium Ambient Sheen */}
       <div style={{
-        backgroundColor: '#ffffff',
-        padding: '36px',
-        borderRadius: 'var(--radius-lg)',
-        border: '1px solid var(--color-border-card)',
-        boxShadow: 'var(--shadow-sm)'
+        position: 'absolute',
+        top: '20%',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: '500px',
+        height: '350px',
+        background: 'radial-gradient(circle, rgba(56, 189, 248, 0.05) 0%, rgba(203, 213, 225, 0.02) 40%, transparent 70%)',
+        pointerEvents: 'none',
+        zIndex: 0
+      }} />
+
+      <div style={{
+        width: '100%',
+        maxWidth: '460px',
+        backgroundColor: 'var(--color-gunmetal-dark)',
+        padding: '44px 38px',
+        borderRadius: '16px',
+        border: '1px solid var(--color-border-steel)',
+        boxShadow: '0 24px 50px rgba(0,0,0,0.6)',
+        position: 'relative',
+        zIndex: 1
       }}>
-        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
           <div style={{
-            width: '44px',
-            height: '44px',
-            borderRadius: 'var(--radius-sm)',
-            background: 'linear-gradient(135deg, #FF385C 0%, #E00B41 100%)',
+            width: '48px',
+            height: '48px',
+            borderRadius: '12px',
+            backgroundColor: 'var(--color-titanium-brushed)',
+            border: '1px solid var(--color-border-chrome)',
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#ffffff',
-            marginBottom: '12px'
+            color: 'var(--color-icy-steel)',
+            marginBottom: '18px',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.4)'
           }}>
-            <Sparkles size={24} />
+            <KeyRound size={22} />
           </div>
-          <h1 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 800 }}>
-            Welcome to Vyapari
+          <h1 className="heading-whisper" style={{ fontSize: '26px', color: '#ffffff', letterSpacing: '0.02em', marginBottom: '8px' }}>
+            Platform Authentication
           </h1>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: '4px' }}>
-            Unified role-based marketplace login
+          <p style={{ color: 'var(--color-silver-glow)', opacity: 0.75, fontSize: '13px', margin: 0 }}>
+            Unified role-based access with live cryptographic token security
           </p>
         </div>
 
         {error && (
           <div style={{
-            padding: '12px',
-            backgroundColor: 'var(--color-error-bg)',
+            padding: '12px 16px',
+            backgroundColor: 'rgba(244, 63, 94, 0.12)',
             color: 'var(--color-error)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 'var(--font-size-xs)',
-            fontWeight: 600,
-            marginBottom: '20px'
+            borderRadius: '8px',
+            border: '1px solid rgba(244, 63, 94, 0.3)',
+            fontSize: '12px',
+            fontWeight: 500,
+            marginBottom: '22px'
           }}>
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '6px' }}>
+            <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '12px' }}>
               Email Address
             </label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <Mail size={16} color="var(--color-text-muted)" style={{ position: 'absolute', left: '12px' }} />
+              <Mail size={16} color="var(--color-ash-label)" style={{ position: 'absolute', left: '12px' }} />
               <input
                 type="email"
                 required
                 placeholder="name@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '12px 12px 12px 38px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--color-border-subtle)',
-                  fontSize: 'var(--font-size-sm)'
-                }}
+                className="input-field"
+                style={{ paddingLeft: '38px', backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-border-steel)' }}
               />
             </div>
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '6px' }}>
+            <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '12px' }}>
               Password
             </label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <Lock size={16} color="var(--color-text-muted)" style={{ position: 'absolute', left: '12px' }} />
+              <Lock size={16} color="var(--color-ash-label)" style={{ position: 'absolute', left: '12px' }} />
               <input
                 type="password"
                 required
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '12px 12px 12px 38px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--color-border-subtle)',
-                  fontSize: 'var(--font-size-sm)'
-                }}
+                className="input-field"
+                style={{ paddingLeft: '38px', backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-border-steel)' }}
               />
             </div>
           </div>
@@ -135,72 +152,120 @@ export const LoginPage = () => {
             type="submit"
             disabled={loading}
             className="btn-primary"
-            style={{ width: '100%', padding: '14px', marginTop: '8px' }}
+            style={{ width: '100%', padding: '14px', marginTop: '6px', fontSize: '14px' }}
           >
-            {loading ? 'Authenticating...' : 'Sign In'}
+            {loading ? 'Authenticating...' : 'Sign In to Portal'}
           </button>
         </form>
 
         {/* Demo One-Click Fill Options */}
-        <div style={{ marginTop: '28px', borderTop: '1px solid var(--color-border-card)', paddingTop: '20px' }}>
-          <p style={{ fontSize: 'var(--font-size-xs)', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '10px', textAlign: 'center' }}>
-            ONE-CLICK DEMO ACCOUNTS (Password: Password@123)
+        <div style={{ marginTop: '32px', borderTop: '1px solid var(--color-border-steel)', paddingTop: '22px' }}>
+          <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-ash-label)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '14px', textAlign: 'center' }}>
+            Instant Role Credentials (Password: Password@123)
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <button
               type="button"
               onClick={() => handleDemoFill('customer1@vyapari.com', 'Password@123')}
               style={{
-                padding: '8px 12px',
-                borderRadius: 'var(--radius-sm)',
-                backgroundColor: 'var(--color-surface-subtle)',
-                fontSize: 'var(--font-size-xs)',
-                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                backgroundColor: 'var(--color-titanium-brushed)',
+                border: '1px solid var(--color-border-steel)',
+                color: 'var(--color-silver-glow)',
+                fontSize: '12px',
                 textAlign: 'left',
-                border: '1px solid var(--color-border-subtle)'
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-border-chrome)';
+                e.currentTarget.style.backgroundColor = 'var(--color-slate-chrome)';
+                e.currentTarget.style.color = '#ffffff';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-border-steel)';
+                e.currentTarget.style.backgroundColor = 'var(--color-titanium-brushed)';
+                e.currentTarget.style.color = 'var(--color-silver-glow)';
               }}
             >
-              👤 Customer: Aarav Sharma (customer1@vyapari.com)
+              <User size={14} color="var(--color-icy-steel)" />
+              <span>Customer: <strong style={{ color: '#ffffff' }}>Aarav Sharma</strong> (customer1@vyapari.com)</span>
             </button>
+
             <button
               type="button"
               onClick={() => handleDemoFill('seller2@vyapari.com', 'Password@123')}
               style={{
-                padding: '8px 12px',
-                borderRadius: 'var(--radius-sm)',
-                backgroundColor: 'var(--color-secondary-light)',
-                color: 'var(--color-secondary)',
-                fontSize: 'var(--font-size-xs)',
-                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                backgroundColor: 'var(--color-titanium-brushed)',
+                border: '1px solid var(--color-border-steel)',
+                color: 'var(--color-silver-glow)',
+                fontSize: '12px',
                 textAlign: 'left',
-                border: '1px solid var(--color-border-subtle)'
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-border-chrome)';
+                e.currentTarget.style.backgroundColor = 'var(--color-slate-chrome)';
+                e.currentTarget.style.color = '#ffffff';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-border-steel)';
+                e.currentTarget.style.backgroundColor = 'var(--color-titanium-brushed)';
+                e.currentTarget.style.color = 'var(--color-silver-glow)';
               }}
             >
-              🏪 Seller: Volt Tech Studio (seller2@vyapari.com)
+              <Store size={14} color="var(--color-icy-steel)" />
+              <span>Seller: <strong style={{ color: '#ffffff' }}>Volt Tech Studio</strong> (seller2@vyapari.com)</span>
             </button>
+
             <button
               type="button"
               onClick={() => handleDemoFill('admin@vyapari.com', 'Password@123')}
               style={{
-                padding: '8px 12px',
-                borderRadius: 'var(--radius-sm)',
-                backgroundColor: '#EEF2FF',
-                color: '#6366F1',
-                fontSize: 'var(--font-size-xs)',
-                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                backgroundColor: 'var(--color-titanium-brushed)',
+                border: '1px solid var(--color-border-steel)',
+                color: 'var(--color-silver-glow)',
+                fontSize: '12px',
                 textAlign: 'left',
-                border: '1px solid var(--color-border-subtle)'
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-border-chrome)';
+                e.currentTarget.style.backgroundColor = 'var(--color-slate-chrome)';
+                e.currentTarget.style.color = '#ffffff';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-border-steel)';
+                e.currentTarget.style.backgroundColor = 'var(--color-titanium-brushed)';
+                e.currentTarget.style.color = 'var(--color-silver-glow)';
               }}
             >
-              🛡️ Admin: Vyapari Admin (admin@vyapari.com)
+              <ShieldCheck size={14} color="var(--color-icy-steel)" />
+              <span>Admin: <strong style={{ color: '#ffffff' }}>Vyapari SuperAdmin</strong> (admin@vyapari.com)</span>
             </button>
           </div>
         </div>
 
-        <div style={{ textAlign: 'center', marginTop: '24px', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
-          Don't have an account?{' '}
-          <Link to="/register" style={{ fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'underline' }}>
-            Sign up
+        <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '12px', color: 'var(--color-silver-glow)', opacity: 0.8 }}>
+          Don't have an account yet?{' '}
+          <Link to="/register" style={{ fontWeight: 600, color: 'var(--color-icy-steel)', textDecoration: 'underline' }}>
+            Register here
           </Link>
         </div>
       </div>

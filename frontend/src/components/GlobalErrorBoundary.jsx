@@ -35,44 +35,56 @@ export class GlobalErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         <div style={{
-          minHeight: '60vh',
+          minHeight: '70vh',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
           padding: '2rem',
           textAlign: 'center',
-          color: 'var(--color-text-primary, #0F172A)'
+          backgroundColor: 'var(--color-obsidian-graphite)',
+          color: '#ffffff'
         }}>
           <div style={{
-            background: 'var(--color-surface, #F8FAFC)',
-            border: '1px solid var(--color-border, #E2E8F0)',
-            borderRadius: '12px',
+            background: 'var(--color-gunmetal-dark)',
+            border: '1px solid var(--color-border-steel)',
+            borderRadius: '16px',
             padding: '2.5rem',
-            maxWidth: '480px',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+            maxWidth: '520px',
+            boxShadow: 'var(--shadow-elevated)'
           }}>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.75rem' }}>
-              Something unexpected happened
+            <div style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(244, 63, 94, 0.15)',
+              border: '1px solid rgba(244, 63, 94, 0.3)',
+              color: 'var(--color-error)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px auto',
+              fontSize: '20px',
+              fontWeight: 700
+            }}>
+              !
+            </div>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 330, letterSpacing: '0.02em', marginBottom: '0.75rem', color: '#ffffff' }}>
+              Unexpected Execution Exception
             </h2>
-            <p style={{ color: 'var(--color-text-secondary, #64748B)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
-              An unexpected display error occurred. Our team has been notified. You can reload this page to continue.
+            <p style={{ color: 'var(--color-steel-mist)', marginBottom: '1.75rem', fontSize: '0.92rem', lineHeight: 1.6 }}>
+              A localized frontend component exception was intercepted. Autonomous telemetry has recorded the state stack trace.
             </p>
             <button
               onClick={this.handleReload}
+              className="btn-primary"
               style={{
-                background: 'var(--color-primary, #6366F1)',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.75rem 1.5rem',
-                fontSize: '0.95rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'opacity 0.2s'
+                width: '100%',
+                padding: '12px 24px',
+                fontSize: '13px'
               }}
             >
-              Reload Page
+              Restart Component Session
             </button>
           </div>
         </div>

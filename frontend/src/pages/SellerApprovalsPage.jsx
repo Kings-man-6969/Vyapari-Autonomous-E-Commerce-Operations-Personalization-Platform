@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bot, Check, X, AlertTriangle, ShieldCheck, Sparkles, Clock } from 'lucide-react';
+import { Bot, Check, X, AlertTriangle, ShieldCheck, Sparkles, Clock, CheckCircle2 } from 'lucide-react';
 import api from '../services/api';
 
 export const SellerApprovalsPage = () => {
@@ -58,57 +58,107 @@ export const SellerApprovalsPage = () => {
   const getRiskBadge = (risk) => {
     switch (risk) {
       case 'high':
-        return <span className="badge badge-error">HIGH RISK</span>;
+        return (
+          <span style={{
+            fontSize: '11px',
+            padding: '3px 8px',
+            borderRadius: '9999px',
+            backgroundColor: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            color: '#fca5a5',
+            fontWeight: 600,
+            letterSpacing: '0.04em'
+          }}>
+            HIGH RISK
+          </span>
+        );
       case 'medium':
-        return <span className="badge badge-warning">MEDIUM RISK</span>;
+        return (
+          <span style={{
+            fontSize: '11px',
+            padding: '3px 8px',
+            borderRadius: '9999px',
+            backgroundColor: 'rgba(234, 179, 8, 0.15)',
+            border: '1px solid rgba(234, 179, 8, 0.4)',
+            color: '#fef08a',
+            fontWeight: 600,
+            letterSpacing: '0.04em'
+          }}>
+            MEDIUM RISK
+          </span>
+        );
       default:
-        return <span className="badge badge-success">LOW RISK</span>;
+        return (
+          <span style={{
+            fontSize: '11px',
+            padding: '3px 8px',
+            borderRadius: '9999px',
+            backgroundColor: 'rgba(56, 189, 248, 0.12)',
+            border: '1px solid rgba(56, 189, 248, 0.3)',
+            color: 'var(--color-icy-steel)',
+            fontWeight: 600,
+            letterSpacing: '0.04em'
+          }}>
+            LOW RISK
+          </span>
+        );
     }
   };
 
   return (
-    <div className="container" style={{ padding: '40px 24px', maxWidth: '1000px' }}>
+    <div style={{ maxWidth: '1080px', margin: '0 auto' }}>
       <div style={{ marginBottom: '32px' }}>
-        <div className="badge badge-primary" style={{ marginBottom: '8px' }}>
-          <Bot size={14} style={{ marginRight: '4px' }} />
-          Team B Human-in-the-Loop Engine
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+          <ShieldCheck size={16} color="var(--color-icy-steel)" />
+          <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-icy-steel)', fontWeight: 600 }}>
+            Human-in-the-Loop Safe Mutation Boundary
+          </span>
         </div>
-        <h1 style={{ fontSize: 'var(--font-size-3xl)', fontWeight: 800 }}>
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>
           Agent Approval Queue
         </h1>
-        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: '4px' }}>
-          Every AI agent draft must be explicitly approved by you before touching live catalog or customer communications.
+        <p style={{ color: 'var(--color-silver-glow)', opacity: 0.75, fontSize: '0.875rem', marginTop: '4px' }}>
+          Autonomous Gemini agents operate strictly within draft bounds. Explicit merchant review is required before mutating live catalog or dispatching customer messages.
         </p>
       </div>
 
       {actionNotice && (
         <div style={{
-          padding: '14px 20px',
-          backgroundColor: 'var(--color-success-bg)',
-          color: 'var(--color-success)',
-          borderRadius: 'var(--radius-sm)',
-          fontWeight: 600,
+          padding: '12px 18px',
+          backgroundColor: 'rgba(56, 189, 248, 0.12)',
+          border: '1px solid rgba(56, 189, 248, 0.3)',
+          color: 'var(--color-icy-steel)',
+          borderRadius: '8px',
+          fontWeight: 500,
           marginBottom: '24px',
-          fontSize: 'var(--font-size-sm)'
+          fontSize: '0.875rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
         }}>
-          {actionNotice}
+          <CheckCircle2 size={16} />
+          <span>{actionNotice}</span>
         </div>
       )}
 
       {/* Filter Tabs */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
         {['pending', 'approved', 'rejected', 'all'].map((status) => (
           <button
             key={status}
             onClick={() => setFilter(status)}
             style={{
-              padding: '8px 18px',
-              borderRadius: 'var(--radius-full)',
-              backgroundColor: filter === status ? 'var(--color-text-primary)' : 'var(--color-surface-subtle)',
-              color: filter === status ? '#ffffff' : 'var(--color-text-primary)',
-              fontSize: 'var(--font-size-sm)',
+              padding: '6px 16px',
+              borderRadius: '9999px',
+              backgroundColor: filter === status ? '#ffffff' : 'var(--color-forest-floor)',
+              color: filter === status ? '#02090a' : 'var(--color-tide-pool)',
+              border: '1px solid',
+              borderColor: filter === status ? '#ffffff' : 'var(--color-iron-veil)',
+              fontSize: '12px',
               fontWeight: 600,
-              textTransform: 'capitalize'
+              textTransform: 'capitalize',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
             }}
           >
             {status}
@@ -119,18 +169,26 @@ export const SellerApprovalsPage = () => {
       {/* Queue Items List */}
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {[1, 2, 3].map(n => <div key={n} style={{ height: '140px' }} className="skeleton" />)}
+          {[1, 2, 3].map(n => <div key={n} style={{ height: '140px', backgroundColor: 'var(--color-forest-floor)' }} className="skeleton" />)}
         </div>
       ) : queue.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '64px 0', border: '1px dashed var(--color-border-subtle)', borderRadius: 'var(--radius-md)' }}>
-          <ShieldCheck size={48} color="var(--color-success)" style={{ marginBottom: '16px' }} />
-          <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700, marginBottom: '8px' }}>Queue is clean</h3>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-            No agent actions are currently waiting for {filter} approval.
+        <div style={{ 
+          textAlign: 'center', 
+          padding: '64px 20px', 
+          border: '1px dashed var(--color-border-steel)', 
+          borderRadius: '12px',
+          backgroundColor: 'var(--color-gunmetal-dark)' 
+        }}>
+          <ShieldCheck size={40} color="var(--color-icy-steel)" style={{ marginBottom: '16px' }} />
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '8px' }}>
+            Queue is clear
+          </h3>
+          <p style={{ color: 'var(--color-steel-mist)', fontSize: '0.875rem' }}>
+            No agent mutations are currently pending for {filter} approval.
           </p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           {queue.map((item) => {
             const payload = typeof item.payload === 'string' ? JSON.parse(item.payload || '{}') : item.payload;
 
@@ -138,27 +196,27 @@ export const SellerApprovalsPage = () => {
               <div
                 key={item.id}
                 style={{
-                  backgroundColor: '#ffffff',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-border-card)',
-                  padding: '24px',
-                  boxShadow: 'var(--shadow-xs)',
+                  backgroundColor: 'var(--color-forest-floor)',
+                  borderRadius: '12px',
+                  border: '1px solid var(--color-iron-veil)',
+                  padding: '22px 24px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '16px'
+                  gap: '16px',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)'
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontWeight: 800, fontSize: 'var(--font-size-base)', textTransform: 'uppercase' }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       {item.item_type.replace('_', ' ')}
                     </span>
                     {getRiskBadge(item.risk_level)}
-                    <span className="badge" style={{ backgroundColor: 'var(--color-surface-subtle)' }}>
-                      Status: {item.status}
+                    <span className="status-pill status-draft" style={{ fontSize: '11px' }}>
+                      {item.status}
                     </span>
                   </div>
-                  <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--color-ash-label)' }}>
                     Generated: {new Date(item.created_at).toLocaleString()}
                   </span>
                 </div>
@@ -166,26 +224,29 @@ export const SellerApprovalsPage = () => {
                 {/* Payload Preview */}
                 <div style={{
                   padding: '16px',
-                  backgroundColor: 'var(--color-surface-subtle)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: 'var(--font-size-sm)',
+                  backgroundColor: 'var(--color-deep-canopy)',
+                  border: '1px solid var(--color-iron-veil)',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
                   lineHeight: 1.6
                 }}>
                   {item.item_type === 'listing_draft' && (
                     <div>
-                      <div style={{ fontWeight: 700, marginBottom: '4px' }}>Draft Title: {payload.draft_title || payload.title}</div>
-                      <div style={{ color: 'var(--color-text-secondary)' }}>
-                        Suggested Price: <strong>₹{payload.suggested_price || payload.price}</strong> • Category: {payload.category || 'General'}
+                      <div style={{ fontWeight: 600, color: '#ffffff', marginBottom: '4px' }}>
+                        Draft Title: {payload.draft_title || payload.title}
+                      </div>
+                      <div style={{ color: 'var(--color-tide-pool)' }}>
+                        Suggested Price: <strong style={{ color: '#ffffff' }}>₹{payload.suggested_price || payload.price}</strong> • Category: {payload.category || 'General'}
                       </div>
                     </div>
                   )}
 
                   {item.item_type === 'support_reply' && (
                     <div>
-                      <div style={{ fontWeight: 700, color: 'var(--color-error)', marginBottom: '6px' }}>
-                        Customer Issue: {payload.customer_query || 'Inquiry regarding product return/refund'}
+                      <div style={{ fontWeight: 600, color: '#f87171', marginBottom: '6px' }}>
+                        Customer Query: {payload.customer_query || 'Inquiry regarding product return/refund'}
                       </div>
-                      <div style={{ fontStyle: 'italic', color: 'var(--color-text-primary)' }}>
+                      <div style={{ fontStyle: 'italic', color: 'var(--color-tide-pool)' }}>
                         "Draft Response: {payload.draft_response || payload.draft_preview}"
                       </div>
                     </div>
@@ -193,11 +254,11 @@ export const SellerApprovalsPage = () => {
 
                   {item.item_type === 'inventory_advisory' && (
                     <div>
-                      <div style={{ fontWeight: 700, marginBottom: '4px' }}>
-                        Stock Depletion Alert ({payload.days_left} Days Left)
+                      <div style={{ fontWeight: 600, color: '#ffffff', marginBottom: '4px' }}>
+                        Stock Depletion Advisory ({payload.days_left} Days Runway Left)
                       </div>
-                      <div style={{ color: 'var(--color-text-secondary)' }}>
-                        Recommended Reorder: <strong>{payload.reorder} units</strong>. {payload.reasoning}
+                      <div style={{ color: 'var(--color-tide-pool)' }}>
+                        Recommended Reorder: <strong style={{ color: '#ffffff' }}>{payload.reorder} units</strong>. {payload.reasoning}
                       </div>
                     </div>
                   )}
@@ -205,20 +266,42 @@ export const SellerApprovalsPage = () => {
 
                 {/* Action Buttons (if pending) */}
                 {item.status === 'pending' && (
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
                     <button
                       onClick={() => handleReject(item.id)}
-                      className="btn-outline"
-                      style={{ color: 'var(--color-error)', borderColor: 'var(--color-border-subtle)', fontSize: 'var(--font-size-sm)' }}
+                      style={{
+                        padding: '7px 16px',
+                        borderRadius: '9999px',
+                        backgroundColor: 'transparent',
+                        border: '1px solid rgba(239, 68, 68, 0.4)',
+                        color: '#f87171',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer'
+                      }}
                     >
-                      <X size={16} /> Reject
+                      <X size={14} /> Reject
                     </button>
                     <button
                       onClick={() => handleApprove(item.id)}
-                      className="btn-primary"
-                      style={{ fontSize: 'var(--font-size-sm)' }}
+                      style={{
+                        padding: '7px 20px',
+                        borderRadius: '9999px',
+                        backgroundColor: '#ffffff',
+                        color: '#02090a',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        border: 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer'
+                      }}
                     >
-                      <Check size={16} /> Approve & Execute
+                      <Check size={14} /> Approve & Commit
                     </button>
                   </div>
                 )}
@@ -230,3 +313,5 @@ export const SellerApprovalsPage = () => {
     </div>
   );
 };
+
+export default SellerApprovalsPage;

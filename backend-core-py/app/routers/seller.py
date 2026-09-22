@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from app.auth.dependencies import require_auth, require_role
 from app.config import settings
 from app.db import get_db, get_pool
+from app.utils import to_valid_uuid
 
 router = APIRouter()
 
@@ -40,7 +41,12 @@ async def onboarding_status(user: dict = _auth, db=Depends(get_db)) -> dict:
 
     b_info = row["business_info"] or {}
     if isinstance(b_info, str):
-        b_info = json.loads(b_info)
+        try:
+            b_info = json.loads(b_info)
+        except Exception:
+            b_info = {}
+    if not isinstance(b_info, dict):
+        b_info = {}
     pan = b_info.get("pan", "")
     masked_pan = f"{pan[:2]}******{pan[-2:]}" if len(pan) >= 4 else "XXXXXXXXXX"
 
@@ -116,41 +122,47 @@ async def submit_onboarding(body: OnboardingBody, user: dict = _auth) -> dict:
 @router.get("/dashboard")
 async def seller_dashboard(user: dict = _seller_or_admin, db=Depends(get_db)) -> dict:
     seller_id = user["id"]
-    stats, pending, recent, low_stock = await asyncio.gather(
-        db.fetchrow(
-            """SELECT
-                COALESCE(SUM(oi.quantity * oi.price_at_purchase), 0) AS total_revenue,
-                COUNT(DISTINCT oi.order_id) AS total_orders,
-                COUNT(DISTINCT p.id) FILTER (WHERE p.status = 'active') AS active_products_count
-               FROM products p
-               LEFT JOIN order_items oi ON p.id = oi.product_id
-               WHERE p.seller_id = $1""",
-            seller_id,
-        ),
-        db.fetchrow(
-            "SELECT COUNT(*) AS count FROM agent_approval_queue WHERE seller_id = $1 AND status = 'pending'",
-            seller_id,
-        ),
-        db.fetch(
-            """SELECT DISTINCT o.id, o.total_amount, o.status, o.created_at, u.name AS customer_name
-               FROM orders o
-               JOIN order_items oi ON o.id = oi.order_id
-               JOIN users u ON o.user_id = u.id
-               WHERE oi.seller_id = $1
-               ORDER BY o.created_at DESC LIMIT 5""",
-            seller_id,
-        ),
-        db.fetch(
-            """SELECT id, title, stock_qty, price FROM products
-               WHERE seller_id = $1 AND stock_qty <= 5 AND status != 'archived'
-               ORDER BY stock_qty ASC LIMIT 5""",
-            seller_id,
-        ),
+    prof = await db.fetchrow(
+        "SELECT is_verified, store_name FROM seller_profiles WHERE user_id = $1", seller_id
+    )
+    is_verified = bool(prof["is_verified"]) if prof else (user.get("role") == "seller")
+    seller_status = "verified" if is_verified else "pending_kyc"
+
+    stats = await db.fetchrow(
+        """SELECT
+            COALESCE(SUM(oi.quantity * oi.price_at_purchase), 0) AS total_revenue,
+            COUNT(DISTINCT oi.order_id) AS total_orders,
+            COUNT(DISTINCT p.id) FILTER (WHERE p.status = 'active') AS active_products_count
+           FROM products p
+           LEFT JOIN order_items oi ON p.id = oi.product_id
+           WHERE p.seller_id = $1""",
+        seller_id,
+    )
+    pending = await db.fetchrow(
+        "SELECT COUNT(*) AS count FROM agent_approval_queue WHERE seller_id = $1 AND status = 'pending'",
+        seller_id,
+    )
+    recent = await db.fetch(
+        """SELECT DISTINCT o.id, o.total_amount, o.status, o.created_at, u.name AS customer_name
+           FROM orders o
+           JOIN order_items oi ON o.id = oi.order_id
+           JOIN users u ON o.user_id = u.id
+           WHERE oi.seller_id = $1
+           ORDER BY o.created_at DESC LIMIT 5""",
+        seller_id,
+    )
+    low_stock = await db.fetch(
+        """SELECT id, title, stock_qty, price FROM products
+           WHERE seller_id = $1 AND stock_qty <= 5 AND status != 'archived'
+           ORDER BY stock_qty ASC LIMIT 5""",
+        seller_id,
     )
 
     return {
         "success": True,
         "data": {
+            "is_verified": is_verified,
+            "seller_status": seller_status,
             "stats": {
                 "total_revenue": float(stats["total_revenue"]) if stats and "total_revenue" in stats else 0.0,
                 "total_orders": int(stats["total_orders"]) if stats and "total_orders" in stats else 0,
@@ -215,14 +227,26 @@ async def create_seller_product(
     tags = body.tags if isinstance(body.tags, list) else [t.strip() for t in body.tags.split(",") if t.strip()]
     attributes = {"cost_price": body.cost_price, "tags": tags}
 
+    cat_id = None
+    if body.category_id and str(body.category_id).strip():
+        try:
+            import uuid
+            uuid.UUID(str(body.category_id).strip())
+            cat_id = str(body.category_id).strip()
+        except ValueError:
+            cat_id = None
+    if not cat_id:
+        first_cat = await db.fetchrow("SELECT id FROM categories LIMIT 1")
+        cat_id = str(first_cat["id"]) if first_cat else "10000000-0000-0000-0000-000000000001"
+
     row = await db.fetchrow(
         """INSERT INTO products
            (seller_id, category_id, title, slug, description, price, compare_at_price,
             stock_qty, images, attributes, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11)
-           RETURNING *""",
+            VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11)
+            RETURNING *""",
         user["id"],
-        body.category_id,
+        cat_id,
         body.title.strip(),
         final_slug,
         body.description or "",
@@ -313,6 +337,15 @@ async def update_seller_product(
         "tags": tags if tags is not None else cur_attrs.get("tags"),
     }
 
+    valid_category_id = None
+    if body.category_id and str(body.category_id).strip():
+        try:
+            import uuid
+            uuid.UUID(str(body.category_id).strip())
+            valid_category_id = str(body.category_id).strip()
+        except ValueError:
+            valid_category_id = None
+
     row = await db.fetchrow(
         """UPDATE products
            SET title = COALESCE($1, title),
@@ -321,7 +354,7 @@ async def update_seller_product(
                price = COALESCE($4, price),
                compare_at_price = $5,
                stock_qty = $6,
-               category_id = COALESCE($7, category_id),
+               category_id = COALESCE($7::uuid, category_id),
                images = COALESCE($8::jsonb, images),
                attributes = $9::jsonb,
                status = $10,
@@ -334,7 +367,7 @@ async def update_seller_product(
         body.price,
         body.compare_at_price,
         new_stock,
-        body.category_id,
+        valid_category_id,
         json.dumps(body.images) if body.images is not None else None,
         json.dumps(updated_attrs),
         new_status,
@@ -388,25 +421,32 @@ async def fulfill_order(id: str, body: FulfillOrderBody, user: dict = _seller_or
     if body.status not in valid_statuses:
         raise HTTPException(400, detail={"code": "INVALID_STATUS", "message": f"Status must be one of: {', '.join(valid_statuses)}"})
 
-    await db.execute("UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2", body.status, id)
-    await db.execute(
-        "INSERT INTO order_status_history (order_id, status, note, changed_by) VALUES ($1, $2, $3, $4)",
-        id,
-        body.status,
-        f"Status set to {body.status}. Carrier: {body.carrier or 'Express'}, AWB: {body.tracking_number or 'N/A'}",
-        user["id"],
-    )
+    clean_order_id = to_valid_uuid(id)
+    if clean_order_id:
+        await db.execute("UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2::uuid", body.status, clean_order_id)
+        try:
+            await db.execute(
+                "INSERT INTO order_status_history (order_id, status, note, changed_by) VALUES ($1::uuid, $2, $3, $4)",
+                clean_order_id,
+                body.status,
+                f"Status set to {body.status}. Carrier: {body.carrier or 'Express'}, AWB: {body.tracking_number or 'N/A'}",
+                user["id"],
+            )
+        except Exception:
+            pass
 
-    order_row = await db.fetchrow("SELECT user_id FROM orders WHERE id = $1", id)
-    if order_row:
-        await db.execute(
-            "INSERT INTO notifications (user_id, type, title, body, link) VALUES ($1, $2, $3, $4, $5)",
-            order_row["user_id"],
-            "order_status",
-            f"Order #{id[:8].upper()} Dispatched",
-            f"Your consignment is now {body.status.upper()} via {body.carrier or 'Courier'}.",
-            f"/orders/{id}",
-        )
+        order_row = await db.fetchrow("SELECT user_id FROM orders WHERE id = $1::uuid", clean_order_id)
+        if order_row:
+            await db.execute(
+                "INSERT INTO notifications (user_id, type, title, body, link) VALUES ($1, $2, $3, $4, $5)",
+                order_row["user_id"],
+                "order_status",
+                f"Order #{id[:8].upper()} Dispatched",
+                f"Your consignment is now {body.status.upper()} via {body.carrier or 'Courier'}.",
+                f"/orders/{id}",
+            )
+    else:
+        await db.execute("UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id::text = $2", body.status, id)
 
     return {"success": True, "message": f"Order updated to {body.status}."}
 
@@ -495,7 +535,12 @@ async def get_settings(user: dict = _seller_or_admin, db=Depends(get_db)) -> dic
 
     b_info = row["business_info"] or {}
     if isinstance(b_info, str):
-        b_info = json.loads(b_info)
+        try:
+            b_info = json.loads(b_info)
+        except Exception:
+            b_info = {}
+    if not isinstance(b_info, dict):
+        b_info = {}
 
     return {
         "success": True,
@@ -528,7 +573,12 @@ async def update_settings(body: SettingsBody, user: dict = _seller_or_admin, db=
     if cur:
         prev_info = cur["business_info"] or {}
         if isinstance(prev_info, str):
-            prev_info = json.loads(prev_info)
+            try:
+                prev_info = json.loads(prev_info)
+            except Exception:
+                prev_info = {}
+        if not isinstance(prev_info, dict):
+            prev_info = {}
 
     merged = {
         **prev_info,

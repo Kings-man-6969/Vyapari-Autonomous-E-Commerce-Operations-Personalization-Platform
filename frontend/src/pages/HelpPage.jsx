@@ -1,71 +1,71 @@
 import React, { useState } from 'react';
-import { HelpCircle, Search, Package, RefreshCw, CreditCard, ShieldCheck, ChevronDown, Mail } from 'lucide-react';
+import { HelpCircle, Package, RefreshCw, CreditCard, ShieldCheck, ChevronDown, Mail } from 'lucide-react';
 
 export const HelpPage = () => {
   const [openFaq, setOpenFaq] = useState(null);
 
   const faqs = [
     {
-      q: 'How does order tracking and delivery work?',
-      a: 'Once your payment is confirmed, the merchant receives fulfillment instructions immediately. You can track your order timeline in real-time from the "My Orders" tab.'
+      q: 'How does order fulfillment and courier tracking operate?',
+      a: 'Once you place your order, the seller prepares and ships it via reliable express couriers. You can track live delivery updates anytime under "My Orders".'
     },
     {
-      q: 'What is the return and refund policy on Vyapari?',
-      a: 'All eligible items can be returned within 7 days of delivery. Verified sellers inspect the returned goods, and refunds are credited back to your original payment method within 3 to 5 business days.'
+      q: 'What is the platform return and refund policy on Vyapari?',
+      a: 'Eligible products can be returned or replaced within 7 days of delivery. Refunds are processed back to your original payment method within 3 to 5 business days.'
     },
     {
-      q: 'How does Vyapari AI semantic search work?',
-      a: 'Vyapari converts your search terms into dense vector embeddings using all-MiniLM-L6-v2 models. It matches concepts, synonyms, and styles instead of just exact product title keywords.'
+      q: 'How does Vyapari smart search work?',
+      a: 'Vyapari uses intelligent search to understand natural language queries. For example, searching for "cozy winter hoodie" or "ceramic coffee mug" finds relevant matching items instantly.'
     },
     {
-      q: 'How can I become a verified seller on Vyapari?',
-      a: 'Navigate to "Become a Seller" in the menu. Complete our 4-step onboarding KYC wizard with your business name, GSTIN/PAN, and bank payout account. Our admin desk verifies submissions within 24 hours.'
+      q: 'How can I start selling on Vyapari?',
+      a: 'Click "Sell on Vyapari" in the top navigation, register your seller account, and enter your business and tax details. Once approved, you can list products and start selling immediately.'
     },
     {
-      q: 'Are payments on Vyapari secure?',
-      a: 'Yes. All transactions are protected with TLS 1.3 encryption and comply with RBI standards. We never store raw credit card credentials.'
+      q: 'How are customer payments secured?',
+      a: 'All transactions are processed through 256-bit encrypted secure gateways supporting UPI, Debit/Credit Cards, and NetBanking with buyer protection guarantee.'
     }
   ];
 
   return (
-    <div className="container" style={{ padding: '60px 24px 80px', maxWidth: '860px' }}>
+    <div style={{ padding: '60px 24px 80px', maxWidth: '960px', margin: '0 auto' }}>
       <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-        <h1 style={{ fontSize: '2.25rem', fontWeight: 800, marginBottom: '12px' }}>
-          Vyapari Help & Support Center
+        <h1 style={{ fontSize: '2.25rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '12px' }}>
+          Help Center
         </h1>
-        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-base)' }}>
-          Answers to common questions about shopping, shipping, seller operations, and security
+        <p style={{ color: 'var(--color-steel-mist)', fontSize: '1rem' }}>
+          Frequently asked questions about orders, deliveries, returns, and selling on Vyapari
         </p>
       </div>
 
       {/* Quick Category Cards */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
         gap: '16px',
         marginBottom: '48px'
       }}>
-        <div style={{ background: '#ffffff', border: '1px solid var(--color-border-card)', borderRadius: 'var(--radius-md)', padding: '20px', textAlign: 'center' }}>
-          <Package size={24} color="var(--color-primary)" style={{ margin: '0 auto 10px' }} />
-          <h4 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 700 }}>Orders & Shipping</h4>
+        <div style={{ background: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)', borderRadius: '12px', padding: '20px', textAlign: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)' }}>
+          <Package size={22} color="var(--color-icy-steel)" style={{ margin: '0 auto 10px' }} />
+          <h4 style={{ fontSize: '0.875rem', fontWeight: 500, color: '#ffffff' }}>Orders & Tracking</h4>
         </div>
-        <div style={{ background: '#ffffff', border: '1px solid var(--color-border-card)', borderRadius: 'var(--radius-md)', padding: '20px', textAlign: 'center' }}>
-          <RefreshCw size={24} color="var(--color-secondary)" style={{ margin: '0 auto 10px' }} />
-          <h4 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 700 }}>Returns & Refunds</h4>
+        <div style={{ background: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)', borderRadius: '12px', padding: '20px', textAlign: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)' }}>
+          <RefreshCw size={22} color="var(--color-icy-steel)" style={{ margin: '0 auto 10px' }} />
+          <h4 style={{ fontSize: '0.875rem', fontWeight: 500, color: '#ffffff' }}>Returns & Refunds</h4>
         </div>
-        <div style={{ background: '#ffffff', border: '1px solid var(--color-border-card)', borderRadius: 'var(--radius-md)', padding: '20px', textAlign: 'center' }}>
-          <CreditCard size={24} color="#6366F1" style={{ margin: '0 auto 10px' }} />
-          <h4 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 700 }}>Payments & Invoices</h4>
+        <div style={{ background: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)', borderRadius: '12px', padding: '20px', textAlign: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)' }}>
+          <CreditCard size={22} color="var(--color-icy-steel)" style={{ margin: '0 auto 10px' }} />
+          <h4 style={{ fontSize: '0.875rem', fontWeight: 500, color: '#ffffff' }}>Payments & Settlement</h4>
         </div>
-        <div style={{ background: '#ffffff', border: '1px solid var(--color-border-card)', borderRadius: 'var(--radius-md)', padding: '20px', textAlign: 'center' }}>
-          <ShieldCheck size={24} color="var(--color-success)" style={{ margin: '0 auto 10px' }} />
-          <h4 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 700 }}>Trust & Safety</h4>
+        <div style={{ background: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)', borderRadius: '12px', padding: '20px', textAlign: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)' }}>
+          <ShieldCheck size={22} color="var(--color-icy-steel)" style={{ margin: '0 auto 10px' }} />
+          <h4 style={{ fontSize: '0.875rem', fontWeight: 500, color: '#ffffff' }}>Merchant Trust</h4>
         </div>
       </div>
 
       {/* Accordion FAQs */}
       <div style={{ marginBottom: '48px' }}>
-        <h2 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '20px' }}>Frequently Asked Questions</h2>
+        <h2 style={{ fontSize: '1.35rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '20px' }}>Frequently Addressed Queries</h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {faqs.map((faq, idx) => {
             const isOpen = openFaq === idx;
@@ -73,34 +73,39 @@ export const HelpPage = () => {
               <div
                 key={idx}
                 style={{
-                  background: '#ffffff',
-                  border: '1px solid var(--color-border-card)',
-                  borderRadius: 'var(--radius-sm)',
-                  overflow: 'hidden'
+                  background: 'var(--color-gunmetal-dark)',
+                  border: `1px solid ${isOpen ? 'var(--color-border-chrome)' : 'var(--color-border-steel)'}`,
+                  borderRadius: '10px',
+                  overflow: 'hidden',
+                  transition: 'border-color 0.2s ease'
                 }}
               >
                 <button
                   onClick={() => setOpenFaq(isOpen ? null : idx)}
                   style={{
                     width: '100%',
-                    padding: '16px 20px',
+                    padding: '18px 20px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     textAlign: 'left',
-                    fontWeight: 600,
-                    fontSize: 'var(--font-size-sm)'
+                    fontWeight: 500,
+                    fontSize: '0.875rem',
+                    color: '#ffffff',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer'
                   }}
                 >
                   <span>{faq.q}</span>
                   <ChevronDown
                     size={16}
-                    color="var(--color-text-secondary)"
-                    style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}
+                    color="var(--color-silver-glow)"
+                    style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', flexShrink: 0 }}
                   />
                 </button>
                 {isOpen && (
-                  <div style={{ padding: '0 20px 16px', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+                  <div style={{ padding: '0 20px 18px', color: 'var(--color-steel-mist)', fontSize: '0.875rem', lineHeight: 1.6 }}>
                     {faq.a}
                   </div>
                 )}
@@ -108,30 +113,6 @@ export const HelpPage = () => {
             );
           })}
         </div>
-      </div>
-
-      {/* Direct Contact Banner */}
-      <div style={{
-        background: 'var(--color-surface-subtle)',
-        border: '1px solid var(--color-border-card)',
-        borderRadius: 'var(--radius-md)',
-        padding: '24px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '16px'
-      }}>
-        <div>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Need more assistance?</h3>
-          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
-            Our operations team is available Monday through Saturday, 9 AM – 7 PM IST.
-          </p>
-        </div>
-        <a href="mailto:support@vyapari.com" className="btn-outline" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-          <Mail size={16} />
-          <span>Contact Support</span>
-        </a>
       </div>
     </div>
   );

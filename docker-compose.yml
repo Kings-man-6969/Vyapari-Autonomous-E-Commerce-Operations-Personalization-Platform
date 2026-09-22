@@ -14,6 +14,7 @@ services:
     restart: unless-stopped
     ports:
       - "5432:5432"
+    shm_size: 256mb
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-vyapari}
       POSTGRES_USER: ${POSTGRES_USER:-vyapari_admin}
@@ -56,6 +57,8 @@ services:
     restart: unless-stopped
     ports:
       - "8001:8001"
+    volumes:
+      - ./service-recommendation/src:/app/src
     environment:
       PORT: 8001
       DATABASE_URL: postgresql://${POSTGRES_USER:-vyapari_admin}:${POSTGRES_PASSWORD:-vyapari_secure_password}@db:5432/${POSTGRES_DB:-vyapari}
@@ -80,6 +83,8 @@ services:
     restart: unless-stopped
     ports:
       - "8002:8002"
+    volumes:
+      - ./service-seller-agent/src:/app/src
     environment:
       PORT: 8002
       DATABASE_URL: postgresql://${POSTGRES_USER:-vyapari_admin}:${POSTGRES_PASSWORD:-vyapari_secure_password}@db:5432/${POSTGRES_DB:-vyapari}
@@ -106,6 +111,8 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend-core-py/app:/app/app
     environment:
       PORT: 8000
       NODE_ENV: ${NODE_ENV:-development}
@@ -148,6 +155,10 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
     environment:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api}
     depends_on:

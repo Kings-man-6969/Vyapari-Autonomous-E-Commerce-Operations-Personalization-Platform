@@ -2,14 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Sparkles, 
-  ArrowRight, 
   CheckCircle2, 
   AlertCircle, 
-  Send, 
   Layers, 
   Cpu, 
-  Check, 
-  Edit3
+  Check
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -23,8 +20,8 @@ export const SellerAiListingPage = () => {
   // Input specs
   const [specs, setSpecs] = useState('');
   const [categoryId, setCategoryId] = useState('');
-  const [targetAudience, setTargetAudience] = useState('Urban discerning shoppers');
-  const [targetMargin, setTargetMargin] = useState('40%');
+  const [targetAudience, setTargetAudience] = useState('Discerning tech & lifestyle consumers');
+  const [targetMargin, setTargetMargin] = useState('35%');
 
   // Generated draft
   const [draft, setDraft] = useState(null);
@@ -32,10 +29,10 @@ export const SellerAiListingPage = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const res = await api.get('/categories');
-        if (res.data?.success && res.data.data.length > 0) {
-          setCategories(res.data.data);
-          setCategoryId(res.data.data[0].id);
+        const list = res.data?.data?.categories || res.data?.categories || (Array.isArray(res.data?.data) ? res.data.data : []);
+        if (res.data?.success && list.length > 0) {
+          setCategories(list);
+          setCategoryId(list[0].id);
         }
       } catch (err) {
         console.error('Failed to load categories:', err);
@@ -65,12 +62,12 @@ export const SellerAiListingPage = () => {
     } catch (err) {
       // Robust fallback draft generator
       const firstLine = specs.split('\n')[0].replace(/[-*•]/g, '').trim().slice(0, 70);
-      const generatedTitle = firstLine ? `Artisanal ${firstLine}` : 'Premium Handcrafted Collection Item';
+      const generatedTitle = firstLine ? `Curated ${firstLine}` : 'Premium Precision Engineered Product';
       setDraft({
         title: generatedTitle,
-        description: `Experience exceptional craftsmanship with this thoughtfully engineered product.\n\nKey Highlights:\n${specs}\n\nManufactured under ethical standards with high-grade components for prolonged lifespan and premium user experience.`,
-        tags: ['artisan', 'premium', 'handcrafted', 'trending', 'durable'],
-        suggested_price: 1299,
+        description: `Precision-crafted item designed for performance and reliability.\n\nTechnical Specifications:\n${specs}\n\nManufactured with verified quality standards and covered by platform guarantee.`,
+        tags: ['verified', 'precision', 'handcrafted', 'durable', 'trending'],
+        suggested_price: 1899,
         category_id: categoryId
       });
     } finally {
@@ -85,7 +82,7 @@ export const SellerAiListingPage = () => {
       const res = await api.post('/approvals/create', {
         action_type: 'product_draft',
         title: `AI Draft: ${draft.title}`,
-        description: 'Auto-generated product listing submitted to merchant approval queue',
+        description: 'Autonomous listing draft staged for merchant approval queue',
         proposed_payload: {
           ...draft,
           category_id: categoryId,
@@ -97,7 +94,7 @@ export const SellerAiListingPage = () => {
       if (res.data?.success) {
         setActionMsg({
           type: 'success',
-          text: 'Listing draft dispatched to your Human-in-the-Loop Approval Queue.'
+          text: 'Listing draft successfully submitted to Human-in-the-Loop Approval Queue.'
         });
         setTimeout(() => navigate('/seller/approvals'), 1200);
       }
@@ -116,42 +113,44 @@ export const SellerAiListingPage = () => {
       <div style={{ marginBottom: '28px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
           <div style={{
-            width: '28px',
-            height: '28px',
-            borderRadius: 'var(--radius-xs)',
-            backgroundColor: 'var(--color-primary-light)',
-            color: 'var(--color-primary)',
+            width: '26px',
+            height: '26px',
+            borderRadius: '6px',
+            backgroundColor: 'var(--color-titanium-brushed)',
+            border: '1px solid var(--color-border-steel)',
+            color: 'var(--color-icy-steel)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            <Sparkles size={16} />
+            <Sparkles size={15} />
           </div>
-          <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-primary)' }}>
+          <span style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-icy-steel)' }}>
             Gemini Autonomous Agent Studio
           </span>
         </div>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+        <h1 className="heading-whisper" style={{ fontSize: '26px' }}>
           AI Listing Studio
         </h1>
-        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: '4px' }}>
-          Formulate complete, SEO-optimized, pgvector-embedded product listings from raw supplier bullet points
+        <p style={{ color: 'var(--color-silver-glow)', opacity: 0.75, fontSize: '13px', marginTop: '4px' }}>
+          Synthesize structured, pgvector-embedded product catalog listings from supplier specification notes
         </p>
       </div>
 
       {actionMsg.text && (
         <div style={{
           padding: '12px 16px',
-          borderRadius: 'var(--radius-sm)',
+          borderRadius: '8px',
           marginBottom: '20px',
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          backgroundColor: actionMsg.type === 'success' ? 'var(--color-success-bg)' : 'var(--color-error-bg)',
-          color: actionMsg.type === 'success' ? 'var(--color-success)' : 'var(--color-error)',
-          fontSize: 'var(--font-size-sm)'
+          backgroundColor: actionMsg.type === 'success' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(244, 63, 94, 0.12)',
+          color: actionMsg.type === 'success' ? 'var(--color-icy-steel)' : 'var(--color-error)',
+          border: actionMsg.type === 'success' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(244, 63, 94, 0.3)',
+          fontSize: '13px'
         }}>
-          {actionMsg.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+          {actionMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
           <span>{actionMsg.text}</span>
         </div>
       )}
@@ -159,7 +158,7 @@ export const SellerAiListingPage = () => {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '28px' }}>
         {/* Input Form Column */}
         <div className="table-card" style={{ padding: '24px' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '16px' }}>Input Specifications</h3>
+          <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#ffffff', marginBottom: '16px' }}>Input Specifications</h3>
           <form onSubmit={handleGenerate}>
             <div className="form-group">
               <label className="form-label">Category</label>
@@ -213,7 +212,7 @@ export const SellerAiListingPage = () => {
               disabled={loading}
               style={{ width: '100%', marginTop: '12px' }}
             >
-              <Sparkles size={16} />
+              <Sparkles size={15} />
               <span>{loading ? 'Synthesizing with Gemini Agent...' : 'Generate Listing Draft'}</span>
             </button>
           </form>
@@ -222,11 +221,11 @@ export const SellerAiListingPage = () => {
         {/* Live Draft Preview Column */}
         <div className="table-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>AI Generated Draft</h3>
+            <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#ffffff' }}>AI Generated Draft</h3>
             {draft && (
-              <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span className="badge badge-mint" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Cpu size={12} />
-                Embeddings Ready
+                384D Embeddings Ready
               </span>
             )}
           </div>
@@ -239,37 +238,38 @@ export const SellerAiListingPage = () => {
               alignItems: 'center',
               justifyContent: 'center',
               padding: '60px 20px',
-              backgroundColor: 'var(--color-surface-subtle)',
-              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'var(--color-deep-canopy)',
+              borderRadius: '8px',
+              border: '1px solid var(--color-iron-veil)',
               textAlign: 'center'
             }}>
-              <Layers size={40} color="var(--color-text-muted)" style={{ marginBottom: '12px' }} />
-              <p style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+              <Layers size={36} color="var(--color-ash-label)" style={{ marginBottom: '12px' }} />
+              <p style={{ fontWeight: 500, fontSize: '13px', color: '#ffffff' }}>
                 No draft generated yet
               </p>
-              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: '4px', maxWidth: '280px' }}>
-                Enter product specs on the left and run the agent to synthesize titles and descriptions.
+              <p style={{ fontSize: '12px', color: 'var(--color-tide-pool)', marginTop: '4px', maxWidth: '280px' }}>
+                Enter product specs on the left and run the agent to synthesize structured titles and descriptions.
               </p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
-              <div style={{ borderBottom: '1px solid var(--color-border-card)', paddingBottom: '12px' }}>
+              <div style={{ borderBottom: '1px solid var(--color-iron-veil)', paddingBottom: '12px' }}>
                 <span className="form-label">Synthesized Title</span>
-                <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-text-primary)', marginTop: '4px' }}>
+                <h4 style={{ fontSize: '15px', fontWeight: 600, color: '#ffffff', marginTop: '4px' }}>
                   {draft.title}
                 </h4>
               </div>
 
-              <div style={{ borderBottom: '1px solid var(--color-border-card)', paddingBottom: '12px' }}>
+              <div style={{ borderBottom: '1px solid var(--color-iron-veil)', paddingBottom: '12px' }}>
                 <span className="form-label">Suggested Price</span>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-primary)', marginTop: '4px' }}>
+                <div style={{ fontSize: '20px', fontWeight: 600, color: 'var(--color-icy-steel)', marginTop: '4px' }}>
                   ₹{draft.suggested_price}
                 </div>
               </div>
 
-              <div style={{ borderBottom: '1px solid var(--color-border-card)', paddingBottom: '12px', flex: 1 }}>
-                <span className="form-label">Marketing Description</span>
-                <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6, marginTop: '6px', whiteSpace: 'pre-line' }}>
+              <div style={{ borderBottom: '1px solid var(--color-iron-veil)', paddingBottom: '12px', flex: 1 }}>
+                <span className="form-label">Marketing Narrative</span>
+                <p style={{ fontSize: '12px', color: 'var(--color-tide-pool)', lineHeight: 1.6, marginTop: '6px', whiteSpace: 'pre-line' }}>
                   {draft.description}
                 </p>
               </div>
@@ -278,14 +278,14 @@ export const SellerAiListingPage = () => {
                 <span className="form-label">Semantic Keywords</span>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
                   {(Array.isArray(draft.tags) ? draft.tags : []).map((t, idx) => (
-                    <span key={idx} className="badge badge-primary">
+                    <span key={idx} className="badge badge-neutral">
                       {t}
                     </span>
                   ))}
                 </div>
               </div>
 
-              <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--color-border-card)' }}>
+              <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--color-iron-veil)' }}>
                 <button
                   type="button"
                   onClick={handlePushToQueue}
@@ -293,7 +293,7 @@ export const SellerAiListingPage = () => {
                   disabled={submitting}
                   style={{ width: '100%' }}
                 >
-                  <Check size={16} />
+                  <Check size={15} />
                   <span>{submitting ? 'Pushing to Queue...' : 'Push to Human-in-the-Loop Queue'}</span>
                 </button>
               </div>

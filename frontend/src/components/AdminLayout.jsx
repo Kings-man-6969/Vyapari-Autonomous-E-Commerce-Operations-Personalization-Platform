@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, Outlet, Link } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 import { 
   ShieldCheck, 
   Users, 
@@ -7,8 +7,7 @@ import {
   Boxes, 
   FolderTree, 
   Cpu, 
-  LayoutDashboard,
-  ExternalLink
+  LayoutDashboard
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -29,11 +28,23 @@ export const AdminLayout = ({ children }) => {
       {/* Persistent Admin Sidebar */}
       <aside className="console-sidebar">
         <div className="console-sidebar-header">
-          <span className="console-sidebar-title">Governance Desk</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-            <ShieldCheck size={16} color="#6366F1" />
-            <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-              Super Admin Console
+          <span className="console-sidebar-title">Platform Governance</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+            <div style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '6px',
+              backgroundColor: 'var(--color-forest-floor)',
+              border: '1px solid var(--color-iron-veil)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-cyan-pulse)'
+            }}>
+              <ShieldCheck size={16} />
+            </div>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#ffffff' }}>
+              Super Admin Desk
             </span>
           </div>
         </div>
@@ -48,16 +59,16 @@ export const AdminLayout = ({ children }) => {
                 className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
                 end={item.to === '/admin'}
               >
-                <Icon size={18} />
+                <Icon size={17} />
                 <span>{item.label}</span>
               </NavLink>
             );
           })}
         </nav>
 
-        <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--color-border-card)' }}>
-          <div style={{ padding: '8px 12px', background: 'var(--color-surface-subtle)', borderRadius: 'var(--radius-sm)', fontSize: '11px', color: 'var(--color-text-secondary)' }}>
-            Admin: <strong>{user?.name}</strong>
+        <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--color-iron-veil)' }}>
+          <div style={{ padding: '8px 12px', background: 'var(--color-forest-floor)', borderRadius: '6px', border: '1px solid var(--color-iron-veil)', fontSize: '11px', color: 'var(--color-tide-pool)' }}>
+            Admin: <strong style={{ color: '#ffffff' }}>{user?.name || 'Administrator'}</strong>
           </div>
         </div>
       </aside>

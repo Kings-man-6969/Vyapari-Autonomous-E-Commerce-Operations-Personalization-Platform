@@ -52,12 +52,28 @@ import { AdminProductsPage } from './pages/AdminProductsPage';
 import { AdminCategoriesPage } from './pages/AdminCategoriesPage';
 import { AdminSystemPage } from './pages/AdminSystemPage';
 
-// Route Guards
-const CustomerRoute = ({ children }) => {
+// Allows any authenticated user (customer, seller, admin)
+const AuthRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
   if (loading) return null;
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+  return children;
+};
+
+// Strictly customer-only: blocks sellers and admins from shopping routes
+const CustomerRoute = ({ children }) => {
+  const { user, isAuthenticated, loading } = useAuth();
+  if (loading) return null;
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  if (user?.role === 'seller') {
+    return <Navigate to="/seller/dashboard" replace />;
+  }
+  if (user?.role === 'admin') {
+    return <Navigate to="/admin" replace />;
   }
   return children;
 };
@@ -104,15 +120,17 @@ export const App = () => {
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/returns" element={<ReturnsPage />} />
 
-            {/* Authenticated Customer Routes */}
+            {/* Authenticated Customer-Only Routes */}
+            <Route path="/cart" element={<CustomerRoute><CartPage /></CustomerRoute>} />
             <Route path="/checkout" element={<CustomerRoute><CheckoutPage /></CustomerRoute>} />
             <Route path="/orders" element={<CustomerRoute><OrdersPage /></CustomerRoute>} />
             <Route path="/orders/:id" element={<CustomerRoute><OrderDetailPage /></CustomerRoute>} />
             <Route path="/wishlist" element={<CustomerRoute><WishlistPage /></CustomerRoute>} />
             <Route path="/account" element={<CustomerRoute><AccountPage /></CustomerRoute>} />
             <Route path="/account/addresses" element={<CustomerRoute><AddressesPage /></CustomerRoute>} />
-            <Route path="/notifications" element={<CustomerRoute><NotificationsPage /></CustomerRoute>} />
-            <Route path="/seller/onboarding" element={<CustomerRoute><SellerOnboardingPage /></CustomerRoute>} />
+            {/* Notifications & Seller onboarding: any authenticated user */}
+            <Route path="/notifications" element={<AuthRoute><NotificationsPage /></AuthRoute>} />
+            <Route path="/seller/onboarding" element={<AuthRoute><SellerOnboardingPage /></AuthRoute>} />
 
             {/* Seller Console Routes (Persistent SellerLayout) */}
             <Route path="/seller" element={<Navigate to="/seller/dashboard" replace />} />
@@ -124,7 +142,8 @@ export const App = () => {
             <Route path="/seller/reviews" element={<SellerRoute><SellerLayout><SellerReviewsPage /></SellerLayout></SellerRoute>} />
             <Route path="/seller/inventory" element={<SellerRoute><SellerLayout><SellerInventoryPage /></SellerLayout></SellerRoute>} />
             <Route path="/seller/ai/listing" element={<SellerRoute><SellerLayout><SellerAiListingPage /></SellerLayout></SellerRoute>} />
-            <Route path="/seller/ai/chat" element={<SellerRoute><SellerLayout><SellerAiChatPage /></SellerLayout></SellerRoute>} />
+            <Route path="/seller/ai" element={<SellerRoute><SellerLayout><SellerAiChatPage /></SellerLayout></SellerRoute>} />
+            <Route path="/seller/ai/chat" element={<Navigate to="/seller/ai" replace />} />
             <Route path="/seller/approvals" element={<SellerRoute><SellerLayout><SellerApprovalsPage /></SellerLayout></SellerRoute>} />
             <Route path="/seller/settings" element={<SellerRoute><SellerLayout><SellerSettingsPage /></SellerLayout></SellerRoute>} />
 

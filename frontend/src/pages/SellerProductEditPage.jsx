@@ -42,13 +42,15 @@ export const SellerProductEditPage = () => {
           api.get(`/products/${id}`)
         ]);
 
+        const catList = catRes.data?.data?.categories || catRes.data?.categories || (Array.isArray(catRes.data?.data) ? catRes.data.data : []);
         if (catRes.data?.success) {
-          setCategories(catRes.data.data);
+          setCategories(catList);
         }
 
         if (prodRes.data?.success) {
           const p = prodRes.data.data;
           const imgArr = Array.isArray(p.images) ? p.images : (typeof p.images === 'string' ? JSON.parse(p.images || '[]') : []);
+          const resolvedCatId = p.category_id || (catList[0]?.id || '');
           setFormData({
             title: p.title || '',
             slug: p.slug || '',
@@ -57,7 +59,7 @@ export const SellerProductEditPage = () => {
             compare_at_price: p.compare_at_price || '',
             cost_price: p.cost_price || '',
             inventory_count: p.inventory_count !== undefined ? p.inventory_count : p.stock_qty || 0,
-            category_id: p.category_id || '',
+            category_id: resolvedCatId,
             tags: Array.isArray(p.tags) ? p.tags.join(', ') : p.tags || '',
             images: imgArr.length > 0 ? imgArr : ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80'],
             status: p.status || 'active'
@@ -97,6 +99,7 @@ export const SellerProductEditPage = () => {
       const cleanedImages = formData.images.filter((url) => url.trim().length > 0);
       const payload = {
         ...formData,
+        category_id: formData.category_id && formData.category_id.trim() ? formData.category_id.trim() : null,
         price: parseFloat(formData.price),
         compare_at_price: formData.compare_at_price ? parseFloat(formData.compare_at_price) : null,
         cost_price: formData.cost_price ? parseFloat(formData.cost_price) : null,
@@ -107,7 +110,7 @@ export const SellerProductEditPage = () => {
 
       const res = await api.put(`/seller/products/${id}`, payload);
       if (res.data?.success) {
-        setStatusMsg({ type: 'success', text: 'Product updated successfully.' });
+        setStatusMsg({ type: 'success', text: 'Product modifications successfully persisted.' });
       }
     } catch (err) {
       setStatusMsg({
@@ -121,7 +124,7 @@ export const SellerProductEditPage = () => {
 
   if (loading) {
     return (
-      <div style={{ maxWidth: '960px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '1080px', margin: '0 auto' }}>
         <div style={{ height: '40px', width: '200px', marginBottom: '24px' }} className="skeleton" />
         <div style={{ height: '400px' }} className="skeleton" />
       </div>
@@ -129,38 +132,67 @@ export const SellerProductEditPage = () => {
   }
 
   return (
-    <div style={{ maxWidth: '960px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '1080px', margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Link to="/seller/products" style={{ color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center' }}>
-            <ArrowLeft size={20} />
+          <Link 
+            to="/seller/products" 
+            style={{ 
+              color: 'var(--color-tide-pool)', 
+              display: 'flex', 
+              alignItems: 'center',
+              padding: '6px',
+              borderRadius: '6px',
+              backgroundColor: 'var(--color-deep-canopy)',
+              border: '1px solid var(--color-iron-veil)'
+            }}
+          >
+            <ArrowLeft size={18} />
           </Link>
           <div>
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Edit Product</h1>
-            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>ID: {id}</span>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>
+              Edit Listing
+            </h1>
+            <span style={{ fontSize: '11px', color: 'var(--color-ash-label)' }}>SKU ID: {id}</span>
           </div>
         </div>
 
-        <Link to={`/products/${id}`} target="_blank" className="btn-outline" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-          <Eye size={16} />
-          <span>View Live Product</span>
+        <Link 
+          to={`/products/${id}`} 
+          target="_blank" 
+          style={{ 
+            display: 'inline-flex', 
+            alignItems: 'center', 
+            gap: '6px',
+            padding: '8px 16px',
+            borderRadius: '9999px',
+            backgroundColor: 'var(--color-gunmetal-dark)',
+            border: '1px solid var(--color-border-steel)',
+            color: '#ffffff',
+            fontSize: '13px',
+            textDecoration: 'none'
+          }}
+        >
+          <Eye size={15} color="var(--color-icy-steel)" />
+          <span>View Public PDP</span>
         </Link>
       </div>
 
       {statusMsg.text && (
         <div style={{
           padding: '12px 16px',
-          borderRadius: 'var(--radius-sm)',
+          borderRadius: '8px',
           marginBottom: '20px',
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          backgroundColor: statusMsg.type === 'success' ? 'var(--color-success-bg)' : 'var(--color-error-bg)',
-          color: statusMsg.type === 'success' ? 'var(--color-success)' : 'var(--color-error)',
-          fontSize: 'var(--font-size-sm)'
+          backgroundColor: statusMsg.type === 'success' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(239, 68, 68, 0.1)',
+          border: `1px solid ${statusMsg.type === 'success' ? 'rgba(56, 189, 248, 0.3)' : 'var(--color-status-cancelled)'}`,
+          color: statusMsg.type === 'success' ? 'var(--color-icy-steel)' : '#fca5a5',
+          fontSize: '0.875rem'
         }}>
-          {statusMsg.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+          {statusMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
           <span>{statusMsg.text}</span>
         </div>
       )}
@@ -170,10 +202,12 @@ export const SellerProductEditPage = () => {
           {/* Main Column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {/* General Info Card */}
-            <div className="table-card" style={{ padding: '24px' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '16px' }}>General Information</h3>
+            <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '16px' }}>
+                Listing Specifications
+              </h3>
               <div className="form-group">
-                <label className="form-label">Product Title</label>
+                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Product Title</label>
                 <input
                   type="text"
                   className="input-field"
@@ -184,7 +218,7 @@ export const SellerProductEditPage = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">URL Slug</label>
+                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>URL Slug</label>
                 <input
                   type="text"
                   className="input-field"
@@ -195,7 +229,7 @@ export const SellerProductEditPage = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Description</label>
+                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Description</label>
                 <textarea
                   className="textarea-field"
                   rows="6"
@@ -206,7 +240,7 @@ export const SellerProductEditPage = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Tags (Comma separated)</label>
+                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Tags (Comma separated)</label>
                 <input
                   type="text"
                   className="input-field"
@@ -217,11 +251,13 @@ export const SellerProductEditPage = () => {
             </div>
 
             {/* Pricing Card */}
-            <div className="table-card" style={{ padding: '24px' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '16px' }}>Pricing & Margins</h3>
+            <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '16px' }}>
+                Financial Parameters
+              </h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
-                  <label className="form-label">Selling Price (₹)</label>
+                  <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Selling Price (₹)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -233,7 +269,7 @@ export const SellerProductEditPage = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Compare-at Price (₹)</label>
+                  <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Compare-at Price (₹)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -244,7 +280,7 @@ export const SellerProductEditPage = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Cost Price (₹)</label>
+                  <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Cost Price (₹)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -258,16 +294,28 @@ export const SellerProductEditPage = () => {
             </div>
 
             {/* Product Images Card */}
-            <div className="table-card" style={{ padding: '24px' }}>
+            <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Image Assets</h3>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>
+                  Media Assets
+                </h3>
                 <button
                   type="button"
                   onClick={handleAddImageUrl}
-                  style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                  style={{ 
+                    fontSize: '12px', 
+                    color: 'var(--color-icy-steel)', 
+                    fontWeight: 600, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '4px',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
                 >
                   <Plus size={14} />
-                  <span>Add Image URL</span>
+                  <span>Add URL</span>
                 </button>
               </div>
 
@@ -283,7 +331,13 @@ export const SellerProductEditPage = () => {
                     <button
                       type="button"
                       onClick={() => handleRemoveImageUrl(idx)}
-                      style={{ color: 'var(--color-error)', padding: '8px' }}
+                      style={{ 
+                        color: '#f87171', 
+                        padding: '8px', 
+                        background: 'transparent', 
+                        border: 'none', 
+                        cursor: 'pointer' 
+                      }}
                     >
                       <Trash2 size={16} />
                     </button>
@@ -295,16 +349,18 @@ export const SellerProductEditPage = () => {
 
           {/* Right Sidebar Column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            <div className="table-card" style={{ padding: '24px' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '16px' }}>Status & Stock</h3>
+            <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '16px' }}>
+                Status & Allocation
+              </h3>
               <div className="form-group">
-                <label className="form-label">Listing Status</label>
+                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Listing Status</label>
                 <select
                   className="select-field"
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                 >
-                  <option value="active">Active (Live in Marketplace)</option>
+                  <option value="active">Active (Public)</option>
                   <option value="draft">Draft (Private)</option>
                   <option value="out_of_stock">Out of Stock</option>
                   <option value="archived">Archived</option>
@@ -312,7 +368,7 @@ export const SellerProductEditPage = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Category</label>
+                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Category Taxonomy</label>
                 <select
                   className="select-field"
                   value={formData.category_id}
@@ -326,7 +382,7 @@ export const SellerProductEditPage = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Available Inventory Units</label>
+                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Available Inventory Units</label>
                 <input
                   type="number"
                   min="0"
@@ -339,9 +395,23 @@ export const SellerProductEditPage = () => {
 
               <button
                 type="submit"
-                className="btn-primary"
                 disabled={saving}
-                style={{ width: '100%', marginTop: '16px' }}
+                style={{
+                  width: '100%',
+                  marginTop: '16px',
+                  padding: '12px 24px',
+                  borderRadius: '9999px',
+                  backgroundColor: '#ffffff',
+                  color: '#02090a',
+                  fontWeight: 600,
+                  fontSize: '14px',
+                  border: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: saving ? 'not-allowed' : 'pointer'
+                }}
               >
                 <Save size={16} />
                 <span>{saving ? 'Saving Changes...' : 'Save Product'}</span>

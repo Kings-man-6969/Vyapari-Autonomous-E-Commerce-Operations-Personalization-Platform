@@ -58,7 +58,7 @@ These tighten pre-implementation decisions before anyone writes code.
 
 ## Part 1 — Global Design System
 
-All values derived from [DESIGN.md](file:///c:/Users/gungu/Vyapari-Autonomous-E-Commerce-Operations-Personalization-Platform/DESIGN.md) with the Inter font substitution applied.
+All values derived from [DESIGN.md](./DESIGN.md) with the Inter font substitution applied.
 
 ### 1.1 Visual Principles
 

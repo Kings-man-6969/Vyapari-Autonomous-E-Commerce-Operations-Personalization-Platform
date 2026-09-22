@@ -108,7 +108,7 @@ async def add_to_wishlist_body(
             detail={"code": "VALIDATION_ERROR", "message": "product_id is required."},
         )
 
-    prod = await db.fetchrow("SELECT id FROM products WHERE id = $1", product_id)
+    prod = await db.fetchrow("SELECT id FROM products WHERE id::text = $1", product_id)
     if not prod:
         raise HTTPException(
             status_code=404,
@@ -118,13 +118,13 @@ async def add_to_wishlist_body(
     wishlist_id = await _get_or_create_wishlist(db, user["id"])
     await db.execute(
         """INSERT INTO wishlist_items (wishlist_id, product_id)
-           VALUES ($1, $2)
+           VALUES ($1, $2::uuid)
            ON CONFLICT (wishlist_id, product_id) DO NOTHING""",
         wishlist_id,
-        product_id,
+        prod["id"],
     )
 
-    _fire_and_forget_interaction(user["id"], product_id)
+    _fire_and_forget_interaction(user["id"], str(prod["id"]))
 
     return {"success": True, "message": "Added to wishlist."}
 
@@ -135,7 +135,7 @@ async def add_to_wishlist_param(
     user: dict = Depends(require_auth),
     db=Depends(get_db),
 ) -> dict:
-    prod = await db.fetchrow("SELECT id FROM products WHERE id = $1", product_id)
+    prod = await db.fetchrow("SELECT id FROM products WHERE id::text = $1", product_id)
     if not prod:
         raise HTTPException(
             status_code=404,
@@ -145,13 +145,13 @@ async def add_to_wishlist_param(
     wishlist_id = await _get_or_create_wishlist(db, user["id"])
     await db.execute(
         """INSERT INTO wishlist_items (wishlist_id, product_id)
-           VALUES ($1, $2)
+           VALUES ($1, $2::uuid)
            ON CONFLICT (wishlist_id, product_id) DO NOTHING""",
         wishlist_id,
-        product_id,
+        prod["id"],
     )
 
-    _fire_and_forget_interaction(user["id"], product_id)
+    _fire_and_forget_interaction(user["id"], str(prod["id"]))
 
     return {"success": True, "message": "Added to wishlist."}
 
@@ -164,7 +164,7 @@ async def remove_from_wishlist(
 ) -> dict:
     wishlist_id = await _get_or_create_wishlist(db, user["id"])
     await db.execute(
-        "DELETE FROM wishlist_items WHERE wishlist_id = $1 AND product_id = $2",
+        "DELETE FROM wishlist_items WHERE wishlist_id = $1 AND product_id::text = $2",
         wishlist_id,
         product_id,
     )

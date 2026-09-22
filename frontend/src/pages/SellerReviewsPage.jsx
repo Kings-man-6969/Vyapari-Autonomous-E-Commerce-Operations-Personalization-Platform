@@ -43,10 +43,9 @@ export const SellerReviewsPage = () => {
       setSubmittingId(reviewId);
       const res = await api.post(`/reviews/${reviewId}/reply`, { reply: text.trim() });
       if (res.data?.success) {
-        setSuccessNotice(`Official reply posted successfully!`);
+        setSuccessNotice(`Official reply posted successfully.`);
         setTimeout(() => setSuccessNotice(null), 3500);
 
-        // Update local review state
         setReviews(prev => prev.map(r => {
           if (r.id === reviewId) {
             return {
@@ -76,67 +75,80 @@ export const SellerReviewsPage = () => {
   });
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+    <div style={{ maxWidth: '1080px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800 }}>Customer Reviews & Feedback</h1>
-          <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
-            Monitor customer sentiment, reply directly to buyers, and build marketplace trust.
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>
+            Customer Feedback & Reviews
+          </h1>
+          <p style={{ fontSize: '0.875rem', color: 'var(--color-tide-pool)', marginTop: '4px' }}>
+            Verified buyer sentiment, verified reviews, and merchant responses
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button
-            onClick={() => setFilterPending(!filterPending)}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '8px',
-              backgroundColor: filterPending ? 'var(--color-primary)' : '#ffffff',
-              color: filterPending ? '#ffffff' : 'var(--color-text-primary)',
-              border: '1px solid var(--color-border-subtle)',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            {filterPending ? '✓ Showing Needs Reply' : 'Filter: Unanswered Reviews'}
-          </button>
-        </div>
+        <button
+          onClick={() => setFilterPending(!filterPending)}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '9999px',
+            backgroundColor: filterPending ? '#ffffff' : 'var(--color-forest-floor)',
+            color: filterPending ? '#02090a' : 'var(--color-tide-pool)',
+            border: '1px solid',
+            borderColor: filterPending ? '#ffffff' : 'var(--color-iron-veil)',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          {filterPending ? 'Showing Unanswered Only' : 'Filter: Unanswered Reviews'}
+        </button>
       </div>
 
       {successNotice && (
         <div style={{
           padding: '12px 16px',
-          backgroundColor: 'var(--color-success-bg)',
-          color: 'var(--color-success)',
+          backgroundColor: 'rgba(56, 189, 248, 0.12)',
+          border: '1px solid rgba(56, 189, 248, 0.3)',
+          color: 'var(--color-icy-steel)',
           borderRadius: '8px',
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
           marginBottom: '20px',
-          fontSize: '13px',
-          fontWeight: 600
+          fontSize: '0.875rem',
+          fontWeight: 500
         }}>
           <CheckCircle2 size={16} />
-          {successNotice}
+          <span>{successNotice}</span>
         </div>
       )}
 
       {/* Search Filter */}
-      <div style={{ position: 'relative', marginBottom: '24px' }}>
-        <Search size={16} color="var(--color-text-muted)" style={{ position: 'absolute', left: '14px', top: '13px' }} />
+      <div style={{
+        position: 'relative',
+        marginBottom: '24px',
+        display: 'flex',
+        alignItems: 'center',
+        background: 'var(--color-forest-floor)',
+        border: '1px solid var(--color-iron-veil)',
+        borderRadius: '9999px',
+        padding: '2px 14px'
+      }}>
+        <Search size={15} color="var(--color-ash-label)" style={{ marginRight: '8px' }} />
         <input
           type="text"
-          placeholder="Search by product, customer name, or comment keywords..."
+          placeholder="Filter feedback by product title, reviewer name, or keyword..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           style={{
             width: '100%',
-            padding: '10px 16px 10px 38px',
-            borderRadius: '8px',
-            border: '1px solid var(--color-border-subtle)',
-            backgroundColor: '#ffffff',
-            fontSize: '13px'
+            padding: '8px 0',
+            border: 'none',
+            background: 'transparent',
+            color: '#ffffff',
+            fontSize: '13px',
+            outline: 'none'
           }}
         />
       </div>
@@ -144,20 +156,22 @@ export const SellerReviewsPage = () => {
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {[1, 2, 3].map(n => (
-            <div key={n} className="skeleton" style={{ height: '140px', borderRadius: '8px' }} />
+            <div key={n} className="skeleton" style={{ height: '140px', borderRadius: '12px', backgroundColor: 'var(--color-forest-floor)' }} />
           ))}
         </div>
       ) : error ? (
-        <div style={{ padding: '32px', textAlign: 'center', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid var(--color-border-card)' }}>
-          <AlertCircle size={32} color="var(--color-error)" style={{ margin: '0 auto 8px' }} />
-          <p style={{ color: 'var(--color-error)', fontWeight: 600 }}>{error}</p>
+        <div style={{ padding: '32px', textAlign: 'center', backgroundColor: 'var(--color-forest-floor)', borderRadius: '12px', border: '1px solid var(--color-iron-veil)' }}>
+          <AlertCircle size={32} color="#f87171" style={{ margin: '0 auto 8px' }} />
+          <p style={{ color: '#f87171', fontWeight: 500 }}>{error}</p>
         </div>
       ) : filteredReviews.length === 0 ? (
-        <div style={{ padding: '60px 24px', textAlign: 'center', backgroundColor: '#ffffff', borderRadius: '12px', border: '1px dashed var(--color-border-subtle)' }}>
-          <MessageSquare size={40} color="var(--color-text-muted)" style={{ margin: '0 auto 12px' }} />
-          <h3 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '6px' }}>No Customer Reviews Found</h3>
-          <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-            {filterPending ? 'All customer reviews on your catalog have been answered!' : 'Customer reviews on your catalog will appear here once shoppers rate their purchases.'}
+        <div style={{ padding: '60px 24px', textAlign: 'center', backgroundColor: 'var(--color-forest-floor)', borderRadius: '12px', border: '1px dashed var(--color-iron-veil)' }}>
+          <MessageSquare size={40} color="var(--color-ash-label)" style={{ margin: '0 auto 12px' }} />
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '6px' }}>
+            No Customer Reviews Found
+          </h3>
+          <p style={{ fontSize: '0.875rem', color: 'var(--color-tide-pool)' }}>
+            {filterPending ? 'All customer reviews on your catalog have been answered.' : 'Customer feedback on your catalog will populate here once verified buyers rate orders.'}
           </p>
         </div>
       ) : (
@@ -171,11 +185,11 @@ export const SellerReviewsPage = () => {
 
             return (
               <div key={r.id} style={{
-                backgroundColor: '#ffffff',
-                borderRadius: '10px',
-                border: '1px solid var(--color-border-card)',
+                backgroundColor: 'var(--color-forest-floor)',
+                borderRadius: '12px',
+                border: '1px solid var(--color-iron-veil)',
                 padding: '24px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)'
               }}>
                 {/* Header: Product preview + Rating */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '16px' }}>
@@ -183,51 +197,51 @@ export const SellerReviewsPage = () => {
                     <img
                       src={thumb}
                       alt={r.product_title}
-                      style={{ width: '48px', height: '48px', borderRadius: '6px', objectFit: 'contain', backgroundColor: '#f8fafc', padding: '2px', border: '1px solid #f1f5f9' }}
+                      style={{ width: '48px', height: '48px', borderRadius: '6px', objectFit: 'cover', border: '1px solid var(--color-iron-veil)' }}
                     />
                     <div>
-                      <a href={`/products/${r.product_id}`} target="_blank" rel="noreferrer" style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                      <a href={`/products/${r.product_id}`} target="_blank" rel="noreferrer" style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff', textDecoration: 'none' }}>
                         {r.product_title}
                       </a>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                        <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>By {r.reviewer_name}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--color-tide-pool)' }}>By {r.reviewer_name}</span>
                         {r.is_verified_purchase && (
-                          <span className="badge badge-success" style={{ fontSize: '10px' }}>Verified Buyer</span>
+                          <span className="badge-agent" style={{ fontSize: '10px' }}>Verified Buyer</span>
                         )}
-                        <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--color-ash-label)' }}>
                           {new Date(r.created_at).toLocaleDateString()}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#fef3c7', padding: '3px 8px', borderRadius: '4px' }}>
-                    <Star size={13} fill="#b45309" color="#b45309" />
-                    <span style={{ fontSize: '12px', fontWeight: 800, color: '#b45309' }}>{r.rating} / 5</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: 'var(--color-deep-canopy)', border: '1px solid var(--color-iron-veil)', padding: '4px 10px', borderRadius: '9999px' }}>
+                    <Star size={12} fill="#fbbf24" color="#fbbf24" />
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#fbbf24' }}>{r.rating} / 5</span>
                   </div>
                 </div>
 
                 {/* Customer Comment */}
                 <div style={{ marginBottom: '18px' }}>
-                  {r.title && <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '4px' }}>{r.title}</h4>}
-                  <p style={{ fontSize: '13.5px', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+                  {r.title && <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff', marginBottom: '4px' }}>{r.title}</h4>}
+                  <p style={{ fontSize: '13.5px', color: 'var(--color-tide-pool)', lineHeight: 1.6 }}>
                     "{r.comment}"
                   </p>
                 </div>
 
                 {/* Seller Reply Section */}
                 <div style={{
-                  backgroundColor: '#f8fafc',
-                  border: '1px solid #e2e8f0',
+                  backgroundColor: 'var(--color-slate-chrome)',
+                  border: '1px solid var(--color-border-steel)',
                   borderRadius: '8px',
                   padding: '16px',
                   marginTop: '12px'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', fontSize: '12px', fontWeight: 700, color: 'var(--color-primary)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', fontSize: '12px', fontWeight: 600, color: 'var(--color-icy-steel)' }}>
                     <CornerDownRight size={14} />
                     <span>Official Merchant Response ({r.store_name})</span>
                     {r.seller_reply_at && (
-                      <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontWeight: 500, marginLeft: 'auto' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--color-ash-label)', fontWeight: 400, marginLeft: 'auto' }}>
                         Answered {new Date(r.seller_reply_at).toLocaleDateString()}
                       </span>
                     )}
@@ -235,19 +249,21 @@ export const SellerReviewsPage = () => {
 
                   <textarea
                     rows={3}
-                    placeholder="Write a professional, helpful response to this customer..."
+                    placeholder="Provide a professional, courteous response to address this customer..."
                     value={draftReply}
                     onChange={(e) => handleReplyChange(r.id, e.target.value)}
                     style={{
                       width: '100%',
                       padding: '10px 12px',
                       borderRadius: '6px',
-                      border: '1px solid var(--color-border-subtle)',
-                      backgroundColor: '#ffffff',
+                      border: '1px solid var(--color-iron-veil)',
+                      backgroundColor: 'var(--color-abyssal-ink)',
+                      color: '#ffffff',
                       fontSize: '13px',
                       lineHeight: 1.5,
                       marginBottom: '10px',
-                      resize: 'vertical'
+                      resize: 'vertical',
+                      outline: 'none'
                     }}
                   />
 
@@ -255,18 +271,23 @@ export const SellerReviewsPage = () => {
                     <button
                       onClick={() => submitReply(r.id)}
                       disabled={submittingId === r.id || !draftReply.trim()}
-                      className="btn-primary"
                       style={{
-                        padding: '6px 14px',
+                        padding: '6px 16px',
                         fontSize: '12px',
+                        fontWeight: 600,
+                        borderRadius: '9999px',
+                        backgroundColor: '#ffffff',
+                        color: '#02090a',
+                        border: 'none',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '6px',
-                        cursor: (!draftReply.trim() || submittingId === r.id) ? 'not-allowed' : 'pointer'
+                        cursor: (!draftReply.trim() || submittingId === r.id) ? 'not-allowed' : 'pointer',
+                        opacity: (!draftReply.trim() || submittingId === r.id) ? 0.5 : 1
                       }}
                     >
-                      <Send size={13} />
-                      {submittingId === r.id ? 'Saving...' : (r.seller_reply ? 'Update Reply' : 'Post Reply')}
+                      <Send size={12} />
+                      <span>{submittingId === r.id ? 'Saving...' : (r.seller_reply ? 'Update Reply' : 'Post Reply')}</span>
                     </button>
                   </div>
                 </div>
@@ -278,3 +299,5 @@ export const SellerReviewsPage = () => {
     </div>
   );
 };
+
+export default SellerReviewsPage;

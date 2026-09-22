@@ -60,7 +60,7 @@ export const SellerSettingsPage = () => {
       setSaving(true);
       const res = await api.put('/seller/settings', formData);
       if (res.data?.success) {
-        setStatusMsg({ type: 'success', text: 'Store settings and Support RAG policies updated successfully.' });
+        setStatusMsg({ type: 'success', text: 'Store identity and RAG policy documents synchronized successfully.' });
       }
     } catch (err) {
       setStatusMsg({
@@ -74,7 +74,7 @@ export const SellerSettingsPage = () => {
 
   if (loading) {
     return (
-      <div style={{ maxWidth: '840px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '880px', margin: '0 auto' }}>
         <div style={{ height: '40px', width: '200px', marginBottom: '24px' }} className="skeleton" />
         <div style={{ height: '350px' }} className="skeleton" />
       </div>
@@ -82,43 +82,44 @@ export const SellerSettingsPage = () => {
   }
 
   return (
-    <div style={{ maxWidth: '840px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '880px', margin: '0 auto' }}>
       <div style={{ marginBottom: '28px' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
-          Store Settings & AI Policy Knowledge Base
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>
+          Store Settings & RAG Knowledge Base
         </h1>
-        <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)', marginTop: '4px' }}>
-          Configure your storefront identity and policy documents indexed by our Customer Support RAG agent
+        <p style={{ color: 'var(--color-tide-pool)', fontSize: '0.875rem', marginTop: '4px' }}>
+          Configure merchant storefront credentials and policy documents ingested by the Customer Support RAG agent
         </p>
       </div>
 
       {statusMsg.text && (
         <div style={{
           padding: '12px 16px',
-          borderRadius: 'var(--radius-sm)',
+          borderRadius: '8px',
           marginBottom: '20px',
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          backgroundColor: statusMsg.type === 'success' ? 'var(--color-success-bg)' : 'var(--color-error-bg)',
-          color: statusMsg.type === 'success' ? 'var(--color-success)' : 'var(--color-error)',
-          fontSize: 'var(--font-size-sm)'
+          backgroundColor: statusMsg.type === 'success' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(239, 68, 68, 0.1)',
+          border: `1px solid ${statusMsg.type === 'success' ? 'rgba(56, 189, 248, 0.3)' : 'var(--color-status-cancelled)'}`,
+          color: statusMsg.type === 'success' ? 'var(--color-icy-steel)' : '#fca5a5',
+          fontSize: '0.875rem'
         }}>
-          {statusMsg.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+          {statusMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
           <span>{statusMsg.text}</span>
         </div>
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         {/* Brand Identity */}
-        <div className="table-card" style={{ padding: '24px' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Store size={18} color="var(--color-primary)" />
+        <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)' }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Store size={18} color="var(--color-icy-steel)" />
             <span>Storefront Brand Identity</span>
           </h3>
 
           <div className="form-group">
-            <label className="form-label">Public Store Name</label>
+            <label className="form-label" style={{ color: 'var(--color-slate-caption)' }}>Public Store Name</label>
             <input
               type="text"
               className="input-field"
@@ -129,7 +130,7 @@ export const SellerSettingsPage = () => {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Store Biography & Tagline</label>
+            <label className="form-label" style={{ color: 'var(--color-slate-caption)' }}>Store Biography & Tagline</label>
             <textarea
               className="textarea-field"
               rows="3"
@@ -139,7 +140,7 @@ export const SellerSettingsPage = () => {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Registered Operational Address</label>
+            <label className="form-label" style={{ color: 'var(--color-slate-caption)' }}>Registered Operational Address</label>
             <input
               type="text"
               className="input-field"
@@ -150,7 +151,7 @@ export const SellerSettingsPage = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div className="form-group">
-              <label className="form-label">Support Email</label>
+              <label className="form-label" style={{ color: 'var(--color-slate-caption)' }}>Support Contact Email</label>
               <input
                 type="email"
                 className="input-field"
@@ -160,7 +161,7 @@ export const SellerSettingsPage = () => {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Support Helpline</label>
+              <label className="form-label" style={{ color: 'var(--color-slate-caption)' }}>Support Helpline</label>
               <input
                 type="tel"
                 className="input-field"
@@ -173,21 +174,21 @@ export const SellerSettingsPage = () => {
         </div>
 
         {/* Policy Knowledge Base for RAG */}
-        <div className="table-card" style={{ padding: '24px' }}>
+        <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <FileText size={18} color="var(--color-secondary)" />
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FileText size={18} color="var(--color-icy-steel)" />
               <span>Policies for Support RAG Agent</span>
             </h3>
-            <span className="badge badge-success">Auto-Indexed</span>
+            <span className="badge-agent" style={{ fontSize: '11px' }}>RAG Ingested</span>
           </div>
 
-          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', marginBottom: '16px', lineHeight: 1.5 }}>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--color-tide-pool)', marginBottom: '16px', lineHeight: 1.5 }}>
             Our autonomous customer service agent queries these policy clauses via semantic retrieval (RAG) when answering buyer questions regarding returns, repairs, and transit times.
           </p>
 
           <div className="form-group">
-            <label className="form-label">Return & Refund Policy Clauses</label>
+            <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Return & Refund Policy Clauses</label>
             <textarea
               className="textarea-field"
               rows="5"
@@ -198,7 +199,7 @@ export const SellerSettingsPage = () => {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Shipping & Packaging Standards</label>
+            <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Shipping & Packaging Standards</label>
             <textarea
               className="textarea-field"
               rows="5"
@@ -212,12 +213,23 @@ export const SellerSettingsPage = () => {
         <div>
           <button
             type="submit"
-            className="btn-primary"
             disabled={saving}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+            style={{
+              padding: '12px 28px',
+              borderRadius: '9999px',
+              backgroundColor: '#ffffff',
+              color: '#02090a',
+              fontWeight: 600,
+              fontSize: '14px',
+              border: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              cursor: saving ? 'not-allowed' : 'pointer'
+            }}
           >
             <Save size={16} />
-            <span>{saving ? 'Saving...' : 'Save Settings & Sync Policies'}</span>
+            <span>{saving ? 'Syncing...' : 'Save Settings & Sync Policies'}</span>
           </button>
         </div>
       </form>

@@ -16,14 +16,12 @@ import {
   MapPin,
   Settings,
   Boxes,
-  PlusCircle,
   FileCheck2,
   TrendingUp,
   Cpu,
-  HelpCircle,
-  ChevronDown,
   Tag,
-  ArrowRight
+  ArrowRight,
+  Star
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -31,11 +29,12 @@ import { useWishlist } from '../context/WishlistContext';
 import api from '../services/api';
 
 export const Header = () => {
-  const { user, isAuthenticated, isSeller, isAdmin, logout } = useAuth();
+  const { user, isAuthenticated, isCustomer, isSeller, isAdmin, logout } = useAuth();
   const { itemCount } = useCart();
   const { wishlistCount } = useWishlist();
   const [searchQuery, setSearchQuery] = useState('');
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   // Search Autocomplete / Suggestions State
@@ -53,6 +52,7 @@ export const Header = () => {
   useEffect(() => {
     setUserMenuOpen(false);
     setIsSuggestOpen(false);
+    setMobileMenuOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -81,8 +81,12 @@ export const Header = () => {
       try {
         const res = await api.get('/notifications');
         if (res.data?.success) {
-          const unread = res.data.data.filter((n) => !n.is_read).length;
-          setUnreadNotifications(unread);
+          const count = res.data.data?.unread_count !== undefined
+            ? res.data.data.unread_count
+            : (Array.isArray(res.data.data?.notifications)
+                ? res.data.data.notifications.filter((n) => !n.is_read).length
+                : (Array.isArray(res.data.data) ? res.data.data.filter((n) => !n.is_read).length : 0));
+          setUnreadNotifications(count);
         }
       } catch {
         // Silently tolerate if notification service is idle
@@ -144,25 +148,25 @@ export const Header = () => {
         top: 'calc(100% + 8px)',
         left: 0,
         right: 0,
-        backgroundColor: '#ffffff',
+        backgroundColor: 'var(--color-deep-canopy)',
         borderRadius: '12px',
-        border: '1px solid #e2e8f0',
-        boxShadow: '0 16px 36px rgba(0, 0, 0, 0.14)',
+        border: '1px solid var(--color-iron-veil)',
+        boxShadow: 'var(--shadow-floating)',
         zIndex: 1100,
         overflow: 'hidden',
         maxHeight: '440px',
         overflowY: 'auto'
       }}>
         {suggestLoading && (
-          <div style={{ padding: '10px 16px', fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #f8fafc' }}>
-            <Sparkles size={13} color="var(--color-primary)" />
-            <span>Scanning marketplace & AI semantic embeddings...</span>
+          <div style={{ padding: '10px 16px', fontSize: '12px', color: 'var(--color-steel-mist)', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--color-border-steel)' }}>
+            <Sparkles size={13} color="var(--color-icy-steel)" />
+            <span>Searching products, categories, and brands...</span>
           </div>
         )}
 
         {/* 1. Quick Brand & Category Discovery Badges */}
         {(suggestionsData.brands?.length > 0 || suggestionsData.categories?.length > 0) && (
-          <div style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: '8px', flexWrap: 'wrap', backgroundColor: '#fcfcfd' }}>
+          <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--color-border-steel)', display: 'flex', gap: '8px', flexWrap: 'wrap', backgroundColor: 'var(--color-gunmetal-dark)' }}>
             {suggestionsData.brands?.map((b) => (
               <button
                 key={b.name}
@@ -176,19 +180,18 @@ export const Header = () => {
                   alignItems: 'center',
                   gap: '6px',
                   padding: '5px 12px',
-                  borderRadius: '16px',
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #e2e8f0',
-                  color: '#0f172a',
+                  borderRadius: '9999px',
+                  backgroundColor: 'var(--color-slate-chrome)',
+                  border: '1px solid var(--color-border-steel)',
+                  color: '#ffffff',
                   fontSize: '12px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                  fontWeight: 600,
+                  cursor: 'pointer'
                 }}
               >
-                <Store size={13} color="#008489" />
+                <Store size={13} color="var(--color-icy-steel)" />
                 <span>Brand: {b.name}</span>
-                <span style={{ color: '#64748b', fontSize: '11px', fontWeight: 500 }}>({b.count})</span>
+                <span style={{ color: 'var(--color-slate-caption)', fontSize: '11px' }}>({b.count})</span>
               </button>
             ))}
 
@@ -205,17 +208,16 @@ export const Header = () => {
                   alignItems: 'center',
                   gap: '6px',
                   padding: '5px 12px',
-                  borderRadius: '16px',
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #e2e8f0',
-                  color: '#475569',
+                  borderRadius: '9999px',
+                  backgroundColor: 'var(--color-deep-canopy)',
+                  border: '1px solid var(--color-iron-veil)',
+                  color: 'var(--color-tide-pool)',
                   fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                  fontWeight: 500,
+                  cursor: 'pointer'
                 }}
               >
-                <Tag size={13} color="#6366f1" />
+                <Tag size={13} color="var(--color-cyan-pulse)" />
                 <span>in {c.name}</span>
               </button>
             ))}
@@ -224,7 +226,7 @@ export const Header = () => {
 
         {/* 2. Suggested Queries Autocomplete */}
         {suggestionsData.suggestions?.length > 0 && (
-          <div style={{ padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
+          <div style={{ padding: '6px 0', borderBottom: '1px solid var(--color-iron-veil)' }}>
             {suggestionsData.suggestions.map((s, idx) => (
               <div
                 key={idx}
@@ -239,15 +241,15 @@ export const Header = () => {
                   gap: '10px',
                   padding: '8px 16px',
                   fontSize: '13px',
-                  color: '#1e293b',
+                  color: '#ffffff',
                   cursor: 'pointer',
-                  transition: 'background-color 0.1s ease'
+                  transition: 'background-color 0.15s ease'
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-forest-floor)')}
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
               >
-                <Search size={14} color="#94a3b8" />
-                <span style={{ fontWeight: 600 }}>{s}</span>
+                <Search size={14} color="var(--color-ash-label)" />
+                <span style={{ fontWeight: 500 }}>{s}</span>
               </div>
             ))}
           </div>
@@ -256,7 +258,7 @@ export const Header = () => {
         {/* 3. Matching Products Preview */}
         {suggestionsData.products?.length > 0 && (
           <div style={{ padding: '6px 0' }}>
-            <div style={{ padding: '4px 16px 6px', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.5px' }}>
+            <div style={{ padding: '4px 16px 6px', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-ash-label)', letterSpacing: '0.06em' }}>
               Products
             </div>
             {suggestionsData.products.map((prod) => {
@@ -277,9 +279,9 @@ export const Header = () => {
                     gap: '12px',
                     padding: '8px 16px',
                     cursor: 'pointer',
-                    transition: 'background-color 0.1s ease'
+                    transition: 'background-color 0.15s ease'
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-forest-floor)')}
                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   <img
@@ -290,28 +292,29 @@ export const Header = () => {
                       height: '38px',
                       borderRadius: '6px',
                       objectFit: 'contain',
-                      backgroundColor: '#f8fafc',
+                      backgroundColor: 'var(--color-abyssal-ink)',
                       padding: '2px',
-                      border: '1px solid #e2e8f0',
+                      border: '1px solid var(--color-iron-veil)',
                       flexShrink: 0
                     }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 500, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {prod.title}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
-                      <span style={{ fontSize: '11px', color: '#64748b' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--color-tide-pool)' }}>
                         {prod.brand || prod.category_name}
                       </span>
                       {prod.rating && (
-                        <span style={{ fontSize: '11px', color: '#b45309', fontWeight: 700 }}>
-                          ★ {parseFloat(prod.rating).toFixed(1)}
+                        <span style={{ fontSize: '11px', color: 'var(--color-icy-steel)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          <Star size={11} fill="var(--color-icy-steel)" stroke="none" />
+                          {parseFloat(prod.rating).toFixed(1)}
                         </span>
                       )}
                     </div>
                   </div>
-                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', flexShrink: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#ffffff', flexShrink: 0 }}>
                     ₹{priceNum.toLocaleString('en-IN')}
                   </div>
                 </div>
@@ -325,25 +328,24 @@ export const Header = () => {
           onClick={handleSearch}
           style={{
             padding: '11px 16px',
-            backgroundColor: '#f8fafc',
-            borderTop: '1px solid #e2e8f0',
+            backgroundColor: 'var(--color-forest-floor)',
+            borderTop: '1px solid var(--color-iron-veil)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             cursor: 'pointer',
             fontSize: '12.5px',
-            color: '#334155',
-            fontWeight: 600
+            color: 'var(--color-tide-pool)'
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(24, 29, 38, 0.8)')}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-forest-floor)')}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Sparkles size={15} color="var(--color-primary)" />
-            <span>Search <strong>"{searchQuery}"</strong> with Natural Language AI</span>
+            <Sparkles size={15} color="var(--color-icy-steel)" />
+            <span>Search <strong>"{searchQuery}"</strong> with pgvector AI semantic intent</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#64748b' }}>
-            <span>Press Enter</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--color-ash-label)' }}>
+            <span>Enter</span>
             <ArrowRight size={13} />
           </div>
         </div>
@@ -356,52 +358,77 @@ export const Header = () => {
       position: 'sticky',
       top: 0,
       zIndex: 100,
-      backgroundColor: '#ffffff',
-      borderBottom: '1px solid var(--color-border-subtle)',
-      boxShadow: 'var(--shadow-xs)'
+      backgroundColor: 'rgba(9, 10, 13, 0.92)',
+      backdropFilter: 'blur(20px)',
+      borderBottom: '1px solid var(--color-border-steel)',
+      boxShadow: 'var(--shadow-sm)'
     }}>
-      <div className="container header-container">
-        {/* Brand Logo */}
-        <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, order: 1 }}>
-          <div style={{
-            width: '38px',
-            height: '38px',
-            borderRadius: 'var(--radius-sm)',
-            background: 'linear-gradient(135deg, #FF385C 0%, #E00B41 100%)',
-            display: 'flex',
+      <div className="container header-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+        {/* Mobile Hamburger Button — rightmost on mobile */}
+        <button
+          className="header-mobile-menu-btn"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-label="Toggle navigation menu"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#ffffff',
+            cursor: 'pointer',
+            padding: '6px',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#ffffff'
-          }}>
-            <Sparkles size={20} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '1.3rem', fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--color-primary)', lineHeight: 1.1 }}>
-              Vyapari
-            </span>
-            <span style={{ fontSize: '0.62rem', fontWeight: 600, textTransform: 'uppercase', color: 'var(--color-text-secondary)', letterSpacing: '0.8px' }}>
-              Autonomous Market
-            </span>
-          </div>
-        </Link>
+            order: 3,
+            marginLeft: '6px'
+          }}
+        >
+          {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
+
+        {/* Brand Logo & System Status Badge — always leftmost */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0, order: 0 }}>
+          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '9px',
+              background: 'linear-gradient(135deg, #181d26 0%, #12151b 100%)',
+              border: '1px solid var(--color-border-chrome)',
+              boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 4px 12px rgba(0, 0, 0, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-brushed-aluminum)'
+            }}>
+              <ShoppingBag size={18} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '1.25rem', fontWeight: 330, letterSpacing: '0.04em', color: '#ffffff', lineHeight: 1.1 }}>
+                Vyapari
+              </span>
+              <span style={{ fontSize: '0.62rem', fontWeight: 600, textTransform: 'uppercase', color: 'var(--color-steel-mist)', letterSpacing: '0.08em' }}>
+                Online Store
+              </span>
+            </div>
+          </Link>
+        </div>
 
         {/* Global Desktop Search Bar (Hidden on Mobile) */}
-        <div ref={desktopSearchRef} className="header-desktop-search" style={{ position: 'relative', flex: '1', maxWidth: '540px' }}>
+        <div ref={desktopSearchRef} className="header-desktop-search" style={{ position: 'relative', flex: '1', maxWidth: '520px' }}>
           <form onSubmit={handleSearch} style={{
             display: 'flex',
             alignItems: 'center',
             width: '100%',
-            background: 'var(--color-surface-subtle)',
-            borderRadius: 'var(--radius-full)',
+            backgroundColor: 'var(--color-gunmetal-dark)',
+            borderRadius: 'var(--radius-pills)',
             padding: '6px 14px',
-            border: isSuggestOpen ? '1px solid var(--color-primary)' : '1px solid var(--color-border-subtle)',
-            boxShadow: 'var(--shadow-xs)',
+            border: isSuggestOpen ? '1px solid var(--color-icy-steel)' : '1px solid var(--color-border-steel)',
+            boxShadow: 'var(--shadow-sm)',
             transition: 'all var(--transition-fast)'
           }}>
-            <Search size={17} color="var(--color-text-secondary)" style={{ marginRight: '8px', flexShrink: 0 }} />
+            <Search size={16} color="var(--color-ash-label)" style={{ marginRight: '8px', flexShrink: 0 }} />
             <input
               type="text"
-              placeholder="Search or ask in Natural Language (e.g. 'headphones under 10000')..."
+              placeholder="Search for products, brands and more..."
               value={searchQuery}
               onFocus={() => {
                 if (suggestionsData.products?.length > 0 || suggestionsData.suggestions?.length > 0) {
@@ -417,8 +444,8 @@ export const Header = () => {
                 border: 'none',
                 background: 'transparent',
                 outline: 'none',
-                fontSize: 'var(--font-size-sm)',
-                color: 'var(--color-text-primary)'
+                fontSize: '13px',
+                color: '#ffffff'
               }}
             />
             {searchQuery && (
@@ -428,46 +455,47 @@ export const Header = () => {
                   setSearchQuery('');
                   setIsSuggestOpen(false);
                 }}
-                style={{ padding: '4px', cursor: 'pointer', color: '#94a3b8', marginRight: '4px' }}
+                style={{ padding: '4px', cursor: 'pointer', color: 'var(--color-ash-label)', marginRight: '4px' }}
                 title="Clear input"
               >
                 <X size={14} />
               </button>
             )}
             <button type="submit" aria-label="Submit search" style={{
-              background: 'var(--color-primary)',
-              color: '#ffffff',
-              borderRadius: 'var(--radius-full)',
-              width: '30px',
-              height: '30px',
+              backgroundColor: '#ffffff',
+              color: '#02090a',
+              borderRadius: 'var(--radius-pills)',
+              width: '28px',
+              height: '28px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              flexShrink: 0
+              flexShrink: 0,
+              cursor: 'pointer'
             }}>
-              <Search size={13} />
+              <Search size={12} />
             </button>
           </form>
 
           {renderSuggestionsDropdown()}
         </div>
 
-        {/* Mobile Full-Width Search Bar (Visible strictly on screens < 768px) */}
+        {/* Mobile Full-Width Search Bar */}
         <div ref={mobileSearchRef} className="header-mobile-search" style={{ position: 'relative', width: '100%' }}>
           <form onSubmit={handleSearch} style={{
             display: 'flex',
             alignItems: 'center',
             width: '100%',
-            background: 'var(--color-surface-subtle)',
-            borderRadius: 'var(--radius-full)',
+            backgroundColor: 'var(--color-gunmetal-dark)',
+            borderRadius: 'var(--radius-pills)',
             padding: '6px 14px',
-            border: isSuggestOpen ? '1px solid var(--color-primary)' : '1px solid var(--color-border-subtle)',
-            boxShadow: 'var(--shadow-xs)'
+            border: isSuggestOpen ? '1px solid var(--color-icy-steel)' : '1px solid var(--color-border-steel)',
+            boxShadow: 'var(--shadow-sm)'
           }}>
-            <Search size={16} color="var(--color-text-secondary)" style={{ marginRight: '8px', flexShrink: 0 }} />
+            <Search size={16} color="var(--color-ash-label)" style={{ marginRight: '8px', flexShrink: 0 }} />
             <input
               type="text"
-              placeholder="Search or ask in Natural Language..."
+              placeholder="Search for products, brands and more..."
               value={searchQuery}
               onFocus={() => {
                 if (suggestionsData.products?.length > 0 || suggestionsData.suggestions?.length > 0) {
@@ -483,8 +511,8 @@ export const Header = () => {
                 border: 'none',
                 background: 'transparent',
                 outline: 'none',
-                fontSize: 'var(--font-size-sm)',
-                color: 'var(--color-text-primary)'
+                fontSize: '13px',
+                color: '#ffffff'
               }}
             />
             {searchQuery && (
@@ -494,16 +522,16 @@ export const Header = () => {
                   setSearchQuery('');
                   setIsSuggestOpen(false);
                 }}
-                style={{ padding: '4px', cursor: 'pointer', color: '#94a3b8', marginRight: '4px' }}
+                style={{ padding: '4px', cursor: 'pointer', color: 'var(--color-ash-label)', marginRight: '4px' }}
                 title="Clear input"
               >
                 <X size={14} />
               </button>
             )}
             <button type="submit" aria-label="Submit search" style={{
-              background: 'var(--color-primary)',
-              color: '#ffffff',
-              borderRadius: 'var(--radius-full)',
+              backgroundColor: '#ffffff',
+              color: '#02090a',
+              borderRadius: 'var(--radius-pills)',
               width: '28px',
               height: '28px',
               display: 'flex',
@@ -525,14 +553,17 @@ export const Header = () => {
             <Link 
               to="/explore" 
               style={{ 
-                fontSize: 'var(--font-size-sm)', 
-                fontWeight: 600, 
-                color: 'var(--color-text-primary)',
-                padding: '8px 12px',
-                borderRadius: 'var(--radius-sm)'
+                fontSize: '13px', 
+                fontWeight: 500, 
+                color: 'var(--color-tide-pool)',
+                padding: '6px 12px',
+                borderRadius: 'var(--radius-pills)',
+                transition: 'color 0.15s ease'
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#ffffff')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-tide-pool)')}
             >
-              Explore
+              Catalog
             </Link>
 
             {/* Seller Quick Entry */}
@@ -543,15 +574,16 @@ export const Header = () => {
                   display: 'inline-flex', 
                   alignItems: 'center', 
                   gap: '6px', 
-                  fontSize: 'var(--font-size-sm)', 
-                  fontWeight: 600,
-                  color: 'var(--color-secondary)',
-                  backgroundColor: 'var(--color-secondary-light)',
-                  padding: '6px 12px',
-                  borderRadius: 'var(--radius-full)'
+                  fontSize: '13px', 
+                  fontWeight: 500,
+                  color: '#ffffff',
+                  backgroundColor: 'var(--color-gunmetal-dark)',
+                  border: '1px solid var(--color-border-steel)',
+                  padding: '6px 14px',
+                  borderRadius: 'var(--radius-pills)'
                 }}
               >
-                <Store size={15} />
+                <Store size={14} color="var(--color-icy-steel)" />
                 <span>Seller Console</span>
               </Link>
             )}
@@ -564,57 +596,60 @@ export const Header = () => {
                   display: 'inline-flex', 
                   alignItems: 'center', 
                   gap: '6px', 
-                  fontSize: 'var(--font-size-sm)', 
-                  fontWeight: 600,
-                  color: '#6366F1',
-                  backgroundColor: '#EEF2FF',
-                  padding: '6px 12px',
-                  borderRadius: 'var(--radius-full)'
+                  fontSize: '13px', 
+                  fontWeight: 500,
+                  color: '#ffffff',
+                  backgroundColor: 'var(--color-forest-floor)',
+                  border: '1px solid var(--color-iron-veil)',
+                  padding: '6px 14px',
+                  borderRadius: 'var(--radius-pills)'
                 }}
               >
-                <ShieldCheck size={15} />
+                <ShieldCheck size={14} color="var(--color-cyan-pulse)" />
                 <span>Admin Desk</span>
               </Link>
             )}
           </div>
 
-          {/* Wishlist Link with Badge */}
-          <Link 
-            to="/wishlist" 
-            title="My Wishlist"
-            style={{
-              position: 'relative',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '40px',
-              height: '40px',
-              borderRadius: 'var(--radius-full)',
-              border: '1px solid var(--color-border-subtle)',
-              backgroundColor: '#ffffff'
-            }}
-          >
-            <Heart size={18} color="var(--color-text-primary)" />
-            {wishlistCount > 0 && (
-              <span style={{
-                position: 'absolute',
-                top: '-4px',
-                right: '-4px',
-                backgroundColor: 'var(--color-primary)',
-                color: '#ffffff',
-                fontSize: '11px',
-                fontWeight: 700,
-                width: '18px',
-                height: '18px',
-                borderRadius: '50%',
+          {/* Wishlist Link — customers only */}
+          {isCustomer && (
+            <Link 
+              to="/wishlist" 
+              title="My Wishlist"
+              style={{
+                position: 'relative',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                {wishlistCount}
-              </span>
-            )}
-          </Link>
+                justifyContent: 'center',
+                width: '38px',
+                height: '38px',
+                borderRadius: 'var(--radius-pills)',
+                border: '1px solid var(--color-iron-veil)',
+                backgroundColor: 'var(--color-forest-floor)'
+              }}
+            >
+              <Heart size={16} color="var(--color-tide-pool)" />
+              {wishlistCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-4px',
+                  right: '-4px',
+                  backgroundColor: 'var(--color-icy-steel)',
+                  color: '#090a0d',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  width: '16px',
+                  height: '16px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  {wishlistCount}
+                </span>
+              )}
+            </Link>
+          )}
 
           {/* Notifications Link with Badge */}
           {isAuthenticated && (
@@ -626,25 +661,25 @@ export const Header = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                width: '40px',
-                height: '40px',
-                borderRadius: 'var(--radius-full)',
-                border: '1px solid var(--color-border-subtle)',
-                backgroundColor: '#ffffff'
+                width: '38px',
+                height: '38px',
+                borderRadius: 'var(--radius-pills)',
+                border: '1px solid var(--color-border-steel)',
+                backgroundColor: 'var(--color-gunmetal-dark)'
               }}
             >
-              <Bell size={18} color="var(--color-text-primary)" />
+              <Bell size={16} color="var(--color-steel-mist)" />
               {unreadNotifications > 0 && (
                 <span style={{
                   position: 'absolute',
                   top: '-4px',
                   right: '-4px',
-                  backgroundColor: 'var(--color-error)',
-                  color: '#ffffff',
-                  fontSize: '11px',
+                  backgroundColor: 'var(--color-icy-steel)',
+                  color: '#090a0d',
+                  fontSize: '10px',
                   fontWeight: 700,
-                  width: '18px',
-                  height: '18px',
+                  width: '16px',
+                  height: '16px',
                   borderRadius: '50%',
                   display: 'flex',
                   alignItems: 'center',
@@ -656,43 +691,45 @@ export const Header = () => {
             </Link>
           )}
 
-          {/* Cart Link with Badge */}
-          <Link 
-            to="/cart" 
-            title="Shopping Cart"
-            style={{
-              position: 'relative',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '40px',
-              height: '40px',
-              borderRadius: 'var(--radius-full)',
-              border: '1px solid var(--color-border-subtle)',
-              backgroundColor: '#ffffff'
-            }}
-          >
-            <ShoppingBag size={18} color="var(--color-text-primary)" />
-            {itemCount > 0 && (
-              <span style={{
-                position: 'absolute',
-                top: '-4px',
-                right: '-4px',
-                backgroundColor: 'var(--color-primary)',
-                color: '#ffffff',
-                fontSize: '11px',
-                fontWeight: 700,
-                width: '18px',
-                height: '18px',
-                borderRadius: '50%',
+          {/* Cart Link — customers only */}
+          {isCustomer && (
+            <Link 
+              to="/cart" 
+              title="Shopping Cart"
+              style={{
+                position: 'relative',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                {itemCount}
-              </span>
-            )}
-          </Link>
+                justifyContent: 'center',
+                width: '38px',
+                height: '38px',
+                borderRadius: 'var(--radius-pills)',
+                border: '1px solid var(--color-iron-veil)',
+                backgroundColor: 'var(--color-forest-floor)'
+              }}
+            >
+              <ShoppingBag size={16} color="var(--color-tide-pool)" />
+              {itemCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-4px',
+                  right: '-4px',
+                  backgroundColor: '#ffffff',
+                  color: '#02090a',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  width: '16px',
+                  height: '16px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  {itemCount}
+                </span>
+              )}
+            </Link>
+          )}
 
           {/* User Profile Pill & Dropdown */}
           <div style={{ position: 'relative' }} ref={menuRef}>
@@ -702,26 +739,28 @@ export const Header = () => {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                padding: '5px 12px',
-                borderRadius: 'var(--radius-full)',
-                border: '1px solid var(--color-border-subtle)',
-                backgroundColor: '#ffffff'
+                padding: '4px 10px 4px 12px',
+                borderRadius: 'var(--radius-pills)',
+                border: '1px solid var(--color-iron-veil)',
+                backgroundColor: 'var(--color-forest-floor)',
+                cursor: 'pointer'
               }}
             >
-              <Menu size={16} color="var(--color-text-secondary)" />
+              <Menu size={15} color="var(--color-tide-pool)" />
               <div style={{
-                width: '28px',
-                height: '28px',
+                width: '26px',
+                height: '26px',
                 borderRadius: '50%',
-                backgroundColor: isAuthenticated ? 'var(--color-primary-light)' : 'var(--color-surface-subtle)',
-                color: isAuthenticated ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                backgroundColor: isAuthenticated ? 'var(--color-slate-chrome)' : 'var(--color-titanium-brushed)',
+                color: isAuthenticated ? 'var(--color-icy-steel)' : 'var(--color-silver-glow)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontWeight: 700,
-                fontSize: '12px'
+                fontWeight: 600,
+                fontSize: '11px',
+                border: '1px solid var(--color-border-steel)'
               }}>
-                {isAuthenticated && user.name ? user.name[0].toUpperCase() : <User size={15} />}
+                {isAuthenticated && user.name ? user.name[0].toUpperCase() : <User size={13} />}
               </div>
             </button>
 
@@ -730,12 +769,12 @@ export const Header = () => {
               <div style={{
                 position: 'absolute',
                 right: 0,
-                top: '48px',
+                top: '46px',
                 width: '260px',
-                backgroundColor: '#ffffff',
-                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--color-deep-canopy)',
+                borderRadius: '12px',
                 boxShadow: 'var(--shadow-floating)',
-                border: '1px solid var(--color-border-card)',
+                border: '1px solid var(--color-iron-veil)',
                 padding: '8px 0',
                 display: 'flex',
                 flexDirection: 'column',
@@ -743,61 +782,76 @@ export const Header = () => {
               }}>
                 {isAuthenticated ? (
                   <>
-                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border-subtle)' }}>
-                      <p style={{ fontWeight: 700, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-primary)' }}>{user.name}</p>
-                      <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', wordBreak: 'break-all' }}>{user.email}</p>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-iron-veil)' }}>
+                      <p style={{ fontWeight: 600, fontSize: '14px', color: '#ffffff' }}>{user.name}</p>
+                      <p style={{ fontSize: '12px', color: 'var(--color-tide-pool)', wordBreak: 'break-all' }}>{user.email}</p>
                       <span className="badge badge-primary" style={{ marginTop: '6px', textTransform: 'capitalize' }}>
                         {user.role}
                       </span>
                     </div>
 
+                    {/* Catalog Link */}
+                    <Link 
+                      to="/explore" 
+                      onClick={() => setUserMenuOpen(false)}
+                      style={{ padding: '9px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-tide-pool)' }}
+                    >
+                      <Boxes size={15} color="var(--color-ash-label)" />
+                      Explore Catalog
+                    </Link>
+
                     {/* Customer Links */}
                     <Link 
                       to="/account" 
                       onClick={() => setUserMenuOpen(false)}
-                      style={{ padding: '9px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px' }}
+                      style={{ padding: '9px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-tide-pool)' }}
                     >
-                      <User size={15} color="var(--color-text-secondary)" />
-                      My Profile & Security
+                      <User size={15} color="var(--color-ash-label)" />
+                      Profile & Security
                     </Link>
 
-                    <Link 
-                      to="/orders" 
-                      onClick={() => setUserMenuOpen(false)}
-                      style={{ padding: '9px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px' }}
-                    >
-                      <Package size={15} color="var(--color-text-secondary)" />
-                      My Orders
-                    </Link>
+                    {/* Customer-only links: Orders, Addresses, Wishlist */}
+                    {isCustomer && (
+                      <>
+                        <Link 
+                          to="/orders" 
+                          onClick={() => setUserMenuOpen(false)}
+                          style={{ padding: '9px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-tide-pool)' }}
+                        >
+                          <Package size={15} color="var(--color-ash-label)" />
+                          My Orders
+                        </Link>
 
-                    <Link 
-                      to="/account/addresses" 
-                      onClick={() => setUserMenuOpen(false)}
-                      style={{ padding: '9px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px' }}
-                    >
-                      <MapPin size={15} color="var(--color-text-secondary)" />
-                      Saved Addresses
-                    </Link>
+                        <Link 
+                          to="/account/addresses" 
+                          onClick={() => setUserMenuOpen(false)}
+                          style={{ padding: '9px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-tide-pool)' }}
+                        >
+                          <MapPin size={15} color="var(--color-ash-label)" />
+                          Saved Addresses
+                        </Link>
 
-                    <Link 
-                      to="/wishlist" 
-                      onClick={() => setUserMenuOpen(false)}
-                      style={{ padding: '9px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px' }}
-                    >
-                      <Heart size={15} color="var(--color-text-secondary)" />
-                      Wishlist ({wishlistCount})
-                    </Link>
+                        <Link 
+                          to="/wishlist" 
+                          onClick={() => setUserMenuOpen(false)}
+                          style={{ padding: '9px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-tide-pool)' }}
+                        >
+                          <Heart size={15} color="var(--color-ash-label)" />
+                          Wishlist ({wishlistCount})
+                        </Link>
+                      </>
+                    )}
 
                     {/* Seller Console Submenu */}
                     {isSeller ? (
-                      <div style={{ borderTop: '1px solid var(--color-border-subtle)', marginTop: '4px', paddingTop: '4px' }}>
-                        <div style={{ padding: '6px 16px 2px', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>
+                      <div style={{ borderTop: '1px solid var(--color-iron-veil)', marginTop: '4px', paddingTop: '4px' }}>
+                        <div style={{ padding: '6px 16px 2px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-ash-label)', letterSpacing: '0.06em' }}>
                           Merchant Operations
                         </div>
                         <Link 
                           to="/seller/dashboard" 
                           onClick={() => setUserMenuOpen(false)}
-                          style={{ padding: '8px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-secondary)' }}
+                          style={{ padding: '8px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-icy-steel)' }}
                         >
                           <Store size={15} />
                           Seller Dashboard
@@ -805,99 +859,84 @@ export const Header = () => {
                         <Link 
                           to="/seller/products" 
                           onClick={() => setUserMenuOpen(false)}
-                          style={{ padding: '8px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px' }}
+                          style={{ padding: '8px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-steel-mist)' }}
                         >
-                          <Boxes size={15} color="var(--color-text-secondary)" />
-                          Manage Products
+                          <Boxes size={15} color="var(--color-slate-caption)" />
+                          Manage Catalog
                         </Link>
                         <Link 
                           to="/seller/orders" 
                           onClick={() => setUserMenuOpen(false)}
-                          style={{ padding: '8px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px' }}
+                          style={{ padding: '8px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-steel-mist)' }}
                         >
-                          <Package size={15} color="var(--color-text-secondary)" />
+                          <Package size={15} color="var(--color-slate-caption)" />
                           Fulfill Orders
                         </Link>
                         <Link 
-                          to="/seller/inventory" 
+                          to="/seller/ai/listing" 
                           onClick={() => setUserMenuOpen(false)}
-                          style={{ padding: '8px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px' }}
+                          style={{ padding: '8px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-steel-mist)' }}
                         >
-                          <TrendingUp size={15} color="var(--color-text-secondary)" />
-                          Inventory Velocity
+                          <Sparkles size={15} color="var(--color-icy-steel)" />
+                          AI Listing Studio
                         </Link>
                         <Link 
                           to="/seller/approvals" 
                           onClick={() => setUserMenuOpen(false)}
-                          style={{ padding: '8px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px' }}
+                          style={{ padding: '8px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-steel-mist)' }}
                         >
-                          <FileCheck2 size={15} color="var(--color-text-secondary)" />
+                          <FileCheck2 size={15} color="var(--color-slate-caption)" />
                           AI Approval Queue
                         </Link>
-                        <Link 
-                          to="/seller/settings" 
-                          onClick={() => setUserMenuOpen(false)}
-                          style={{ padding: '8px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px' }}
-                        >
-                          <Settings size={15} color="var(--color-text-secondary)" />
-                          Store Policies
-                        </Link>
                       </div>
-                    ) : (
-                      <div style={{ borderTop: '1px solid var(--color-border-subtle)', marginTop: '4px', paddingTop: '4px' }}>
+                    ) : isAdmin ? null : (
+                      // Customer: show "Become a Seller" upsell
+                      <div style={{ borderTop: '1px solid var(--color-border-steel)', marginTop: '4px', paddingTop: '4px' }}>
                         <Link 
                           to="/seller/onboarding" 
                           onClick={() => setUserMenuOpen(false)}
-                          style={{ padding: '9px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-primary)', fontWeight: 600 }}
+                          style={{ padding: '9px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-icy-steel)', fontWeight: 600 }}
                         >
                           <Store size={15} />
-                          Become a Seller (KYC)
+                          Become a Seller
                         </Link>
                       </div>
                     )}
 
                     {/* Admin Desk Submenu */}
                     {isAdmin && (
-                      <div style={{ borderTop: '1px solid var(--color-border-subtle)', marginTop: '4px', paddingTop: '4px' }}>
-                        <div style={{ padding: '6px 16px 2px', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>
+                      <div style={{ borderTop: '1px solid var(--color-iron-veil)', marginTop: '4px', paddingTop: '4px' }}>
+                        <div style={{ padding: '6px 16px 2px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-ash-label)', letterSpacing: '0.06em' }}>
                           Platform Governance
                         </div>
                         <Link 
                           to="/admin" 
                           onClick={() => setUserMenuOpen(false)}
-                          style={{ padding: '8px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px', color: '#6366F1', fontWeight: 600 }}
+                          style={{ padding: '8px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-cyan-pulse)', fontWeight: 600 }}
                         >
                           <ShieldCheck size={15} />
                           Admin Console
                         </Link>
                         <Link 
-                          to="/admin/users" 
-                          onClick={() => setUserMenuOpen(false)}
-                          style={{ padding: '8px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px' }}
-                        >
-                          <User size={15} color="var(--color-text-secondary)" />
-                          Manage Users
-                        </Link>
-                        <Link 
                           to="/admin/sellers" 
                           onClick={() => setUserMenuOpen(false)}
-                          style={{ padding: '8px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px' }}
+                          style={{ padding: '8px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-tide-pool)' }}
                         >
-                          <FileCheck2 size={15} color="var(--color-text-secondary)" />
+                          <FileCheck2 size={15} color="var(--color-ash-label)" />
                           Seller KYC Desk
                         </Link>
                         <Link 
                           to="/admin/system" 
                           onClick={() => setUserMenuOpen(false)}
-                          style={{ padding: '8px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px' }}
+                          style={{ padding: '8px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-tide-pool)' }}
                         >
-                          <Cpu size={15} color="var(--color-text-secondary)" />
+                          <Cpu size={15} color="var(--color-ash-label)" />
                           System Health
                         </Link>
                       </div>
                     )}
 
-                    <div style={{ borderTop: '1px solid var(--color-border-subtle)', marginTop: '4px', paddingTop: '4px' }}>
+                    <div style={{ borderTop: '1px solid var(--color-iron-veil)', marginTop: '4px', paddingTop: '4px' }}>
                       <button
                         onClick={() => {
                           logout();
@@ -905,13 +944,14 @@ export const Header = () => {
                         }}
                         style={{
                           padding: '10px 16px',
-                          fontSize: 'var(--font-size-sm)',
+                          fontSize: '13px',
                           display: 'flex',
                           alignItems: 'center',
                           gap: '10px',
                           color: 'var(--color-error)',
                           textAlign: 'left',
-                          width: '100%'
+                          width: '100%',
+                          cursor: 'pointer'
                         }}
                       >
                         <LogOut size={15} />
@@ -924,22 +964,22 @@ export const Header = () => {
                     <Link 
                       to="/login" 
                       onClick={() => setUserMenuOpen(false)}
-                      style={{ padding: '12px 16px', fontWeight: 600, fontSize: 'var(--font-size-sm)', display: 'block' }}
+                      style={{ padding: '12px 16px', fontWeight: 600, fontSize: '13px', color: '#ffffff', display: 'block' }}
                     >
                       Sign In
                     </Link>
                     <Link 
                       to="/register" 
                       onClick={() => setUserMenuOpen(false)}
-                      style={{ padding: '10px 16px', fontSize: 'var(--font-size-sm)', display: 'block' }}
+                      style={{ padding: '10px 16px', fontSize: '13px', color: 'var(--color-tide-pool)', display: 'block' }}
                     >
                       Create Account
                     </Link>
-                    <div style={{ borderTop: '1px solid var(--color-border-subtle)', marginTop: '4px', paddingTop: '4px' }}>
+                    <div style={{ borderTop: '1px solid var(--color-border-steel)', marginTop: '4px', paddingTop: '4px' }}>
                       <Link 
                         to="/seller/onboarding" 
                         onClick={() => setUserMenuOpen(false)}
-                        style={{ padding: '10px 16px', fontSize: 'var(--font-size-sm)', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-secondary)', fontWeight: 600 }}
+                        style={{ padding: '10px 16px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-icy-steel)', fontWeight: 500 }}
                       >
                         <Store size={15} />
                         Become a Seller
@@ -952,6 +992,190 @@ export const Header = () => {
           </div>
         </div>
       </div>
+
+      {/* Mobile Navigation Drawer */}
+      {mobileMenuOpen && (
+        <div 
+          className="mobile-nav-drawer"
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            backgroundColor: 'rgba(9, 10, 13, 0.98)',
+            backdropFilter: 'blur(16px)',
+            borderBottom: '1px solid var(--color-border-steel)',
+            boxShadow: 'var(--shadow-floating)',
+            zIndex: 99,
+            padding: '20px 24px 28px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px',
+            animation: 'fadeIn 0.2s ease'
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-slate-caption)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Navigation
+            </span>
+            <Link 
+              to="/explore" 
+              onClick={() => setMobileMenuOpen(false)}
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '12px', 
+                padding: '10px 14px', 
+                borderRadius: '8px', 
+                backgroundColor: 'var(--color-gunmetal-dark)',
+                border: '1px solid var(--color-border-steel)',
+                color: '#ffffff',
+                fontSize: '13px',
+                fontWeight: 500
+              }}
+            >
+              <Boxes size={16} color="var(--color-icy-steel)" />
+              <span>Explore Marketplace Catalog</span>
+            </Link>
+
+            {isSeller ? (
+              <Link 
+                to="/seller/dashboard" 
+                onClick={() => setMobileMenuOpen(false)}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '12px', 
+                  padding: '10px 14px', 
+                  borderRadius: '8px', 
+                  backgroundColor: 'var(--color-gunmetal-dark)',
+                  border: '1px solid var(--color-border-steel)',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  fontWeight: 500
+                }}
+              >
+                <Store size={16} color="var(--color-icy-steel)" />
+                <span>Seller Operations Console</span>
+              </Link>
+            ) : (
+              <Link 
+                to="/seller/onboarding" 
+                onClick={() => setMobileMenuOpen(false)}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '12px', 
+                  padding: '10px 14px', 
+                  borderRadius: '8px', 
+                  backgroundColor: 'var(--color-gunmetal-dark)',
+                  border: '1px solid var(--color-border-steel)',
+                  color: 'var(--color-icy-steel)',
+                  fontSize: '13px',
+                  fontWeight: 600
+                }}
+              >
+                <Store size={16} color="var(--color-icy-steel)" />
+                <span>Become a Verified Seller</span>
+              </Link>
+            )}
+
+            {isAdmin && (
+              <Link 
+                to="/admin" 
+                onClick={() => setMobileMenuOpen(false)}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '12px', 
+                  padding: '10px 14px', 
+                  borderRadius: '8px', 
+                  backgroundColor: 'var(--color-forest-floor)',
+                  border: '1px solid var(--color-iron-veil)',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  fontWeight: 500
+                }}
+              >
+                <ShieldCheck size={16} color="var(--color-cyan-pulse)" />
+                <span>Governance Admin Desk</span>
+              </Link>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderTop: '1px solid var(--color-iron-veil)', paddingTop: '12px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-ash-label)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>
+              Quick Links
+            </span>
+            {isAuthenticated ? (
+              <>
+                {isCustomer && (
+                  <Link 
+                    to="/orders" 
+                    onClick={() => setMobileMenuOpen(false)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 4px', color: 'var(--color-tide-pool)', fontSize: '13px' }}
+                  >
+                    <Package size={15} />
+                    <span>My Orders</span>
+                  </Link>
+                )}
+                {isCustomer && (
+                  <Link 
+                    to="/wishlist" 
+                    onClick={() => setMobileMenuOpen(false)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 4px', color: 'var(--color-tide-pool)', fontSize: '13px' }}
+                  >
+                    <Heart size={15} />
+                    <span>Wishlist ({wishlistCount})</span>
+                  </Link>
+                )}
+                <Link 
+                  to="/notifications" 
+                  onClick={() => setMobileMenuOpen(false)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 4px', color: 'var(--color-tide-pool)', fontSize: '13px' }}
+                >
+                  <Bell size={15} />
+                  <span>Notifications ({unreadNotifications})</span>
+                </Link>
+                <Link 
+                  to="/account" 
+                  onClick={() => setMobileMenuOpen(false)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 4px', color: 'var(--color-tide-pool)', fontSize: '13px' }}
+                >
+                  <User size={15} />
+                  <span>Profile Settings</span>
+                </Link>
+                <button 
+                  onClick={() => { setMobileMenuOpen(false); logout(); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 4px', color: 'var(--color-error)', fontSize: '13px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', marginTop: '4px' }}
+                >
+                  <LogOut size={15} />
+                  <span>Sign Out</span>
+                </button>
+              </>
+            ) : (
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <Link 
+                  to="/login" 
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="btn-primary" 
+                  style={{ flex: 1, textAlign: 'center', padding: '8px 14px', fontSize: '13px' }}
+                >
+                  Sign In
+                </Link>
+                <Link 
+                  to="/register" 
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="btn-outline" 
+                  style={{ flex: 1, textAlign: 'center', padding: '8px 14px', fontSize: '13px' }}
+                >
+                  Register
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   );
 };

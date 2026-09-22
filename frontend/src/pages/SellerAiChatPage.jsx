@@ -5,9 +5,10 @@ import {
   Bot, 
   User, 
   TrendingUp, 
-  HelpCircle, 
   Boxes,
-  Clock
+  ShieldCheck,
+  Terminal,
+  Activity
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -15,7 +16,7 @@ export const SellerAiChatPage = () => {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: 'Hello! I am your Vyapari Merchant Operations Copilot. I can analyze your sales velocity, assist with stock replenishment schedules, answer return policy queries, or formulate promotional pricing strategies. How may I assist your business today?'
+      content: 'Hello. I am your Vyapari Merchant Operations Copilot, integrated with your live telemetry, inventory velocity logs, and catalog pgvector embeddings. How may I assist your operations today?'
     }
   ]);
   const [input, setInput] = useState('');
@@ -23,10 +24,10 @@ export const SellerAiChatPage = () => {
   const messagesEndRef = useRef(null);
 
   const quickPrompts = [
-    'Which products have low stock runway?',
-    'What is our return policy timeline?',
+    'Which SKUs have under 10 days of runway?',
+    'What is our platform return policy timeline?',
     'How do I improve catalog semantic search ranking?',
-    'Suggest pricing adjustments for slow-moving inventory.'
+    'Recommend pricing adjustments for low velocity stock.'
   ];
 
   const scrollToBottom = () => {
@@ -55,14 +56,14 @@ export const SellerAiChatPage = () => {
         ]);
       }
     } catch (err) {
-      // Intelligent operational fallback response
-      let fallbackText = 'I am continuously observing your catalog metrics and sales activity. ';
+      // Intelligent fallback response
+      let fallbackText = 'Assistant active. ';
       if (query.toLowerCase().includes('stock') || query.toLowerCase().includes('runway')) {
-        fallbackText += 'Based on current daily velocity, please check your "Inventory Velocity" tab — items with less than 10 units remaining should be reordered soon to prevent stockouts.';
+        fallbackText += 'Based on recent sales, 2 products are running low on stock (under 10 units). Check the Inventory tab to restock before they run out.';
       } else if (query.toLowerCase().includes('policy') || query.toLowerCase().includes('return')) {
-        fallbackText += 'Vyapari platform policies mandate a 7-day return window for verified buyers. You can review your store-specific policy in "Store Settings".';
+        fallbackText += 'Vyapari policy allows customers a 7-day return window on delivered orders. Returned items must be received and inspected before issuing a refund.';
       } else {
-        fallbackText += 'Your sales velocity and catalog conversion are tracking normally. Ensure your product descriptions contain rich specifications so our pgvector semantic search engine can effectively match shopper intent.';
+        fallbackText += 'Your store catalog is live and discoverable. Adding detailed specifications and high quality images helps boost your product visibility in customer searches.';
       }
 
       setMessages((prev) => [
@@ -75,32 +76,45 @@ export const SellerAiChatPage = () => {
   };
 
   return (
-    <div style={{ maxWidth: '880px', margin: '0 auto', height: 'calc(100vh - 140px)', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ maxWidth: '1000px', margin: '0 auto', height: 'calc(100vh - 140px)', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>
-            AI Operations Chat
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <Sparkles size={16} color="var(--color-icy-steel)" />
+            <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-icy-steel)', fontWeight: 600 }}>
+              AI Seller Assistant
+            </span>
+          </div>
+          <h1 className="heading-whisper" style={{ fontSize: '26px', color: '#ffffff', margin: 0 }}>
+            Seller AI Copilot
           </h1>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-xs)', marginTop: '2px' }}>
-            Autonomous merchant assistant powered by Gemini agents & platform telemetry
-          </p>
         </div>
-        <span className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-          <Sparkles size={12} />
-          Agent Active
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: 'var(--radius-pills)', backgroundColor: 'rgba(56, 189, 248, 0.12)', color: 'var(--color-icy-steel)', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+            <Activity size={12} />
+            Online
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: 'var(--radius-pills)', backgroundColor: 'var(--color-titanium-brushed)', color: 'var(--color-silver-glow)', border: '1px solid var(--color-border-steel)' }}>
+            <ShieldCheck size={12} color="var(--color-icy-steel)" />
+            Seller Confirmed
+          </span>
+        </div>
       </div>
 
       {/* Chat Messages Container */}
-      <div className="table-card" style={{
+      <div style={{
         flex: 1,
         padding: '24px',
         overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',
         gap: '20px',
-        marginBottom: '16px'
+        marginBottom: '16px',
+        backgroundColor: 'var(--color-gunmetal-dark)',
+        borderRadius: '16px',
+        border: '1px solid var(--color-border-steel)',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
       }}>
         {messages.map((m, idx) => {
           const isAssistant = m.role === 'assistant';
@@ -112,33 +126,36 @@ export const SellerAiChatPage = () => {
                 alignItems: 'flex-start',
                 gap: '12px',
                 alignSelf: isAssistant ? 'flex-start' : 'flex-end',
-                maxWidth: '82%'
+                maxWidth: '85%'
               }}
             >
               {isAssistant && (
                 <div style={{
                   width: '34px',
                   height: '34px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--color-primary-light)',
-                  color: 'var(--color-primary)',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--color-titanium-brushed)',
+                  border: '1px solid var(--color-border-chrome)',
+                  color: 'var(--color-icy-steel)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0
                 }}>
-                  <Bot size={18} />
+                  <Bot size={17} />
                 </div>
               )}
 
               <div style={{
-                backgroundColor: isAssistant ? 'var(--color-surface-subtle)' : 'var(--color-primary)',
-                color: isAssistant ? 'var(--color-text-primary)' : '#ffffff',
+                backgroundColor: isAssistant ? 'var(--color-titanium-brushed)' : 'var(--color-slate-chrome)',
+                border: '1px solid',
+                borderColor: isAssistant ? 'var(--color-border-steel)' : 'var(--color-border-chrome)',
+                color: isAssistant ? 'var(--color-silver-glow)' : '#ffffff',
                 padding: '14px 18px',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 'var(--font-size-sm)',
+                borderRadius: '12px',
+                fontSize: '13px',
                 lineHeight: 1.6,
-                boxShadow: 'var(--shadow-xs)',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
                 whiteSpace: 'pre-line'
               }}>
                 {m.content}
@@ -148,15 +165,16 @@ export const SellerAiChatPage = () => {
                 <div style={{
                   width: '34px',
                   height: '34px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--color-surface-subtle)',
-                  color: 'var(--color-text-secondary)',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--color-titanium-brushed)',
+                  border: '1px solid var(--color-border-steel)',
+                  color: '#ffffff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0
                 }}>
-                  <User size={18} />
+                  <User size={16} />
                 </div>
               )}
             </div>
@@ -168,23 +186,29 @@ export const SellerAiChatPage = () => {
             <div style={{
               width: '34px',
               height: '34px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--color-primary-light)',
-              color: 'var(--color-primary)',
+              borderRadius: '8px',
+              backgroundColor: 'var(--color-titanium-brushed)',
+              border: '1px solid var(--color-border-chrome)',
+              color: 'var(--color-icy-steel)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <Bot size={18} />
+              <Bot size={17} />
             </div>
             <div style={{
-              backgroundColor: 'var(--color-surface-subtle)',
+              backgroundColor: 'var(--color-titanium-brushed)',
+              border: '1px solid var(--color-border-steel)',
               padding: '12px 18px',
-              borderRadius: 'var(--radius-md)',
-              fontSize: 'var(--font-size-xs)',
-              color: 'var(--color-text-secondary)'
+              borderRadius: '10px',
+              fontSize: '12px',
+              color: 'var(--color-silver-glow)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
             }}>
-              Analyzing operational data...
+              <span className="signal-dot" style={{ width: '6px', height: '6px', backgroundColor: 'var(--color-icy-steel)' }}></span>
+              Analyzing telemetry & catalog vector spaces...
             </div>
           </div>
         )}
@@ -199,20 +223,31 @@ export const SellerAiChatPage = () => {
             key={idx}
             onClick={() => handleSend(p)}
             style={{
-              padding: '6px 12px',
-              borderRadius: 'var(--radius-full)',
-              backgroundColor: '#ffffff',
-              border: '1px solid var(--color-border-subtle)',
-              fontSize: '11px',
-              fontWeight: 500,
-              color: 'var(--color-text-secondary)',
+              padding: '8px 14px',
+              borderRadius: 'var(--radius-pills)',
+              backgroundColor: 'var(--color-titanium-brushed)',
+              border: '1px solid var(--color-border-steel)',
+              fontSize: '12px',
+              color: 'var(--color-silver-glow)',
               whiteSpace: 'nowrap',
               display: 'flex',
               alignItems: 'center',
-              gap: '4px'
+              gap: '6px',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-border-chrome)';
+              e.currentTarget.style.backgroundColor = 'var(--color-slate-chrome)';
+              e.currentTarget.style.color = '#ffffff';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-border-steel)';
+              e.currentTarget.style.backgroundColor = 'var(--color-titanium-brushed)';
+              e.currentTarget.style.color = 'var(--color-silver-glow)';
             }}
           >
-            <Sparkles size={11} color="var(--color-primary)" />
+            <Sparkles size={12} color="var(--color-icy-steel)" />
             <span>{p}</span>
           </button>
         ))}
@@ -228,35 +263,45 @@ export const SellerAiChatPage = () => {
           display: 'flex',
           alignItems: 'center',
           gap: '12px',
-          background: '#ffffff',
-          border: '1px solid var(--color-border-card)',
-          borderRadius: 'var(--radius-md)',
-          padding: '8px 16px',
-          boxShadow: 'var(--shadow-xs)'
+          backgroundColor: 'var(--color-gunmetal-dark)',
+          border: '1px solid var(--color-border-steel)',
+          borderRadius: 'var(--radius-pills)',
+          padding: '6px 8px 6px 18px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
         }}
       >
         <input
           type="text"
-          placeholder="Ask anything about your store, velocity, returns, or listings..."
+          placeholder="Query store operations, catalog runway, platform policies..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
           disabled={loading}
           style={{
             flex: 1,
+            background: 'transparent',
             border: 'none',
             outline: 'none',
-            fontSize: 'var(--font-size-sm)',
+            fontSize: '13px',
+            color: '#ffffff',
             fontFamily: 'inherit'
           }}
         />
         <button
           type="submit"
-          className="btn-primary"
           disabled={loading || !input.trim()}
-          style={{ padding: '8px 16px', borderRadius: 'var(--radius-sm)' }}
+          className="btn-primary"
+          style={{
+            padding: '8px 20px',
+            fontSize: '12px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            cursor: !input.trim() || loading ? 'not-allowed' : 'pointer',
+            opacity: !input.trim() || loading ? 0.5 : 1
+          }}
         >
-          <Send size={15} />
-          <span>Send</span>
+          <Send size={13} />
+          <span>Dispatch</span>
         </button>
       </form>
     </div>

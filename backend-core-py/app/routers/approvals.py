@@ -121,7 +121,14 @@ async def approve_item(
                         except Exception:
                             tags = []
 
-                    cat_id = draft["category_id"] or "10000000-0000-0000-0000-000000000001"
+                    cat_id = "10000000-0000-0000-0000-000000000001"
+                    if draft.get("category_id") and str(draft["category_id"]).strip():
+                        try:
+                            import uuid
+                            uuid.UUID(str(draft["category_id"]).strip())
+                            cat_id = str(draft["category_id"]).strip()
+                        except ValueError:
+                            cat_id = "10000000-0000-0000-0000-000000000001"
 
                     published = await conn.fetchrow(
                         """INSERT INTO products (
