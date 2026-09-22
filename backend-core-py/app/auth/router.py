@@ -55,13 +55,14 @@ class RefreshBody(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _set_refresh_cookie(response: Response, refresh_token: str, is_production: bool) -> None:
-    """Identical to Node.js res.cookie('refresh_token', ...) call."""
+    """Sets the httpOnly refresh cookie. Uses SameSite=None; Secure for cross-origin HTTPS deployments."""
+    is_cross_site_ssl = is_production or settings.FRONTEND_URL.startswith("https://")
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=is_production,
-        samesite="lax",
+        secure=is_cross_site_ssl,
+        samesite="none" if is_cross_site_ssl else "lax",
         max_age=7 * 24 * 3600,  # 7 days in seconds
     )
 

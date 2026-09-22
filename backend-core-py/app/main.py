@@ -97,6 +97,10 @@ async def security_and_correlation_headers(request: Request, call_next):
 # Global CORS
 origins = [
     settings.FRONTEND_URL,
+    "https://vyapari.live",
+    "http://vyapari.live",
+    "https://www.vyapari.live",
+    "http://www.vyapari.live",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
