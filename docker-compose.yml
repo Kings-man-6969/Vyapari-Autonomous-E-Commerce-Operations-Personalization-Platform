@@ -133,6 +133,7 @@ services:
       RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-rzp_webhook_placeholder_secret}
       RECOMMENDATION_SERVICE_URL: http://service-recommendation:8001
       SELLER_AGENT_SERVICE_URL: http://service-seller-agent:8002
+      API_URL: ${API_URL:-https://api.vyapari.live}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
     depends_on:
       db:
@@ -143,6 +144,12 @@ services:
         condition: service_started
       service-seller-agent:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f --head http://localhost:8000/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   # ----------------------------------------------------------------------------
   # Client Web Application: React 18 + Vite (SPA)
@@ -163,7 +170,7 @@ services:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api}
     depends_on:
       backend-core:
-        condition: service_started
+        condition: service_healthy
 
 volumes:
   pgdata:

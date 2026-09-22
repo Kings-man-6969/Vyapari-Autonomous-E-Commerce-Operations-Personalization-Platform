@@ -439,6 +439,74 @@ class TestAllVyapariEndpoints(unittest.TestCase):
         r2 = self.client.get("/health/")
         self.assertEqual(r2.status_code, 200)
 
+        # Health routing under api.vyapari.live domain
+        r_domain = self.client.get("/health", headers={"Host": "api.vyapari.live"})
+        self.assertEqual(r_domain.status_code, 200)
+        d_domain = r_domain.json()
+        self.assertTrue(d_domain["success"])
+        self.assertEqual(d_domain["services"]["backend_core"], "healthy")
+
+        # Health routing under /api/health prefix on api.vyapari.live
+        r_api = self.client.get("/api/health", headers={"Host": "api.vyapari.live"})
+        self.assertEqual(r_api.status_code, 200)
+        d_api = r_api.json()
+        self.assertTrue(d_api["success"])
+        self.assertEqual(d_api["services"]["backend_core"], "healthy")
+
+        # Root endpoint check on api.vyapari.live
+        r_root = self.client.get("/", headers={"Host": "api.vyapari.live"})
+        self.assertEqual(r_root.status_code, 200)
+        d_root = r_root.json()
+        self.assertTrue(d_root["success"])
+        self.assertEqual(d_root["health_check"], "/health")
+
+        # CORS preflight from api.vyapari.live origin
+        cors_resp = self.client.options(
+            "/health",
+            headers={
+                "Origin": "https://api.vyapari.live",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+        self.assertEqual(cors_resp.status_code, 200)
+        self.assertEqual(
+            cors_resp.headers.get("access-control-allow-origin"),
+            "https://api.vyapari.live",
+        )
+
+        # Security CSP directives include api.vyapari.live
+        csp_header = r_domain.headers.get("content-security-policy", "")
+        self.assertIn("https://api.vyapari.live", csp_header)
+
+    def test_liveness_probe(self):
+        """Lightweight HEAD /health/live — zero external dependencies."""
+        # HEAD must return 200 with no body (used by Docker HEALTHCHECK)
+        r_head = self.client.head("/health/live")
+        self.assertEqual(r_head.status_code, 200)
+        self.assertEqual(r_head.text, "")  # HEAD must have empty body
+        self.assertEqual(r_head.headers.get("x-health-check"), "liveness")
+        self.assertIn("no-store", r_head.headers.get("cache-control", ""))
+
+        # GET /health/live must also return 200 with minimal JSON
+        r_get = self.client.get("/health/live")
+        self.assertEqual(r_get.status_code, 200)
+        data = r_get.json()
+        self.assertEqual(data.get("status"), "ok")
+        self.assertEqual(r_get.headers.get("x-health-check"), "liveness")
+
+        # HEAD /health root alias — Docker compat
+        r_head_root = self.client.head("/health")
+        self.assertEqual(r_head_root.status_code, 200)
+        self.assertEqual(r_head_root.text, "")  # HEAD must have empty body
+        self.assertEqual(r_head_root.headers.get("x-health-check"), "liveness")
+
+        # Same probe on /api/health (api.vyapari.live domain alias)
+        r_api_head = self.client.head("/api/health/live")
+        self.assertEqual(r_api_head.status_code, 200)
+        r_api_head_root = self.client.head("/api/health")
+        self.assertEqual(r_api_head_root.status_code, 200)
+
+
     # ------------------------------------------------------------------------
     # 2. Auth Endpoints
     # ------------------------------------------------------------------------

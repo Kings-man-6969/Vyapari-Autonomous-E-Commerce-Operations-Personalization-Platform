@@ -1,15 +1,90 @@
 """
 Health check — port of backend-core/src/routes/health.js
-GET /health
+
+Route inventory:
+  HEAD /health        → lightweight liveness (process alive only, zero I/O)
+  HEAD /health/live   → canonical liveness probe for Docker HEALTHCHECK / k8s
+  GET  /health/live   → same, with JSON body (curl -i debugging)
+  GET  /health        → deep readiness: DB, pgvector, microservices
 """
 from datetime import datetime, timezone
+
 import httpx
 from fastapi import APIRouter
+from fastapi.responses import Response
+
 from app.config import settings
 from app.db import get_pool
 
 router = APIRouter(tags=["health"])
 
+
+# ---------------------------------------------------------------------------
+# Lightweight liveness probe — zero external dependencies.
+#
+# Rule: MUST NOT query PostgreSQL, pgvector, recommendation service, or
+# seller-agent service. Only confirms the process + event loop are alive.
+#
+# Used by:
+#   - Docker HEALTHCHECK (HEAD, curl -f --head http://127.0.0.1:8000/health/live)
+#   - Kubernetes liveness probes (HEAD /health/live)
+#   - AWS ALB / GCP Health Checks (GET /health/live)
+# ---------------------------------------------------------------------------
+
+_LIVENESS_HEADERS = {
+    "Cache-Control": "no-store",
+    "X-Health-Check": "liveness",
+}
+_LIVENESS_BODY = b'{"status":"ok"}'
+
+
+@router.head("/live")
+@router.get("/live")
+async def liveness_probe():
+    """
+    Canonical lightweight liveness probe at /health/live.
+
+    HEAD returns 200 with empty body.
+    GET returns 200 with minimal JSON body for human debugging.
+    Both skip all external I/O — no DB, no pgvector, no microservice calls.
+    """
+    return Response(
+        content=_LIVENESS_BODY,
+        status_code=200,
+        media_type="application/json",
+        headers=_LIVENESS_HEADERS,
+    )
+
+
+@router.head("")
+@router.head("/")
+async def liveness_head_root():
+    """
+    HEAD /health — lightweight alias for Docker HEALTHCHECK probes.
+
+    curl -f --head http://127.0.0.1:8000/health
+    Keeps backward compat with infra expecting HEAD at the root health path.
+    No body returned (HEAD semantics). Zero external I/O.
+    """
+    return Response(
+        status_code=200,
+        media_type="application/json",
+        headers=_LIVENESS_HEADERS,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Deep readiness / observability check.
+#
+# Polls ALL external dependencies: PostgreSQL, pgvector, recommendation
+# service, and seller-agent service. Intended for:
+#   - Observability dashboards and admin health pages
+#   - Kubernetes readiness probes (GET — NOT liveness)
+#   - Manual curl checks during deployment
+#
+# NOT suitable for Docker HEALTHCHECK — too slow, has external dependencies
+# that may be temporarily unavailable without the process being unhealthy.
+# ---------------------------------------------------------------------------
 
 @router.get("")
 @router.get("/")
@@ -20,7 +95,7 @@ async def health_check() -> dict:
     reco_service_status = "unknown"
     seller_agent_status = "unknown"
 
-    # DB check
+    # DB + pgvector check
     try:
         pool = get_pool()
         async with pool.acquire() as conn:

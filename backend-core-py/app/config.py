@@ -30,7 +30,8 @@ class Settings(BaseSettings):
     RECOMMENDATION_SERVICE_URL: str = "http://service-recommendation:8001"
     SELLER_AGENT_SERVICE_URL: str = "http://service-seller-agent:8002"
 
-    # Frontend
+    # API & Frontend URLs
+    API_URL: str = "https://api.vyapari.live"
     FRONTEND_URL: str = "http://localhost:3000"
 
     # Razorpay (kept for parity with Node.js)

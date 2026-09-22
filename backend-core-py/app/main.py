@@ -64,7 +64,7 @@ CSP_DIRECTIVES = (
     "script-src 'self'; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' https: data: blob:; "
-    "connect-src 'self' https://api.vyapari.com https://api.razorpay.com; "
+    "connect-src 'self' https://api.vyapari.live http://api.vyapari.live https://api.vyapari.com https://api.razorpay.com; "
     "font-src 'self' https: data:; "
     "object-src 'none'; "
     "frame-ancestors 'none'; "
@@ -97,6 +97,9 @@ async def security_and_correlation_headers(request: Request, call_next):
 # Global CORS
 origins = [
     settings.FRONTEND_URL,
+    settings.API_URL,
+    "https://api.vyapari.live",
+    "http://api.vyapari.live",
     "https://vyapari.live",
     "http://vyapari.live",
     "https://www.vyapari.live",
@@ -188,9 +191,24 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ----------------------------------------------------------------------------
-# Route Mounts — Identical prefixes to Express backend-core
+# Root & Health Endpoints
 # ----------------------------------------------------------------------------
+@app.get("/", tags=["health"])
+async def root():
+    return {
+        "success": True,
+        "platform": "Vyapari Core API",
+        "version": "2.0.0",
+        "status": "healthy",
+        "health_check": "/health",
+        "docs_url": "/api/docs",
+    }
+
+
+# Route Mounts — Identical prefixes to Express backend-core
+# Supports both /health and /api/health for api.vyapari.live domain routing
 app.include_router(health_router, prefix="/health")
+app.include_router(health_router, prefix="/api/health")
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(categories_router, prefix="/api/categories")
 app.include_router(products_router, prefix="/api/products")
