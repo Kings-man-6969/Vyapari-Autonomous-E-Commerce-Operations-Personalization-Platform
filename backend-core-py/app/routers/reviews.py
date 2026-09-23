@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from app.auth.dependencies import optional_auth, require_auth, require_role
 from app.db import get_db, get_pool
+from app.redis_client import cache
 
 router = APIRouter(tags=["reviews"])
 _seller_or_admin = Depends(require_role(["seller", "admin"]))
@@ -274,6 +275,14 @@ async def create_review(
     if saved.get("seller_reply_at"):
         saved["seller_reply_at"] = saved["seller_reply_at"].isoformat()
     saved["reviewer_name"] = user.get("name")
+
+    # Broadened invalidation for review creation (rating/popularity/similarity changes)
+    p_id_str = str(product["id"]).lower()
+    await cache.delete(f"product:detail:{p_id_str}")
+    await cache.delete_prefix("search:")
+    await cache.delete_prefix("products:popular:")
+    await cache.delete_prefix(f"products:similar:{p_id_str}:")
+    await cache.delete_prefix("recommendations:")
 
     return {
         "success": True,

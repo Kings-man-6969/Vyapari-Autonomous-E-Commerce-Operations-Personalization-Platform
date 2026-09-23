@@ -15,6 +15,7 @@ from fastapi.responses import Response
 
 from app.config import settings
 from app.db import get_pool
+from app.redis_client import cache
 
 router = APIRouter(tags=["health"])
 
@@ -110,6 +111,10 @@ async def health_check() -> dict:
     except Exception as exc:
         db_status = f"error: {exc}"
 
+    # Redis check — non-critical cache, failures degrade safely without marking application unhealthy
+    redis_info = await cache.health_check()
+    redis_status = "connected" if redis_info.get("is_redis_connected") else "degraded (in_memory_fallback)"
+
     # Recommendation service check
     try:
         async with httpx.AsyncClient(timeout=1.5) as client:
@@ -134,6 +139,11 @@ async def health_check() -> dict:
             "backend_core": "healthy",
             "database": db_status,
             "pgvector": pgvector_status,
+            "redis": {
+                "status": redis_status,
+                "latency_ms": redis_info.get("latency_ms") if redis_info.get("is_redis_connected") else None,
+                "engine": redis_info.get("engine", "InMemoryCache"),
+            },
             "recommendation_service": reco_service_status,
             "seller_agent_service": seller_agent_status,
         },

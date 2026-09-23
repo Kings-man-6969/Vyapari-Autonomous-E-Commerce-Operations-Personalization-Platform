@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from app.auth.dependencies import require_role
 from app.config import settings
 from app.db import get_db
+from app.redis_client import cache
 
 router = APIRouter(tags=["admin"])
 _admin_guard = Depends(require_role("admin"))
@@ -587,6 +588,11 @@ async def create_admin_category(
     if d.get("created_at"):
         d["created_at"] = d["created_at"].isoformat()
 
+    # Invalidate categories tree, slugs, and products facets caches
+    await cache.delete("categories:tree")
+    await cache.delete_prefix("categories:slug:")
+    await cache.delete("products:facets")
+
     return {
         "success": True,
         "message": "Category created successfully.",
@@ -623,6 +629,18 @@ async def _system_health_handler(db) -> dict:
     indexed = int(emb_stats["indexed_products"] or 0) if emb_stats else 0
     coverage = round((indexed / total) * 100) if total > 0 else 100
 
+    redis_health = await cache.health_check()
+    redis_metrics = {
+        "status": redis_health.get("status", "connected"),
+        "engine": redis_health.get("engine", "Redis"),
+        "latency_ms": redis_health.get("latency_ms", 0.0),
+        "used_memory": redis_health.get("used_memory_human", "N/A"),
+        "maxmemory": redis_health.get("maxmemory_human", "30MB"),
+        "connected_clients": redis_health.get("connected_clients", 0),
+        "uptime_seconds": redis_health.get("uptime_in_seconds", 43200),
+        "telemetry": redis_health.get("metrics", {}),
+    }
+
     return {
         "success": True,
         "data": {
@@ -632,10 +650,7 @@ async def _system_health_handler(db) -> dict:
                 "managed_tables": tables_count,
                 "pgvector_installed": pgvector_installed,
             },
-            "redis": {
-                "status": "connected",
-                "uptime_seconds": 43200,
-            },
+            "redis": redis_metrics,
             "embeddings": {
                 "indexed_products": indexed,
                 "total_products": total,

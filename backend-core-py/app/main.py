@@ -12,6 +12,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.auth.router import router as auth_router
 from app.config import settings
 from app.db import close_pool, init_pool
+from app.redis_client import close_redis, init_redis
 from app.routers.admin import router as admin_router
 from app.routers.ai import router as ai_router
 from app.routers.approvals import router as approvals_router
@@ -42,9 +43,17 @@ async def lifespan(app: FastAPI):
         logger.info("Database pool established successfully.")
     except Exception as e:
         logger.warning(f"Could not connect to database on startup: {e}. Will retry on requests.")
+
+    logger.info("Initializing Redis cache connection...")
+    try:
+        await init_redis()
+    except Exception as e:
+        logger.warning(f"Could not initialize Redis on startup: {e}. Fallback active.")
+
     yield
-    logger.info("Closing database connection pool...")
+    logger.info("Closing database and Redis connections...")
     await close_pool()
+    await close_redis()
 
 
 app = FastAPI(

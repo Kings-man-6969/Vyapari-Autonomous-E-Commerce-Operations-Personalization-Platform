@@ -9,6 +9,7 @@ POST /api/products              (seller only)
 PUT  /api/products/:id          (seller/admin)
 POST /api/products/reviews      (verified purchase gate)
 """
+import hashlib
 import json
 import re
 import time
@@ -21,6 +22,13 @@ from pydantic import BaseModel
 from app.auth.dependencies import optional_auth, require_auth, require_role
 from app.config import settings
 from app.db import get_db, get_pool
+from app.redis_client import (
+    TTL_AUTOCOMPLETE,
+    TTL_FACETS,
+    TTL_PRODUCT_DETAIL,
+    TTL_SEARCH,
+    cache,
+)
 
 router = APIRouter()
 
@@ -146,6 +154,10 @@ async def sync_product_embedding(product_id: str, text: str, db) -> None:
 
 @router.get("/facets")
 async def get_facets(db=Depends(get_db)) -> dict:
+    cached = await cache.get_json("products:facets")
+    if cached:
+        return cached
+
     brands_rows = await db.fetch("""
         SELECT p.attributes->>'brand' AS name, count(1)::int AS count
         FROM products p
@@ -163,7 +175,7 @@ async def get_facets(db=Depends(get_db)) -> dict:
         WHERE p.status = 'active'
         GROUP BY c.id ORDER BY count DESC
     """)
-    return {
+    result = {
         "success": True,
         "data": {
             "brands": [dict(r) for r in brands_rows],
@@ -171,6 +183,8 @@ async def get_facets(db=Depends(get_db)) -> dict:
             "categories": [dict(r) for r in cats_rows],
         },
     }
+    await cache.set_json("products:facets", result, ex=TTL_FACETS)
+    return result
 
 
 
@@ -181,6 +195,11 @@ async def suggest(q: str | None = None, db=Depends(get_db)) -> dict:
         return {"success": True, "data": {"products": [], "brands": [], "categories": [], "suggestions": []}}
 
     term = q.strip()
+    cache_key = f"suggest:{term.lower()}"
+    cached = await cache.get_json(cache_key)
+    if cached:
+        return cached
+
     term_like = f"%{term}%"
     start_like = f"{term}%"
 
@@ -220,7 +239,7 @@ async def suggest(q: str | None = None, db=Depends(get_db)) -> dict:
         if len(suggestions) < 4 and p["title"] not in suggestions:
             suggestions.append(p["title"])
 
-    return {
+    result = {
         "success": True,
         "data": {
             "query": term,
@@ -230,6 +249,8 @@ async def suggest(q: str | None = None, db=Depends(get_db)) -> dict:
             "suggestions": suggestions,
         },
     }
+    await cache.set_json(cache_key, result, ex=TTL_AUTOCOMPLETE)
+    return result
 
 
 @router.get("")
@@ -249,6 +270,28 @@ async def list_products(
     q: str | None = None,
     db=Depends(get_db),
 ) -> dict:
+    # ── Check Cache for Repeated Searches ─────────────────────────────────────
+    normalized_params = {
+        "category_id": str(category_id) if category_id else None,
+        "seller_id": str(seller_id) if seller_id else None,
+        "min_price": float(min_price) if min_price is not None else None,
+        "max_price": float(max_price) if max_price is not None else None,
+        "brand": brand.strip().lower() if brand else None,
+        "min_rating": float(min_rating) if min_rating is not None else None,
+        "min_discount": float(min_discount) if min_discount is not None else None,
+        "fast_delivery": fast_delivery in ("true", "1", "yes") if fast_delivery else False,
+        "sort": sort or "newest",
+        "page": int(page),
+        "limit": int(limit),
+        "q": q.strip().lower() if q else "",
+    }
+    canonical_repr = json.dumps(normalized_params, sort_keys=True)
+    cache_hash = hashlib.md5(canonical_repr.encode("utf-8")).hexdigest()
+    cache_key = f"search:{cache_hash}"
+    cached = await cache.get_json(cache_key)
+    if cached:
+        return cached
+
     effective_min_price = min_price
     effective_max_price = max_price
     effective_brand = brand
@@ -362,7 +405,6 @@ async def list_products(
 
     # Order by
     if semantic_product_ids and not sort:
-        # Find the position of the semantic_product_ids parameter in params
         vec_idx = next(
             (i + 1 for i, pv in enumerate(params) if pv is semantic_product_ids), None
         )
@@ -417,7 +459,7 @@ async def list_products(
             },
         }
 
-    return {
+    result = {
         "success": True,
         "data": {
             "products": [dict(r) for r in data_rows],
@@ -430,10 +472,29 @@ async def list_products(
             "nl_analysis": nl_info,
         },
     }
+    await cache.set_json(cache_key, result, ex=TTL_SEARCH)
+    return result
 
 
 @router.get("/{id}")
 async def get_product(id: str, user: dict | None = Depends(optional_auth), db=Depends(get_db)) -> dict:
+    cache_key = f"product:detail:{id.strip().lower()}"
+    cached = await cache.get_json(cache_key)
+    if cached:
+        # Fire-and-forget interaction logging even on cache hit
+        if user:
+            import asyncio
+            pool = get_pool()
+            p_id = cached.get("data", {}).get("product", {}).get("id") or id
+            asyncio.ensure_future(
+                pool.execute(
+                    "INSERT INTO user_interactions (user_id, product_id, event_type) VALUES ($1, $2, 'view')",
+                    user["id"],
+                    p_id,
+                )
+            )
+        return cached
+
     is_uuid = bool(re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", id, re.IGNORECASE))
     where_cond = "p.id = $1::uuid" if is_uuid else "p.slug = $1"
 
@@ -480,13 +541,22 @@ async def get_product(id: str, user: dict | None = Depends(optional_auth), db=De
             )
         )
 
-    return {
+    result = {
         "success": True,
         "data": {
             "product": product,
             "reviews": [dict(r) for r in reviews],
         },
     }
+
+    # Cache by query id, and if slug exists also cache by slug
+    await cache.set_json(cache_key, result, ex=TTL_PRODUCT_DETAIL)
+    if product.get("slug") and product["slug"].lower() != id.strip().lower():
+        await cache.set_json(f"product:detail:{product['slug'].lower()}", result, ex=TTL_PRODUCT_DETAIL)
+    if str(product.get("id")).lower() != id.strip().lower():
+        await cache.set_json(f"product:detail:{str(product['id']).lower()}", result, ex=TTL_PRODUCT_DETAIL)
+
+    return result
 
 
 class CreateProductBody(BaseModel):
@@ -543,6 +613,13 @@ async def create_product(
     )
 
     product = dict(row)
+
+    # Invalidate search, suggest, facets, popular, and categories caches
+    await cache.delete_prefix("search:")
+    await cache.delete_prefix("suggest:")
+    await cache.delete("products:facets")
+    await cache.delete_prefix("products:popular:")
+    await cache.delete("categories:tree")
 
     # Synchronous embedding per architectural decision A4
     await sync_product_embedding(
@@ -625,6 +702,17 @@ async def update_product(
         id,
     )
 
+    # Invalidate product detail, search, suggest, facets, and popular caches
+    await cache.delete(f"product:detail:{id.strip().lower()}")
+    if current.get("slug"):
+        await cache.delete(f"product:detail:{current['slug'].strip().lower()}")
+    if current.get("id"):
+        await cache.delete(f"product:detail:{str(current['id']).strip().lower()}")
+    await cache.delete_prefix("search:")
+    await cache.delete_prefix("suggest:")
+    await cache.delete("products:facets")
+    await cache.delete_prefix("products:popular:")
+
     # Fire-and-forget embedding refresh
     import asyncio
     product = dict(updated)
@@ -680,5 +768,13 @@ async def create_review(
         body.comment.strip(),
         is_verified,
     )
+
+    # Broadened invalidation for review creation (rating/popularity/similarity changes)
+    p_id_str = body.product_id.strip().lower()
+    await cache.delete(f"product:detail:{p_id_str}")
+    await cache.delete_prefix("search:")
+    await cache.delete_prefix("products:popular:")
+    await cache.delete_prefix(f"products:similar:{p_id_str}:")
+    await cache.delete_prefix("recommendations:")
 
     return {"success": True, "data": {"review": dict(review)}}

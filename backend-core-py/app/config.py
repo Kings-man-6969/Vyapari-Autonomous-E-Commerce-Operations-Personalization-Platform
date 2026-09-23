@@ -42,9 +42,21 @@ class Settings(BaseSettings):
     # S3 Storage
     S3_BUCKET_NAME: str = "vyapari-products"
 
-    # Redis
+    # Redis (Supports direct REDIS_URL or host/port/auth/ssl params)
+    REDIS_URL: str | None = None
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
+    REDIS_PASSWORD: str | None = None
+    REDIS_DB: int = 0
+    REDIS_SSL: bool = False
+
+    @property
+    def redis_connection_url(self) -> str:
+        if self.REDIS_URL and self.REDIS_URL.strip():
+            return self.REDIS_URL.strip()
+        proto = "rediss" if self.REDIS_SSL else "redis"
+        auth = f":{self.REDIS_PASSWORD}@" if self.REDIS_PASSWORD else ""
+        return f"{proto}://{auth}{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     @property
     def is_production(self) -> bool:

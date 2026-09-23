@@ -36,6 +36,7 @@ services:
     image: redis:7-alpine
     container_name: vyapari-redis
     restart: unless-stopped
+    command: redis-server --maxmemory 30mb --maxmemory-policy allkeys-lru
     ports:
       - "6379:6379"
     volumes:
@@ -88,10 +89,13 @@ services:
     environment:
       PORT: 8002
       DATABASE_URL: postgresql://${POSTGRES_USER:-vyapari_admin}:${POSTGRES_PASSWORD:-vyapari_secure_password}@db:5432/${POSTGRES_DB:-vyapari}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8002/health || exit 1"]
@@ -122,6 +126,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-vyapari}
       POSTGRES_USER: ${POSTGRES_USER:-vyapari_admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vyapari_secure_password}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-vyapari_jwt_access_secret_sample_key_change_in_production_384b}

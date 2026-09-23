@@ -6,6 +6,7 @@ GET /api/categories/:slug
 """
 from fastapi import APIRouter, Depends, HTTPException
 from app.db import get_db
+from app.redis_client import TTL_CATEGORIES, cache
 
 router = APIRouter()
 
@@ -13,6 +14,10 @@ router = APIRouter()
 @router.get("")
 @router.get("/")
 async def get_categories(db=Depends(get_db)) -> dict:
+    cached = await cache.get_json("categories:tree")
+    if cached:
+        return cached
+
     rows = await db.fetch(
         """SELECT id, name, slug, parent_id, icon_url, created_at
            FROM categories
@@ -45,7 +50,7 @@ async def get_categories(db=Depends(get_db)) -> dict:
                 sub["parent_id"] = str(sub["parent_id"])
 
     # Mirror Node.js and API response shape: data with categories tree and flat list, plus top-level compatibility
-    return {
+    result = {
         "success": True,
         "data": {
             "categories": tree,
@@ -54,10 +59,17 @@ async def get_categories(db=Depends(get_db)) -> dict:
         "categories": tree,
         "flat": all_cats,
     }
+    await cache.set_json("categories:tree", result, ex=TTL_CATEGORIES)
+    return result
 
 
 @router.get("/{slug}")
 async def get_category_by_slug(slug: str, db=Depends(get_db)) -> dict:
+    cache_key = f"categories:slug:{slug.lower().strip()}"
+    cached = await cache.get_json(cache_key)
+    if cached:
+        return cached
+
     cat_row = await db.fetchrow("SELECT * FROM categories WHERE slug = $1", slug)
     if not cat_row:
         raise HTTPException(
@@ -80,10 +92,12 @@ async def get_category_by_slug(slug: str, db=Depends(get_db)) -> dict:
         cat_row["id"],
     )
 
-    return {
+    result = {
         "success": True,
         "data": {
             "category": category,
             "products": [dict(p) for p in products],
         },
     }
+    await cache.set_json(cache_key, result, ex=TTL_CATEGORIES)
+    return result
