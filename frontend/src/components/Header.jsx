@@ -27,6 +27,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import api from '../services/api';
+import { FALLBACK_IMAGE, imageList, responsiveImageProps } from '../lib/imageUrl';
 
 export const Header = () => {
   const { user, isAuthenticated, isCustomer, isSeller, isAdmin, logout } = useAuth();
@@ -262,8 +263,7 @@ export const Header = () => {
               Products
             </div>
             {suggestionsData.products.map((prod) => {
-              const images = Array.isArray(prod.images) ? prod.images : (typeof prod.images === 'string' ? JSON.parse(prod.images || '[]') : []);
-              const thumb = images[0] || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
+              const thumb = imageList(prod.images)[0] || FALLBACK_IMAGE;
               const priceNum = parseFloat(prod.price);
 
               return (
@@ -284,9 +284,12 @@ export const Header = () => {
                   onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--color-forest-floor)')}
                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
+                  {/* Eager, unlike every other image in the app: a suggestion
+                      dropdown only exists after a keystroke, nothing scrolls,
+                      and `loading="lazy"` here would add a visible beat before
+                      the row the customer just asked for appears. */}
                   <img
-                    src={thumb}
-                    alt=""
+                    {...responsiveImageProps(thumb, { alt: '', sizes: '38px', eager: true })}
                     style={{
                       width: '38px',
                       height: '38px',

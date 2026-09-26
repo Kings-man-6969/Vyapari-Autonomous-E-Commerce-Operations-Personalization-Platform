@@ -4,6 +4,7 @@ import { Trash2, ArrowRight, ShoppingBag, ShieldCheck, Lock, ChevronRight, Zap }
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import LineOption from '../components/LineOption';
+import { FALLBACK_IMAGE, imageList, measureOnLoad, responsiveImageProps } from '../lib/imageUrl';
 
 export const CartPage = () => {
   const { items, totalAmount, updateQuantity, removeFromCart, clearCart } = useCart();
@@ -87,8 +88,7 @@ export const CartPage = () => {
           {/* Cart Items List */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {items.map((item) => {
-              const images = Array.isArray(item.images) ? item.images : (typeof item.images === 'string' ? JSON.parse(item.images || '[]') : []);
-              const img = images[0] || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
+              const img = imageList(item.images)[0] || FALLBACK_IMAGE;
 
               return (
                 <div
@@ -106,8 +106,8 @@ export const CartPage = () => {
                   }}
                 >
                   <img
-                    src={img}
-                    alt={item.title}
+                    {...responsiveImageProps(img, { alt: item.title, sizes: '96px', eager: true })}
+                    onLoad={measureOnLoad}
                     style={{
                       width: '96px',
                       height: '96px',

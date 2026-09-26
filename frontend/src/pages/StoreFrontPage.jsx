@@ -195,8 +195,8 @@ export const StoreFrontPage = () => {
             gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
             gap: '24px'
           }}>
-            {products.map((prod) => (
-              <ProductCard key={prod.id} product={prod} />
+            {products.map((prod, i) => (
+              <ProductCard key={prod.id} product={prod} priority={i === 0} />
             ))}
           </div>
         )}

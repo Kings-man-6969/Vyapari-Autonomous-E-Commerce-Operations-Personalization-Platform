@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
@@ -6,6 +6,7 @@ import { Footer } from './components/Footer';
 import { SellerLayout } from './components/SellerLayout';
 import { AdminLayout } from './components/AdminLayout';
 import { GlobalErrorBoundary } from './components/GlobalErrorBoundary';
+import { applyUploadConfig } from './lib/imageUrl';
 
 // Public & Customer Pages
 import { HomePage } from './pages/HomePage';
@@ -100,6 +101,14 @@ const AdminRoute = ({ children }) => {
 };
 
 export const App = () => {
+  // Ask the API which rendition widths it actually stores, so a srcSet is built
+  // from the real ladder rather than the copy of it in `imageUrl.js`. Fire and
+  // forget: the mirror of `IMAGE_VARIANT_WIDTHS` is already in the bundle, so
+  // the first paint is correct whether or not this call lands first.
+  useEffect(() => {
+    applyUploadConfig();
+  }, []);
+
   return (
     <GlobalErrorBoundary>
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>

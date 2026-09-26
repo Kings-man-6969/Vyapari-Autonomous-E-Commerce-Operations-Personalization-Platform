@@ -7,6 +7,7 @@ import {
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ProductCard } from '../components/ProductCard';
+import { measureOnLoad, responsiveImageProps } from '../lib/imageUrl';
 
 const GRID_PAGE_SIZE = 24;
 
@@ -76,13 +77,23 @@ const MediaTile = ({ item, accent, onOpen, ratio = '1 / 1' }) => (
     }}
   >
     <img
-      src={item.thumbnail_url || item.url}
-      alt={item.alt_text || item.caption || ''}
-      loading="lazy"
-      decoding="async"
+      {...responsiveImageProps(item.thumbnail_url || item.url, {
+        alt: item.alt_text || item.caption || '',
+        // Seller media sits in a grid of unknown column count, so the honest
+        // sizes string is a range rather than a fixed guess. Video posters are
+        // the same story -- a seller uploading a promo reel should not push a
+        // 4K frame through a 300px tile.
+        sizes: '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw',
+        // Lazy, but not because of the observer: `loading="lazy"` covers it, and
+        // the IntersectionObserver that used to drive this was doing the same job
+        // with more code and a second layout read.
+        eager: false
+      })}
+      onLoad={measureOnLoad}
       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
       onError={(e) => {
         // A dead CDN link should degrade to a placeholder, not a broken icon.
+        e.currentTarget.onerror = null;
         e.currentTarget.style.visibility = 'hidden';
         e.currentTarget.parentElement?.querySelector('[data-fallback]')?.removeAttribute('hidden');
       }}
@@ -203,8 +214,14 @@ const Lightbox = ({ items, index, onClose, onStep }) => {
           />
         ) : (
           <img
-            src={item.url}
-            alt={item.alt_text || item.caption || ''}
+            {...responsiveImageProps(item.url, {
+              alt: item.alt_text || item.caption || '',
+              // A lightbox is the one place a full-width image is wanted, so
+              // this is the single candidate most likely to want the master.
+              sizes: '92vw',
+              eager: true
+            })}
+            onLoad={measureOnLoad}
             style={{ width: '100%', maxHeight: '76vh', objectFit: 'contain', borderRadius: 'var(--radius-md)' }}
           />
         )}
@@ -323,7 +340,7 @@ const ContentBlock = ({ block, media = [], products = [], accent, onOpenMedia })
       <>
         {header()}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: '16px' }}>
-          {shown.map((p) => <ProductCard key={p.id} product={p} />)}
+          {shown.map((p, i) => <ProductCard key={p.id} product={p} priority={i === 0} />)}
         </div>
         {cta}
       </>
@@ -484,7 +501,16 @@ export const StoreView = ({
               }}
             >
               {page.avatar_url
-                ? <img src={page.avatar_url} alt={seller?.store_name || page.handle} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ? <img
+                    {...responsiveImageProps(page.avatar_url, {
+                      alt: seller?.store_name || page.handle,
+                      sizes: '104px',
+                      // Above the fold, and tiny. Eager at 104px costs almost
+                      // nothing and stops the letterhead from popping in.
+                      eager: true
+                    })}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
                 : (seller?.store_name?.[0]?.toUpperCase() || <Store size={40} />)}
             </div>
 
@@ -588,7 +614,10 @@ export const StoreView = ({
                 <div style={{ width: '72px', height: '72px', borderRadius: '50%', border: `2px solid ${accent}`, padding: '3px', margin: '0 auto' }}>
                   <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', backgroundColor: 'var(--color-gunmetal-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {h.cover_url
-                      ? <img src={h.cover_url} alt={h.title} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ? <img
+                          {...responsiveImageProps(h.cover_url, { alt: h.title, sizes: '72px' })}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
                       : <Star size={20} color="var(--color-ash-label)" />}
                   </div>
                 </div>
@@ -675,7 +704,7 @@ export const StoreView = ({
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '22px' }}>
-              {products.map((p) => <ProductCard key={p.id} product={p} />)}
+              {products.map((p, i) => <ProductCard key={p.id} product={p} priority={i === 0} />)}
             </div>
           )
         )}
@@ -787,6 +816,13 @@ export const SellerShowcasePage = () => {
   }, [handle, loadingMore, media.length, payload]);
 
   // Infinite scroll on the grid tab.
+  //
+  // This observer is for pagination, not images, and the distinction matters:
+  // `loading="lazy"` handles the images (see responsiveImageProps), so an
+  // earlier observer that gated image src attributes was solving a problem the
+  // platform attribute already solves -- and doing it worse, since swapping a
+  // src after mount restarts the request instead of letting the browser pick a
+  // candidate from a srcSet it already has.
   useEffect(() => {
     if (tab !== 'grid' || !payload?.has_more_media || !gridRef.current) return undefined;
     const node = gridRef.current;

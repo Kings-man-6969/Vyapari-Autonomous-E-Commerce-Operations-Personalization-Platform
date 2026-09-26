@@ -303,8 +303,8 @@ export const HomePage = () => {
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '20px' }}>
-              {products.map((product) => (
-                <ProductCard key={product.id} product={product} />
+              {products.map((product, index) => (
+                <ProductCard key={product.id} product={product} priority={index === 0} />
               ))}
             </div>
           )}

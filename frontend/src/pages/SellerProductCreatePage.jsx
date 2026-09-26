@@ -15,6 +15,7 @@ import {
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { findOptionClash, optionAttributes, parseOptionLines } from '../lib/optionLines';
+import ImageUploader from '../components/ImageUploader';
 
 export const SellerProductCreatePage = () => {
   const navigate = useNavigate();
@@ -39,7 +40,11 @@ export const SellerProductCreatePage = () => {
     inventory_count: 20,
     category_id: '',
     tags: '',
-    images: ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80'],
+    // Empty, not a stock photo. This used to ship a fixed photograph of
+    // headphones into every new listing, so a seller who had not uploaded
+    // anything yet published a saree wearing headphones. An empty list is
+    // honest and the storefront falls back to a neutral tile.
+    images: [],
     status: user?.seller_status === 'active' ? 'active' : 'draft'
   });
 
@@ -48,6 +53,10 @@ export const SellerProductCreatePage = () => {
   // has used one has to learn nothing for the other. Empty means a plain
   // single-item product, which is the common case and is unchanged.
   const [optionRows, setOptionRows] = useState([]);
+
+  // Whether the "link to an image" rows are showing. Off until asked for, so
+  // the upload box is what a seller sees first.
+  const [showUrlFallback, setShowUrlFallback] = useState(false);
 
   const addOptionRow = () =>
     setOptionRows((r) => [...r, { attributes: '', price: '', stock_qty: '', sku: '', is_default: false }]);
@@ -208,7 +217,9 @@ export const SellerProductCreatePage = () => {
         compare_at_price: formData.compare_at_price ? parseFloat(formData.compare_at_price) : null,
         cost_price: formData.cost_price ? parseFloat(formData.cost_price) : null,
         inventory_count: parseInt(formData.inventory_count, 10) || 0,
-        images: cleanedImages.length > 0 ? cleanedImages : ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80'],
+        // No invented image. A product with no photo is a product with no
+        // photo, and every card that renders it already has a fallback.
+        images: cleanedImages,
         tags: typeof formData.tags === 'string' ? formData.tags.split(',').map((t) => t.trim()).filter(Boolean) : formData.tags,
         ...(variants.length > 0 ? { variants } : {})
       };
@@ -537,56 +548,91 @@ export const SellerProductCreatePage = () => {
 
             {/* Product Images Card */}
             <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-steel)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>
-                  Media Assets
-                </h3>
-                <button
-                  type="button"
-                  onClick={handleAddImageUrl}
-                  style={{ 
-                    fontSize: '12px', 
-                    color: 'var(--color-icy-steel)', 
-                    fontWeight: 600, 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '4px',
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <Plus size={14} />
-                  <span>Add URL</span>
-                </button>
-              </div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '16px' }}>
+                Media Assets
+              </h3>
 
-              {formData.images.map((url, idx) => (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                  <input
-                    type="url"
-                    className="input-field"
-                    placeholder="https://images.unsplash.com/..."
-                    value={url}
-                    onChange={(e) => handleImageUrlChange(idx, e.target.value)}
-                  />
-                  {formData.images.length > 1 && (
+              <ImageUploader
+                value={formData.images}
+                onChange={(urls) => setFormData((prev) => ({ ...prev, images: urls }))}
+              />
+
+              {/* Linking by URL stays, but demoted below the uploader and behind a
+                  click. It is the only way to attach a shot the seller already
+                  hosts somewhere else, and it is how the 10,057 seeded products
+                  were all populated -- but it is no longer the first thing a
+                  seller is asked to do. */}
+              {showUrlFallback ? (
+                <div style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--color-border-steel)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-silver-glow)' }}>
+                      Or link to an image
+                    </span>
                     <button
                       type="button"
-                      onClick={() => handleRemoveImageUrl(idx)}
-                      style={{ 
-                        color: '#f87171', 
-                        padding: '8px', 
-                        background: 'transparent', 
-                        border: 'none', 
-                        cursor: 'pointer' 
+                      onClick={handleAddImageUrl}
+                      style={{
+                        fontSize: '12px',
+                        color: 'var(--color-icy-steel)',
+                        fontWeight: 600,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer'
                       }}
                     >
-                      <Trash2 size={16} />
+                      <Plus size={14} />
+                      <span>Add URL</span>
                     </button>
-                  )}
+                  </div>
+
+                  {formData.images.map((url, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                      <input
+                        type="url"
+                        className="input-field"
+                        placeholder="https://images.unsplash.com/..."
+                        value={url}
+                        onChange={(e) => handleImageUrlChange(idx, e.target.value)}
+                      />
+                      {formData.images.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveImageUrl(idx)}
+                          style={{
+                            color: '#f87171',
+                            padding: '8px',
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowUrlFallback(true)}
+                  style={{
+                    marginTop: '12px',
+                    fontSize: '12px',
+                    color: 'var(--color-ash-label)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '0',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  Already have the image hosted somewhere? Link it instead
+                </button>
+              )}
             </div>
           </div>
 

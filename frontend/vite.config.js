@@ -24,6 +24,11 @@ const CSP = [
   // checkout script is the only third party allowed to execute.
   "script-src 'self' https://checkout.razorpay.com",
   "style-src 'self' 'unsafe-inline' https://checkout.razorpay.com",
+  // Product images come from three places: our own /media (served same-origin,
+  // proxied from the API in dev), third-party catalogue CDNs over https, and
+  // blob: for the local preview a seller sees before they finish uploading.
+  // Narrowing this to a list of hosts would mean editing it every time a seller
+  // pastes an external image URL, which is exactly the change nobody makes.
   "img-src 'self' https: data: blob:",
   "connect-src 'self' https://api.vyapari.live https://api.vyapari.com https://api.razorpay.com",
   "font-src 'self' https: data:",
@@ -66,6 +71,14 @@ export default defineConfig({
         changeOrigin: true
       },
       '/health': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      },
+      // Uploaded media, served by the API under the local storage provider.
+      // Proxied so dev matches production, where the SPA and /media come from
+      // one origin -- otherwise every <img> would need an absolute API URL,
+      // and img-src would have to carry the API's origin through the CSP.
+      '/media': {
         target: 'http://localhost:8000',
         changeOrigin: true
       }

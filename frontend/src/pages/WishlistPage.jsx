@@ -98,9 +98,10 @@ export const WishlistPage = () => {
             gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
             gap: '24px'
           }}>
-            {wishlistItems.map((item) => (
+            {wishlistItems.map((item, i) => (
               <ProductCard
                 key={item.id || item.product_id}
+                priority={i === 0}
                 product={{
                   id: item.product_id || item.id,
                   title: item.title,

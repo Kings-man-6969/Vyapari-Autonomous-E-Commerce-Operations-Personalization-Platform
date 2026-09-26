@@ -813,8 +813,8 @@ export const ExplorePage = () => {
             ) : (
               <>
                 <div className="product-grid-catalog">
-                  {products.map((product) => (
-                    <ProductCard key={product.id} product={product} />
+                  {products.map((product, index) => (
+                    <ProductCard key={product.id} product={product} priority={index === 0} />
                   ))}
                 </div>
 

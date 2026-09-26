@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Star, MessageSquare, Send, CheckCircle2, AlertCircle, Search, CornerDownRight } from 'lucide-react';
 import api from '../services/api';
+import { FALLBACK_IMAGE, imageList, measureOnLoad, responsiveImageProps } from '../lib/imageUrl';
 
 export const SellerReviewsPage = () => {
   const [reviews, setReviews] = useState([]);
@@ -177,10 +178,7 @@ export const SellerReviewsPage = () => {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {filteredReviews.map((r) => {
-            const productImages = Array.isArray(r.product_images) 
-              ? r.product_images 
-              : (typeof r.product_images === 'string' ? JSON.parse(r.product_images || '[]') : []);
-            const thumb = productImages[0] || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
+            const thumb = imageList(r.product_images)[0] || FALLBACK_IMAGE;
             const draftReply = replyTextMap[r.id] !== undefined ? replyTextMap[r.id] : (r.seller_reply || '');
 
             return (
@@ -195,8 +193,8 @@ export const SellerReviewsPage = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <img
-                      src={thumb}
-                      alt={r.product_title}
+                      {...responsiveImageProps(thumb, { alt: r.product_title, sizes: '48px' })}
+                      onLoad={measureOnLoad}
                       style={{ width: '48px', height: '48px', borderRadius: '6px', objectFit: 'cover', border: '1px solid var(--color-iron-veil)' }}
                     />
                     <div>

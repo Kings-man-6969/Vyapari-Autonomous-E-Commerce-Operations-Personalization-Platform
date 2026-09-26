@@ -4,8 +4,19 @@ import { ShoppingBag, Star, Heart } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useAuth } from '../context/AuthContext';
+import {
+  FALLBACK_IMAGE,
+  imageList,
+  measureOnLoad,
+  responsiveImageProps
+} from '../lib/imageUrl';
 
-export const ProductCard = ({ product }) => {
+/**
+ * @param {object} product
+ * @param {boolean} [priority]  set on the first card of a grid, so the Largest
+ *   Contentful Paint image is fetched eagerly instead of after layout
+ */
+export const ProductCard = ({ product, priority = false }) => {
   const { addToCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { isCustomer, isAuthenticated } = useAuth();
@@ -13,10 +24,8 @@ export const ProductCard = ({ product }) => {
   const canShop = isCustomer || !isAuthenticated;
   const inWish = isInWishlist(product.id);
 
-  const images = Array.isArray(product.images) 
-    ? product.images 
-    : (typeof product.images === 'string' ? JSON.parse(product.images || '[]') : []);
-  const mainImage = images[0] || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
+  const images = imageList(product.images);
+  const mainImage = images[0] || FALLBACK_IMAGE;
 
   const stock = product.inventory_count !== undefined ? product.inventory_count : (product.stock_qty !== undefined ? product.stock_qty : 0);
   const isOutOfStock = product.status === 'out_of_stock' || stock <= 0;
@@ -127,8 +136,18 @@ export const ProductCard = ({ product }) => {
         backgroundColor: 'var(--color-obsidian-graphite)'
       }}>
         <img
-          src={mainImage}
-          alt={product.title}
+          {...responsiveImageProps(mainImage, {
+            alt: product.title,
+            // Four across on desktop, two on a tablet, two on a phone. Without
+            // a `sizes` the browser assumes the image fills the viewport and
+            // downloads the 1600w rendition for a 200px card -- which is the
+            // single biggest waste on a catalogue page.
+            sizes: '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw',
+            // The first row of a grid is above the fold; the rest are not. The
+            // caller marks it, because a component cannot know its own index.
+            eager: priority === true
+          })}
+          onLoad={measureOnLoad}
           style={{
             position: 'absolute',
             top: 0,
@@ -140,7 +159,12 @@ export const ProductCard = ({ product }) => {
             transition: 'transform 0.4s ease'
           }}
           onError={(e) => {
-            e.target.src = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
+            // A broken product image should not leave a hole in the grid. The
+            // srcSet is dropped too, or the browser retries the same dead
+            // candidate and this handler never gets a second turn.
+            e.target.onerror = null;
+            e.target.srcset = '';
+            e.target.src = FALLBACK_IMAGE;
           }}
         />
         {isOutOfStock && (

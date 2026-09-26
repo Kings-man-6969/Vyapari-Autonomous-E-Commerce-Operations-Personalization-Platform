@@ -22,6 +22,7 @@ import {
   ArrowUpDown
 } from 'lucide-react';
 import api from '../services/api';
+import { FALLBACK_IMAGE, imageList, measureOnLoad, responsiveImageProps } from '../lib/imageUrl';
 
 export const AdminProductsPage = () => {
   const [products, setProducts] = useState([]);
@@ -684,8 +685,7 @@ export const AdminProductsPage = () => {
               </thead>
               <tbody>
                 {products.map((p) => {
-                  const images = Array.isArray(p.images) ? p.images : (typeof p.images === 'string' ? JSON.parse(p.images || '[]') : []);
-                  const imgUrl = images[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80';
+                  const imgUrl = imageList(p.images)[0] || FALLBACK_IMAGE;
                   const isSelected = selectedIds.has(p.id);
 
                   return (
@@ -708,8 +708,8 @@ export const AdminProductsPage = () => {
                       <td style={{ padding: '14px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <img
-                            src={imgUrl}
-                            alt={p.title}
+                            {...responsiveImageProps(imgUrl, { alt: p.title, sizes: '44px' })}
+                            onLoad={measureOnLoad}
                             style={{
                               width: '44px',
                               height: '44px',
@@ -719,7 +719,13 @@ export const AdminProductsPage = () => {
                               border: '1px solid var(--color-border-steel)'
                             }}
                             onError={(e) => {
-                              e.target.src = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80';
+                              // Clearing srcset first: otherwise the browser
+                              // retries the same dead candidate and onerror
+                              // never fires a second time, so the row is left
+                              // holding a broken image.
+                              e.target.onerror = null;
+                              e.target.srcset = '';
+                              e.target.src = FALLBACK_IMAGE;
                             }}
                           />
                           <div style={{ maxWidth: '340px' }}>

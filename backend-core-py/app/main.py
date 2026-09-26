@@ -3,13 +3,16 @@ import logging
 import re
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import Response
 
 from app.auth.router import router as auth_router
 from app.config import settings
@@ -318,6 +321,57 @@ app.include_router(reviews_router, prefix="/api/reviews")
 # UUID storefront routes, which stay exactly where they are.
 app.include_router(seller_pages_router, prefix="/api/seller-pages")
 app.include_router(public_pages_router, prefix="/api/public/stores")
+
+
+# ----------------------------------------------------------------------------
+# Local media mount
+# ----------------------------------------------------------------------------
+# Only mounted for STORAGE_PROVIDER=local; with s3 the bytes live in a bucket and
+# a CDN fronts them, and mounting an empty directory here would just invite
+# someone to point the app at it.
+class ImmutableStaticFiles(StaticFiles):
+    """
+    Static files that can never change, served as such.
+
+    Every local media URL is keyed by a uuid generated at upload time and a
+    width the writer chose, and nothing in the app ever rewrites one in place --
+    an "update" is a new upload under a new key. So these responses are safe to
+    cache for a year and never revalidate.
+
+    Without the header, StaticFiles sends ETag/Last-Modified and the browser
+    revalidates every product image on every page view, which turns a catalogue
+    grid into hundreds of conditional requests a session.
+    """
+
+    def file_response(self, *args, **kwargs) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        # Whether this image may render at all is decided by the *embedding*
+        # page's CSP img-src, not by anything sent here -- CSP on an image
+        # response is not consulted. nosniff already comes from the security
+        # middleware above and is the header that matters: it stops a stored
+        # file being reinterpreted as a document if the extension and the bytes
+        # ever disagreed.
+        return response
+
+
+if settings.STORAGE_PROVIDER.strip().lower() == "local":
+    _media_root = Path(settings.MEDIA_ROOT)
+    try:
+        _media_root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:  # pragma: no cover - surfaced through /uploads/config
+        logging.getLogger("vyapari.media").warning(
+            "MEDIA_ROOT %s could not be created (%s); /media will 404 until it is",
+            _media_root,
+            exc,
+        )
+    # check_dir=False so a read-only or missing volume degrades to 404s on
+    # /media rather than preventing the whole API from starting.
+    app.mount(
+        settings.MEDIA_PUBLIC_BASE,
+        ImmutableStaticFiles(directory=str(_media_root), check_dir=False),
+        name="media",
+    )
 
 
 if __name__ == "__main__":

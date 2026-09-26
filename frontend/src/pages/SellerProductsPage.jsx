@@ -14,6 +14,7 @@ import {
   SlidersHorizontal
 } from 'lucide-react';
 import api from '../services/api';
+import { FALLBACK_IMAGE, imageList, measureOnLoad, responsiveImageProps } from '../lib/imageUrl';
 
 export const SellerProductsPage = () => {
   const [products, setProducts] = useState([]);
@@ -253,18 +254,19 @@ export const SellerProductsPage = () => {
             </thead>
             <tbody>
               {filteredProducts.map((p) => {
-                const images = Array.isArray(p.images) ? p.images : (typeof p.images === 'string' ? JSON.parse(p.images || '[]') : []);
-                const imgUrl = images[0] || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
+                const imgUrl = imageList(p.images)[0] || FALLBACK_IMAGE;
                 return (
                   <tr key={p.id}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                         <img
-                          src={imgUrl}
-                          alt={p.title}
+                          {...responsiveImageProps(imgUrl, { alt: p.title, sizes: '46px' })}
+                          onLoad={measureOnLoad}
                           style={{ width: '46px', height: '46px', borderRadius: '6px', objectFit: 'cover', border: '1px solid var(--color-iron-veil)' }}
                           onError={(e) => {
-                            e.target.src = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
+                            e.target.onerror = null;
+                            e.target.srcset = '';
+                            e.target.src = FALLBACK_IMAGE;
                           }}
                         />
                         <div>

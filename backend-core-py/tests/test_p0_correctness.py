@@ -247,7 +247,14 @@ class TestP0Correctness(unittest.TestCase):
         self.assertEqual(r_dup.json()["status"], "duplicate_ignored")
 
     # ------------------------------------------------------------------------
-    # 3. S3 Presigned Upload Validation Tests (SSRF Safe)
+    # 3. Presigned Upload Validation (SSRF Safe)
+    #
+    # Rewritten alongside the storage layer. The old assertion was that the
+    # response's upload_url was present and that the key was derived from the
+    # caller's id -- both still true, and both were true of a route whose URLs
+    # resolved to nothing. test_media_pipeline.py is where the upload path is
+    # actually exercised now: bytes uploaded, renditions written, every
+    # advertised width fetched over HTTP.
     # ------------------------------------------------------------------------
     def test_s3_presigned_upload_success(self):
         resp = self.client.post(
@@ -259,7 +266,32 @@ class TestP0Correctness(unittest.TestCase):
         data = resp.json()["data"]
         self.assertIn("upload_url", data)
         self.assertIn(self.customer_id, data["object_key"])
-        self.assertTrue(data["object_key"].endswith(".jpg"))
+        # The upload target is a bare stem, not a rendition. The local provider
+        # names its own files "{uuid}@{width}w.webp" once the bytes have been
+        # decoded and it knows the real aspect ratio, so a client-supplied
+        # extension would be a guess -- and letting a client name a width would
+        # let it overwrite a 400w rendition with a full-size original.
+        self.assertTrue(data["object_key"].startswith(f"products/{self.customer_id}/"))
+        self.assertNotIn("@", data["object_key"])
+        # Where the image will live is not knowable until the bytes land, which
+        # is the point: the old route returned a cdn.vyapari.com URL that did
+        # not resolve, before anything had been uploaded.
+        self.assertIsNone(data["public_url"])
+        self.assertEqual(data["method"], "POST")
+        self.assertTrue(data["upload_url"].endswith("/api/uploads/object"))
+        self.assertEqual(data["fields"], {"key": data["object_key"]})
+
+    def test_presigned_upload_key_is_not_client_controllable(self):
+        """A client-chosen key is the whole IDOR; the key is derived server-side."""
+        resp = self.client.post(
+            "/api/uploads/presign",
+            json={"mime_type": "image/jpeg", "file_size": 2048, "object_key": "products/x/deadbeef"},
+            headers=self.auth_headers,
+        )
+        # extra="forbid" on the body, so an attempt to name the key is refused
+        # outright rather than quietly ignored.
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json()["error"]["code"], "VALIDATION_ERROR")
 
     def test_s3_presigned_upload_disallowed_mime(self):
         resp = self.client.post(

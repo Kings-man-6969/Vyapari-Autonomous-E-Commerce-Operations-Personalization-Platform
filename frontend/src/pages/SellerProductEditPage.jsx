@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import VariantEditor from '../components/VariantEditor';
+import ImageUploader from '../components/ImageUploader';
+import { imageList } from '../lib/imageUrl';
 
 export const SellerProductEditPage = () => {
   const { id } = useParams();
@@ -20,6 +22,9 @@ export const SellerProductEditPage = () => {
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState({ type: '', text: '' });
   const [hasVariants, setHasVariants] = useState(false);
+  // Whether the "link to an image" rows are showing. Off until asked for, so
+  // the upload box is what a seller sees first.
+  const [showUrlFallback, setShowUrlFallback] = useState(false);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -56,7 +61,7 @@ export const SellerProductEditPage = () => {
 
       if (prodRes.data?.success) {
         const p = prodRes.data.data || {};
-        const imgArr = Array.isArray(p.images) ? p.images : (typeof p.images === 'string' ? JSON.parse(p.images || '[]') : []);
+        const imgArr = imageList(p.images);
         const resolvedCatId = p.category_id || (catList[0]?.id || '');
 
         // jsonb arrives as text on this pool, so tags is '["silk","handloom"]'.
@@ -82,7 +87,10 @@ export const SellerProductEditPage = () => {
           inventory_count: p.inventory_count !== undefined ? p.inventory_count : p.stock_qty || 0,
           category_id: resolvedCatId,
           tags: tagText,
-          images: imgArr.length > 0 ? imgArr : ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80'],
+          // Whatever the product actually has. Seeding a fake photo here was
+          // worse than useless on an edit form: it looked like the seller's own
+          // image, and the first save wrote it to the database permanently.
+          images: imgArr,
           status: p.status || 'active'
         });
         setHasVariants(!!p.has_variants);
@@ -134,7 +142,7 @@ export const SellerProductEditPage = () => {
         // overwritten by the next option edit. Omitting the field leaves the
         // computed value alone, so the other edits on this form still save.
         inventory_count: hasVariants ? null : (parseInt(formData.inventory_count, 10) || 0),
-        images: cleanedImages.length > 0 ? cleanedImages : ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80'],
+        images: cleanedImages,
         tags: typeof formData.tags === 'string' ? formData.tags.split(',').map((t) => t.trim()).filter(Boolean) : formData.tags
       };
 
@@ -331,55 +339,86 @@ export const SellerProductEditPage = () => {
 
             {/* Product Images Card */}
             <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff' }}>
-                  Media Assets
-                </h3>
-                <button
-                  type="button"
-                  onClick={handleAddImageUrl}
-                  style={{ 
-                    fontSize: '12px', 
-                    color: 'var(--color-icy-steel)', 
-                    fontWeight: 600, 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '4px',
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <Plus size={14} />
-                  <span>Add URL</span>
-                </button>
-              </div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '16px' }}>
+                Media Assets
+              </h3>
 
-              {formData.images.map((url, idx) => (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                  <input
-                    type="url"
-                    className="input-field"
-                    value={url}
-                    onChange={(e) => handleImageUrlChange(idx, e.target.value)}
-                  />
-                  {formData.images.length > 1 && (
+              <ImageUploader
+                value={formData.images}
+                onChange={(urls) => setFormData((prev) => ({ ...prev, images: urls }))}
+                label="Product images"
+              />
+
+              {showUrlFallback ? (
+                <div style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--color-border-veil, var(--color-border-steel))' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-silver-glow)' }}>
+                      Or link to an image
+                    </span>
                     <button
                       type="button"
-                      onClick={() => handleRemoveImageUrl(idx)}
-                      style={{ 
-                        color: '#f87171', 
-                        padding: '8px', 
-                        background: 'transparent', 
-                        border: 'none', 
-                        cursor: 'pointer' 
+                      onClick={handleAddImageUrl}
+                      style={{
+                        fontSize: '12px',
+                        color: 'var(--color-icy-steel)',
+                        fontWeight: 600,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer'
                       }}
                     >
-                      <Trash2 size={16} />
+                      <Plus size={14} />
+                      <span>Add URL</span>
                     </button>
-                  )}
+                  </div>
+
+                  {formData.images.map((url, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                      <input
+                        type="url"
+                        className="input-field"
+                        value={url}
+                        onChange={(e) => handleImageUrlChange(idx, e.target.value)}
+                      />
+                      {formData.images.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveImageUrl(idx)}
+                          style={{
+                            color: '#f87171',
+                            padding: '8px',
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowUrlFallback(true)}
+                  style={{
+                    marginTop: '12px',
+                    fontSize: '12px',
+                    color: 'var(--color-ash-label)',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '0',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  Already have the image hosted somewhere? Link it instead
+                </button>
+              )}
             </div>
 
             {/* Options. Inside the form but not part of it -- no input here has a

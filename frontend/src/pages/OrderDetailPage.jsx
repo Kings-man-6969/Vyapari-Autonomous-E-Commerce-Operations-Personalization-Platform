@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { CheckCircle2, Clock, Truck, Package, ArrowLeft, Star, ShieldCheck, Zap } from 'lucide-react';
 import api from '../services/api';
 import LineOption from '../components/LineOption';
+import { FALLBACK_IMAGE, imageList, measureOnLoad, responsiveImageProps } from '../lib/imageUrl';
 
 export const OrderDetailPage = () => {
   const { id } = useParams();
@@ -197,13 +198,16 @@ export const OrderDetailPage = () => {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             {items.map((item) => {
-              const images = Array.isArray(item.images) ? item.images : (typeof item.images === 'string' ? JSON.parse(item.images || '[]') : []);
-              const img = images[0] || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
+              const img = imageList(item.images)[0] || FALLBACK_IMAGE;
 
               return (
                 <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '18px', borderBottom: '1px solid var(--color-border-steel)', flexWrap: 'wrap', gap: '14px' }}>
                   <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                    <img src={img} alt={item.title} style={{ width: '60px', height: '60px', borderRadius: '8px', objectFit: 'contain', backgroundColor: 'var(--color-obsidian-graphite)', border: '1px solid var(--color-border-steel)', padding: '4px' }} />
+                    <img
+                      {...responsiveImageProps(img, { alt: item.title, sizes: '60px', eager: true })}
+                      onLoad={measureOnLoad}
+                      style={{ width: '60px', height: '60px', borderRadius: '8px', objectFit: 'contain', backgroundColor: 'var(--color-obsidian-graphite)', border: '1px solid var(--color-border-steel)', padding: '4px' }}
+                    />
                     <div>
                       <h4 style={{ fontWeight: 500, fontSize: '14px', color: '#ffffff', margin: 0 }}>{item.title}</h4>
                       {/* What was bought, as it was bought. The API snapshots the

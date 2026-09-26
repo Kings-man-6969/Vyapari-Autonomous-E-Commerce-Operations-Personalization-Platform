@@ -35,6 +35,11 @@ import {
   loadCheckoutScript, openCheckout, __resetCheckoutScript, CheckoutDismissed
 } from '../src/lib/razorpay';
 import { isSettled, nextDelay, MAX_ATTEMPTS } from '../src/hooks/usePaymentStatus';
+import {
+  VARIANT_WIDTHS, buildSrcSet, imageList, isRenditionUrl, measureOnLoad,
+  measuredSize, responsiveImageProps, currentVariantWidths, applyUploadConfig, FALLBACK_IMAGE
+} from '../src/lib/imageUrl';
+import { rejectReason, ImageUploader } from '../src/components/ImageUploader';
 
 const CDN = 'https://picsum.photos/seed';
 
@@ -707,6 +712,208 @@ const modal = (scripted) => {
   check('the loop gives up eventually', MAX_ATTEMPTS <= 60, `${MAX_ATTEMPTS} attempts`);
 
 }
+
+// ── image urls ──────────────────────────────────────────────────────────────
+//
+// The catalogue mixes three kinds of image (see src/lib/imageUrl.js) and the
+// distinction is worth these checks, because the tempting simplification --
+// emit a srcSet for everything -- is measurably worse than doing nothing on one
+// of the three.
+
+const LOCAL_800 = '/media/products/9f1c2b44-1111-2222-3333-444455556666/7a8b9c0d-1111-2222-3333-444455556666@800w.webp';
+const LOCAL_1600 = LOCAL_800.replace('@800w', '@1600w');
+
+check('a stored rendition is recognised by its filename', isRenditionUrl(LOCAL_800));
+check('a widthless key is not -- it has no ladder to address',
+  !isRenditionUrl('/media/products/9f1c2b44-1111-2222-3333-444455556666/7a8b9c0d-1111-2222-3333-444455556666.webp'));
+check('a remote image is not ours', !isRenditionUrl('https://cdn.dummyjson.com/product-images/beauty/1.webp'));
+check('and neither is a non-string', !isRenditionUrl(null) && !isRenditionUrl(undefined) && !isRenditionUrl(42));
+
+// Our own ladder: one stored URL, five candidates, no manifest request.
+{
+  const srcSet = buildSrcSet(LOCAL_1600);
+  const candidates = (srcSet || '').split(', ').map((c) => c.trim());
+  check('a 1600w master gets the whole ladder', candidates.length === VARIANT_WIDTHS.length,
+    `${candidates.length} of ${VARIANT_WIDTHS.length}`);
+  check('every candidate is a real sibling file, not a guess',
+    candidates.every((c) => c.includes('@') && c.includes('w.webp')));
+  check('the ladder runs narrowest to widest', candidates[0].endsWith(' 200w') && candidates.at(-1).endsWith(' 1600w'));
+  check('the master is among the candidates, so src and srcSet agree',
+    srcSet.includes(' 1600w') && LOCAL_1600.endsWith('@1600w.webp'));
+}
+
+// A narrow master must not offer widths that were never written -- those 404.
+{
+  const narrow = buildSrcSet(LOCAL_800) || '';
+  check('an 800w master offers only what was written: 200/400/800',
+    narrow.split(', ').length === 3, `got ${narrow.split(', ').length}`);
+  check('and never the 1200w or 1600w that do not exist for it',
+    !narrow.includes('1200w') && !narrow.includes('1600w'));
+  check('a 400w master offers 200w and 400w and nothing wider',
+    (buildSrcSet(LOCAL_800.replace('@800w', '@400w')) || '').split(', ').length === 2);
+}
+
+// Unsplash resizes for real, so a srcSet is worth the bytes there.
+{
+  const srcSet = buildSrcSet('https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80');
+  check('unsplash gets a srcSet', !!srcSet && srcSet.includes(' 400w'));
+  check('and every candidate asks for webp',
+    srcSet.split(', ').every((c) => c.includes('fm=webp')));
+}
+
+// The measurement that decided all of the above.
+check('dummyjson gets NO srcSet, on purpose',
+  buildSrcSet('https://cdn.dummyjson.com/product-images/beauty/1.webp') === null,
+  '?w=200 returned a byte-identical 63,250-byte file; five candidates would download it five times');
+check('an unknown host gets no srcSet either', buildSrcSet('https://example.com/a.jpg') === null);
+check('nothing in, nothing out', buildSrcSet(null) === null && buildSrcSet('') === null && buildSrcSet(undefined) === null);
+
+// The shapes an `images` column has actually been seen in, in one place.
+check('a real array passes through', imageList(['a', 'b']).length === 2);
+check('a JSON string is parsed', imageList('["a","b"]').length === 2);
+check('null is empty, not a crash', imageList(null).length === 0);
+check('unparseable text is empty, not a crash', imageList('not json').length === 0);
+check('JSON that is not an array is empty', imageList('"5"').length === 0 && imageList('{}').length === 0);
+check('a hole in the list is dropped, not rendered as a broken tile',
+  imageList(['a', null, '', 'b', 7]).join(',') === 'a,b');
+
+// props: the part everyone skips is `sizes`.
+{
+  const lazy = responsiveImageProps(LOCAL_800, { alt: 'A product' });
+  check('below the fold is lazy by default', lazy.loading === 'lazy');
+  check('and does not jump the queue', lazy.fetchPriority === undefined);
+  check('decode is off the main thread for lazy images', lazy.decoding === 'async');
+  check('a srcSet rides along', typeof lazy.srcSet === 'string' && lazy.srcSet.length > 0);
+  check('alt is passed through', lazy.alt === 'A product');
+
+  const hero = responsiveImageProps(LOCAL_800, { alt: 'x', sizes: '100vw', eager: true });
+  check('above the fold is eager', hero.loading === 'eager' && hero.fetchPriority === 'high');
+  check('sizes is emitted only when asked for', lazy.sizes === undefined && hero.sizes === '100vw');
+
+  const sized = responsiveImageProps(LOCAL_800, { width: 800, height: 600 });
+  check('known dimensions are emitted for aspect-ratio reservation',
+    sized.width === 800 && sized.height === 600);
+  const bogus = responsiveImageProps(LOCAL_800, { width: 0, height: 600 });
+  check('a zero width is not emitted, because width=0 is a real CSS width',
+    bogus.width === undefined && bogus.height === undefined);
+}
+
+// A missing url falls back rather than rendering a broken image icon.
+check('no url falls back to the neutral image', responsiveImageProps('').src === FALLBACK_IMAGE);
+check('and a url that only gets a srcSet never loses its src', responsiveImageProps(LOCAL_800).src === LOCAL_800);
+
+// The measuring cache that gives seeded products their aspect ratio.
+{
+  const fake = { currentSrc: LOCAL_800, src: LOCAL_800, naturalWidth: 800, naturalHeight: 600 };
+  measureOnLoad({ currentTarget: fake });
+  check('a loaded image remembers its real size', measuredSize(LOCAL_800)?.width === 800);
+  check('an unknown url measures as nothing rather than guessing', measuredSize('/nope') === null);
+  check('a zero naturalWidth is ignored', measureOnLoad({ currentTarget: { currentSrc: 'x', naturalWidth: 0 } }) === null);
+  check('a missing event target does not throw', measureOnLoad(undefined) === null);
+}
+
+// The config re-sync. If the backend ever changes the ladder, the frontend
+// follows rather than emitting a srcSet full of 404s.
+//
+// This block also restores the shipped ladder before the uploader checks run.
+// `applyUploadConfig` mutates module state, and the uploader assertions below
+// depend on which widths are current -- a 400w preview offers 300w/900w's
+// narrower sibling, not 200w. Leaving the mutation in place made a correct
+// component fail a correct test.
+(async () => {
+  const original = api.get;
+  api.get = async () => ({ data: { data: { variant_widths: [300, 900] } } });
+  await applyUploadConfig();
+  check('the ladder is re-synced from the API', currentVariantWidths().join(',') === '300,900',
+    currentVariantWidths().join(','));
+  check('and the bundle default is left alone as the fallback',
+    VARIANT_WIDTHS.join(',') === '200,400,800,1200,1600');
+  check('a re-synced ladder is honoured immediately, with no reload',
+    (buildSrcSet(LOCAL_800) || '').includes('@300w.webp 300w') &&
+    !(buildSrcSet(LOCAL_800) || '').includes('@200w.webp'));
+
+  api.get = async () => { throw new Error('offline'); };
+  await applyUploadConfig();
+  check('a failed config call keeps the last good ladder',
+    currentVariantWidths().join(',') === '300,900');
+
+  api.get = async () => ({ data: { data: { variant_widths: 'nonsense' } } });
+  await applyUploadConfig();
+  check('a junk ladder is ignored rather than emptying every srcSet',
+    currentVariantWidths().join(',') === '300,900');
+
+  api.get = async () => ({ data: { data: { variant_widths: VARIANT_WIDTHS } } });
+  await applyUploadConfig();
+  check('and the shipped ladder comes back for the checks that follow',
+    currentVariantWidths().join(',') === VARIANT_WIDTHS.join(','));
+
+  api.get = original;
+  runUploadChecks();
+})();
+
+// ── the uploader ────────────────────────────────────────────────────────────
+//
+// This is the first caller of /api/uploads/* in the project's history, so the
+// client half of that contract is as untested as the server half was unused.
+
+function runUploadChecks() {
+  const big = { name: 'huge.png', type: 'image/png', size: 9 * 1024 * 1024 };
+  const pdf = { name: 'spec.pdf', type: 'application/pdf', size: 1000 };
+  const ok = { name: 'p.jpg', type: 'image/jpeg', size: 1000 };
+  const empty = { name: 'e.png', type: 'image/png', size: 0 };
+
+  check('a good image is not refused', rejectReason(ok) === null);
+  check('an oversized image is named and sized',
+    !!rejectReason(big) && rejectReason(big).includes('huge.png') && rejectReason(big).includes('5 MB'));
+  check('a PDF is refused with the accepted list',
+    !!rejectReason(pdf) && rejectReason(pdf).includes('JPEG'));
+  check('an empty file is refused', !!rejectReason(empty));
+  check('a file the browser could not type is refused, not assumed',
+    !!rejectReason({ name: 'x', type: '', size: 10 }));
+
+  // The component has to render at all: the first render is what a seller sees
+  // before choosing anything, and it is the state with the most branches in it.
+  // `squashed` because "{urls.length} / {max}" arrives comment-split.
+  const blank = squashed(renderToString(
+    <MemoryRouter><ImageUploader value={[]} onChange={() => {}} /></MemoryRouter>
+  ));
+  check('an empty uploader renders and offers a drop target',
+    blank.includes('Drop images here, or click to choose'));
+  check('and starts at zero, not at one', blank.includes('0 / 6'));
+  check('and shows no preview grid for a product with no images', !blank.includes('src='));
+  check('an empty uploader is still reachable from the keyboard', blank.includes('tabindex="0"'));
+
+  const withImages = squashed(renderToString(
+    <MemoryRouter>
+      <ImageUploader
+        value={['/media/products/s/1@400w.webp', 'https://cdn.dummyjson.com/x.webp']}
+        onChange={() => {}}
+      />
+    </MemoryRouter>
+  ));
+  check('an existing image is shown with a preview', withImages.includes('src="https://cdn.dummyjson.com/x.webp"'));
+  check('the first image is marked as the catalogue one', withImages.includes('Main'));
+  check('the count reflects the existing images', withImages.includes('2 / 6'));
+  // React emits the camelCase prop in server output; the browser gets the
+  // lowercase attribute. Asserting the wrong one is how a srcSet check silently
+  // stops testing anything.
+  check('a local rendition gets a srcSet in the preview too',
+    withImages.includes('srcSet=') && withImages.includes('@200w.webp 200w'));
+  check('a remote image gets no srcSet, only a src',
+    withImages.includes('src="https://cdn.dummyjson.com/x.webp"') &&
+    !withImages.includes('cdn.dummyjson.com/x.webp 200w'));
+  check('the first preview is eager and the second is not',
+    withImages.includes('loading="eager"') && withImages.includes('loading="lazy"'));
+  check('every preview can be removed', withImages.includes('aria-label="Remove image 1"') &&
+    withImages.includes('aria-label="Remove image 2"'));
+  check('and reordered, with the ends pinned',
+    withImages.includes('aria-label="Move earlier"') && withImages.includes('aria-label="Move later"'));
+  check('the file input accepts only the formats the API re-encodes',
+    withImages.includes('accept="image/jpeg,image/png,image/webp,image/gif,image/avif"'));
+  check('the size ceiling is stated before the seller picks a file',
+    withImages.includes('Up to 5 MB each'));
+}
+
 
 runPaymentChecks().then(() => {
 console.log(`\n${failed === 0 ? 'PASS' : `FAIL (${failed} check${failed === 1 ? '' : 's'})`}`);

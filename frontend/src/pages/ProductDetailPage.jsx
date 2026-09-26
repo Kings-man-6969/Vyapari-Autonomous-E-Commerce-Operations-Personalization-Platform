@@ -25,6 +25,12 @@ import api from '../services/api';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { ProductCard } from '../components/ProductCard';
+import {
+  FALLBACK_IMAGE,
+  imageList,
+  measureOnLoad,
+  responsiveImageProps
+} from '../lib/imageUrl';
 
 export const ProductDetailPage = () => {
   const { id } = useParams();
@@ -260,10 +266,8 @@ export const ProductDetailPage = () => {
     );
   }
 
-  const images = Array.isArray(product.images) 
-    ? product.images 
-    : (typeof product.images === 'string' ? JSON.parse(product.images || '[]') : []);
-  const mainImage = images[selectedImage] || images[0] || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
+  const images = imageList(product.images);
+  const mainImage = images[selectedImage] || images[0] || FALLBACK_IMAGE;
 
   // ---- Options ---------------------------------------------------------
   // The API sends the full option set plus the axes derived from it, so the
@@ -383,7 +387,13 @@ export const ProductDetailPage = () => {
                       transition: 'all 0.15s ease'
                     }}
                   >
-                    <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    {/* Thumbnails are lazy and tiny: nothing above the fold here,
+                        and a five-image gallery would otherwise fetch five full
+                        renditions the customer probably never looks at. */}
+                    <img
+                      {...responsiveImageProps(img, { alt: '', sizes: '80px' })}
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    />
                   </button>
                 ))}
               </div>
@@ -412,9 +422,16 @@ export const ProductDetailPage = () => {
                 </div>
               )}
 
+              {/* The one image on this page that is above the fold and decides
+                  the Largest Contentful Paint, so it is eager and asks for high
+                  priority. Everything else on the PDP waits. */}
               <img
-                src={mainImage}
-                alt={product.title}
+                {...responsiveImageProps(mainImage, {
+                  alt: product.title,
+                  sizes: '(max-width: 768px) 100vw, 50vw',
+                  eager: true
+                })}
+                onLoad={measureOnLoad}
                 style={{
                   width: '100%',
                   height: '100%',

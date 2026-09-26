@@ -194,6 +194,16 @@ LIMITS = {
     "reviews.create": (5, 3600),    # 5 per hour: review spam
     # Infra.
     "uploads.presign": (30, 60),    # each call mints storage credentials
+    # Bytes actually written. Tighter per minute than presign because this is the
+    # route that decodes an image on the CPU and writes a rendition ladder to
+    # disk: 40 is a seller importing a catalogue at a realistic clip, and it
+    # caps the decode work one account can queue.
+    "uploads.object": (40, 60),
+    "uploads.delete": (60, 3600),
+    # Public capability read, so the storefront can build a srcSet that matches
+    # the widths the API actually wrote. Cheap, but it is unauthenticated and
+    # answers on every cold cache fill.
+    "uploads.config": (60, 60),
     "telemetry.errors": (30, 60),   # client error reporting can loop
     "ai.interactions": (240, 60),   # 4 events per second sustained
 }

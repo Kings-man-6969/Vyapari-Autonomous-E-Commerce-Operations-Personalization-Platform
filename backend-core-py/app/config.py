@@ -53,8 +53,50 @@ class Settings(BaseSettings):
     RUN_ORDER_SWEEP: bool = True
     ORDER_SWEEP_INTERVAL_SECONDS: int = 300
 
-    # S3 Storage
+    # ------------------------------------------------------------------
+    # Media storage
+    # ------------------------------------------------------------------
+    # "local" writes to MEDIA_ROOT on the API container and serves /media.
+    # That is a real, working provider with no credentials -- good enough for
+    # development, a single-container self-host, or a demo, and it is the only
+    # one that is exercisable end to end today.
+    #
+    # "s3" is the production path: the browser PUTs bytes straight to the bucket
+    # with a presigned URL, so image bytes never transit the API. It needs
+    # S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY. Until those are real it refuses with
+    # 503 STORAGE_NOT_CONFIGURED rather than handing back a URL that 403s -- a
+    # presign that cannot work is worse than an honest error, because the seller
+    # only finds out after they have picked their file.
+    STORAGE_PROVIDER: str = "local"
+
+    # local provider
+    MEDIA_ROOT: str = "./media"
+    MEDIA_PUBLIC_BASE: str = "/media"
+
+    # s3 provider
     S3_BUCKET_NAME: str = "vyapari-products"
+    S3_REGION: str = "ap-south-1"
+    S3_ENDPOINT_URL: str | None = None       # set for MinIO / R2 / LocalStack
+    S3_FORCE_PATH_STYLE: bool = False
+    S3_ACCESS_KEY_ID: str | None = None
+    S3_SECRET_ACCESS_KEY: str | None = None
+    # Public read base (CloudFront distribution, R2 public bucket, CDN host).
+    # Left empty the provider falls back to the virtual-hosted bucket URL.
+    S3_PUBLIC_BASE_URL: str | None = None
+
+    # Every stored image is re-encoded to WebP and also written at each of these
+    # widths, named "{uuid}@{width}w.webp" next to the master. The width in the
+    # filename is what lets the browser build a srcSet from a single stored URL
+    # with no extra lookup -- see app/storage/local.py. Frontend mirrors this
+    # list via GET /api/uploads/config; IMAGE_VARIANT_WIDTHS is the source.
+    IMAGE_VARIANT_WIDTHS: list[int] = [200, 400, 800, 1200, 1600]
+    IMAGE_MASTER_WIDTH: int = 1600
+    # PNG with alpha (a logo, a pack shot on transparency) is kept as PNG;
+    # re-encoding it to WebP would flatten the alpha channel.
+    IMAGE_WEBP_QUALITY: int = 82
+    # Decompression-bomb guard. Pillow refuses anything over this many pixels
+    # unless told otherwise, which is the whole point of the check.
+    IMAGE_MAX_PIXELS: int = 50_000_000
 
     # Transactional email. No provider is wired yet — see app/email.py, which
     # logs instead of sending. Set EMAIL_PROVIDER (and EMAIL_API_KEY for

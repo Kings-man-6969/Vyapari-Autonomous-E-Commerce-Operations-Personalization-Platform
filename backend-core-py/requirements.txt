@@ -9,3 +9,10 @@ bcrypt==4.2.1
 httpx==0.28.1
 python-dotenv==1.0.1
 redis==5.2.1
+# Media pipeline. Pillow decodes, validates and re-encodes every seller upload
+# (app/storage/images.py); boto3 is imported lazily and only when
+# STORAGE_PROVIDER=s3, so a local-media deployment never loads it.
+# python-multipart parses the multipart body of POST /api/uploads/object.
+Pillow==12.3.0
+boto3==1.35.90
+python-multipart==0.0.20
