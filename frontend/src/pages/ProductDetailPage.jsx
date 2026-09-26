@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
+import VariantPicker from '../components/VariantPicker';
 import { 
   ShoppingBag, 
   Star, 
@@ -27,6 +28,7 @@ import { ProductCard } from '../components/ProductCard';
 
 export const ProductDetailPage = () => {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { addToCart } = useCart();
   const { user, isCustomer, isAuthenticated } = useAuth();
@@ -37,6 +39,10 @@ export const ProductDetailPage = () => {
   const [reviewsData, setReviewsData] = useState({ total: 0, average_rating: 0, breakdown: {}, reviews: [] });
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
+  // The option the customer has chosen, or null on a product with no options.
+  // Held as the whole option object rather than an id so the price and stock
+  // below are read off the same row the bag will be built from.
+  const [selectedVariant, setSelectedVariant] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [addedNotice, setAddedNotice] = useState(false);
@@ -77,12 +83,24 @@ export const ProductDetailPage = () => {
         setSelectedImage(0);
         setQuantity(1);
         setPincodeResult(null);
+        setSelectedVariant(null);
 
         // 1. Fetch Product
         const res = await api.get(`/products/${id}`);
         if (res.data?.success) {
           const prodData = res.data.data.product;
           setProduct(prodData);
+
+          // Seed the choice from ?variant=, so a link to a specific size opens on
+          // that size. Done here rather than in the picker because the picker
+          // owns the choice once the customer starts changing it, and seeding it
+          // from two places would fight. Falls through to the default option
+          // when the id is unknown or the product has no options.
+          const wanted = searchParams.get('variant');
+          if (wanted && Array.isArray(prodData.variants)) {
+            const found = prodData.variants.find((v) => v.id === wanted);
+            if (found) setSelectedVariant(found);
+          }
 
           // 2. Fetch Team A AI Similar Products via recommendation service
           try {
@@ -127,14 +145,41 @@ export const ProductDetailPage = () => {
   };
 
   const handleAddToCart = async () => {
-    await addToCart(product.id, quantity);
+    // The option id goes with the line, not just the quantity. Omitting it would
+    // let the server fall back to the default option, and a customer who picked
+    // Large would receive Medium -- a bag that does not match what they clicked
+    // is worse than an error, because nothing looks wrong.
+    await addToCart(product.id, quantity, selectedVariant?.id || null);
     setAddedNotice(true);
     setTimeout(() => setAddedNotice(false), 3000);
   };
 
   const handleBuyNow = async () => {
-    await addToCart(product.id, quantity);
+    await addToCart(product.id, quantity, selectedVariant?.id || null);
     navigate('/checkout');
+  };
+
+  /**
+   * Records the customer's choice and mirrors it into the URL.
+   *
+   * The URL half is what makes a choice shareable and survivable: the customer
+   * can reload, or send the link to someone asking "where did you get the
+   * indigo one in XL?", and land on that option rather than the default. The
+   * other axes are dropped from the query because the option id already implies
+   * them -- a second source of truth for the same fact is a second thing to get
+   * out of step.
+   */
+  const handleVariantChange = (variant, meta = {}) => {
+    setSelectedVariant(variant || null);
+    setQuantity(1);
+    // The picker's opening choice is not a customer action, so it updates what
+    // the page shows but not the address bar. Otherwise every product view
+    // rewrote its own URL on load, including a shared link whose ?variant= is
+    // already correct.
+    if (!variant || meta.seeded) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('variant', variant.id);
+    setSearchParams(next, { replace: true });
   };
 
   const handleHelpfulClick = async (reviewId) => {
@@ -219,8 +264,38 @@ export const ProductDetailPage = () => {
     ? product.images 
     : (typeof product.images === 'string' ? JSON.parse(product.images || '[]') : []);
   const mainImage = images[selectedImage] || images[0] || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
-  const isOutOfStock = product.status === 'out_of_stock' || product.stock_qty <= 0;
-  const isLowStock = !isOutOfStock && product.stock_qty <= 5;
+
+  // ---- Options ---------------------------------------------------------
+  // The API sends the full option set plus the axes derived from it, so the
+  // picker needs no second request. A product with no options gets an empty
+  // list and the picker renders nothing -- a one-option control is noise, and
+  // the backfilled default row exists for the purchase path, not for the UI.
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  const axes = Array.isArray(product.axes) ? product.axes : [];
+  const hasOptions = axes.length > 0 && variants.length > 0;
+
+  // The chosen option is the single source of truth for what this page shows.
+  // Everything downstream reads effectivePrice/effectiveStock rather than the
+  // product row, so the four places that print a price or a stock count cannot
+  // disagree with each other, or with the bag.
+  const chosen = selectedVariant || null;
+  const effectivePrice = chosen?.price ?? product.price;
+  const effectiveCompare = chosen?.compare_at_price ?? product.compare_at_price;
+  const effectiveStock = chosen ? chosen.stock_qty : product.stock_qty;
+  // Three states, not two, and collapsing them is how a variant picker ends up
+  // telling a customer a shirt is out of stock before they have picked a size.
+  //   needsChoice      -- options exist, none chosen yet
+  //   chosenOutOfStock -- the option they picked cannot be bought
+  //   otherwise        -- buyable
+  const needsChoice = hasOptions && !chosen;
+  const chosenOutOfStock = Boolean(chosen) && !chosen.in_stock;
+  const isOutOfStock = product.status === 'out_of_stock' || effectiveStock <= 0 || chosenOutOfStock;
+  const isLowStock = !isOutOfStock && !needsChoice && effectiveStock <= 5;
+  // A product with options cannot be bought without naming one. The server would
+  // accept a missing option id and fall back to its default, which is precisely
+  // the silent substitution this avoids -- so the buttons wait, and the picker
+  // is already open on a buyable option.
+  const canBuy = !isOutOfStock && !needsChoice;
 
   let attrs = {};
   try {
@@ -238,8 +313,8 @@ export const ProductDetailPage = () => {
     ? reviewsData.total 
     : (attrs.reviews_count || 1420);
 
-  const priceNum = parseFloat(product.price);
-  const compareNum = product.compare_at_price ? parseFloat(product.compare_at_price) : 0;
+  const priceNum = parseFloat(effectivePrice);
+  const compareNum = effectiveCompare ? parseFloat(effectiveCompare) : 0;
   const discountPercent = compareNum > priceNum ? Math.round(((compareNum - priceNum) / compareNum) * 100) : 0;
 
   const badge = attrs.badge || (discountPercent >= 20 ? `${discountPercent}% OFF` : 'Curated');
@@ -482,14 +557,29 @@ export const ProductDetailPage = () => {
               )}
             </div>
 
+            {/* Option picker. Renders nothing for a product with no options,
+                which is the common case for the whole existing catalogue. */}
+            {hasOptions && (
+              <VariantPicker
+                axes={axes}
+                variants={variants}
+                onChange={handleVariantChange}
+                initialVariantId={selectedVariant?.id}
+              />
+            )}
+
             {/* Stock Status */}
-            {isOutOfStock ? (
+            {needsChoice ? (
+              <div style={{ color: 'var(--color-icy-steel)', fontSize: '12px', fontWeight: 600, marginBottom: '16px' }}>
+                Choose an option to see availability.
+              </div>
+            ) : isOutOfStock ? (
               <div style={{ padding: '8px 12px', backgroundColor: 'rgba(244, 63, 94, 0.15)', color: 'var(--color-error)', borderRadius: '6px', fontSize: '12px', fontWeight: 600, marginBottom: '16px', border: '1px solid rgba(244, 63, 94, 0.3)' }}>
-                Currently Out of Stock
+                {chosenOutOfStock ? 'That combination is out of stock' : 'Currently Out of Stock'}
               </div>
             ) : isLowStock ? (
               <div style={{ color: 'var(--color-warning)', fontSize: '12px', fontWeight: 600, marginBottom: '16px' }}>
-                Only {product.stock_qty} left in stock - order soon.
+                Only {effectiveStock} left in stock - order soon.
               </div>
             ) : (
               <div style={{ color: 'var(--color-icy-steel)', fontSize: '12px', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -497,8 +587,9 @@ export const ProductDetailPage = () => {
               </div>
             )}
 
-            {/* Quantity Selector */}
-            {!isOutOfStock && (
+            {/* Quantity Selector. Hidden until there is a buyable option, since
+                its ceiling is the chosen option's stock, not the product's. */}
+            {canBuy && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
                 <span style={{ fontSize: '12px', color: 'var(--color-ash-label)' }}>Quantity:</span>
                 <select
@@ -515,7 +606,7 @@ export const ProductDetailPage = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  {[...Array(Math.min(10, product.stock_qty || 5))].map((_, i) => (
+                  {[...Array(Math.min(10, effectiveStock || 5))].map((_, i) => (
                     <option key={i + 1} value={i + 1}>{i + 1}</option>
                   ))}
                 </select>
@@ -527,7 +618,7 @@ export const ProductDetailPage = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
                 <button
                   onClick={handleAddToCart}
-                  disabled={isOutOfStock}
+                  disabled={!canBuy}
                   className="btn-primary"
                   style={{ width: '100%', padding: '12px' }}
                 >
@@ -536,7 +627,7 @@ export const ProductDetailPage = () => {
 
                 <button
                   onClick={handleBuyNow}
-                  disabled={isOutOfStock}
+                  disabled={!canBuy}
                   className="btn-outline"
                   style={{ width: '100%', padding: '11px' }}
                 >
@@ -841,13 +932,13 @@ export const ProductDetailPage = () => {
             <div style={{ fontSize: '15px', fontWeight: 600, color: '#ffffff' }}>
               ₹{priceNum.toLocaleString('en-IN')}
             </div>
-            <div style={{ fontSize: '11px', color: isOutOfStock ? 'var(--color-error)' : 'var(--color-icy-steel)' }}>
-              {isOutOfStock ? 'Out of Stock' : 'In Stock'}
+            <div style={{ fontSize: '11px', color: canBuy ? 'var(--color-icy-steel)' : 'var(--color-error)' }}>
+              {needsChoice ? 'Choose an option' : isOutOfStock ? 'Out of Stock' : 'In Stock'}
             </div>
           </div>
           <button
             onClick={handleAddToCart}
-            disabled={isOutOfStock}
+            disabled={!canBuy}
             className="btn-primary"
             style={{ padding: '10px 20px', fontSize: '12px' }}
           >

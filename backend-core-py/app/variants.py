@@ -191,8 +191,16 @@ def describe_attributes(attributes: Any) -> str:
     Large" states the obvious twice: the axis names are on the picker the
     customer just used, and on the product title line next to it. What a line
     item has to convey is which of the choices was made, not what the choices
-    were called. Axis order follows the order the keys were written, which for
-    a product created through the editor is the order the seller listed them in.
+    were called.
+
+    Axis order is jsonb's, not the seller's. jsonb does not preserve the order
+    keys were written in; it reorders them by length and then bytewise, so
+    {"size": "XL", "colour": "Indigo"} comes back as size first and prints
+    "XL / Indigo" however the seller listed them. Making the order survive would
+    mean storing the axes as an ordered array instead of an object, which is a
+    schema change for the sake of which of two values a line item mentions
+    first. The order is stable for a given product, which is what actually
+    matters -- the same line always reads the same way.
 
     Returns "" for an empty set rather than "/", so a plain product's line item
     shows no option at all instead of a stray separator.

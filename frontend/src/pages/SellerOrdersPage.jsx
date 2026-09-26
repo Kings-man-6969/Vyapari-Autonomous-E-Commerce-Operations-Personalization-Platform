@@ -203,6 +203,14 @@ export const SellerOrdersPage = () => {
                         {items.map((item, idx) => (
                           <div key={idx} style={{ fontSize: '12px', color: 'var(--color-tide-pool)' }}>
                             <span style={{ fontWeight: 600, color: '#ffffff' }}>{item.quantity}x</span> {item.product_title}
+                            {/* The size is what gets picked, packed and shipped. A
+                                line reading "2x Cotton Kurta" with no size is a
+                                return. */}
+                            {item.variant_label && (
+                              <span style={{ marginLeft: '6px', color: 'var(--color-silver-glow)' }}>
+                                ({item.variant_label})
+                              </span>
+                            )}
                           </div>
                         ))}
                       </div>

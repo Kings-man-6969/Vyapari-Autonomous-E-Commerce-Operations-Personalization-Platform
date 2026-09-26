@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { CheckCircle2, Clock, Truck, Package, ArrowLeft, Star, ShieldCheck, Zap } from 'lucide-react';
 import api from '../services/api';
+import LineOption from '../components/LineOption';
 
 export const OrderDetailPage = () => {
   const { id } = useParams();
@@ -205,6 +206,15 @@ export const OrderDetailPage = () => {
                     <img src={img} alt={item.title} style={{ width: '60px', height: '60px', borderRadius: '8px', objectFit: 'contain', backgroundColor: 'var(--color-obsidian-graphite)', border: '1px solid var(--color-border-steel)', padding: '4px' }} />
                     <div>
                       <h4 style={{ fontWeight: 500, fontSize: '14px', color: '#ffffff', margin: 0 }}>{item.title}</h4>
+                      {/* What was bought, as it was bought. The API snapshots the
+                          attributes onto the order line, so this survives the
+                          seller renaming the option or retiring it -- and says so
+                          rather than quietly showing today's name for a choice
+                          made last year. */}
+                      <LineOption
+                        label={item.variant_label}
+                        note={item.variant_renamed ? 'renamed by the seller since' : null}
+                      />
                       <p style={{ fontSize: '12px', color: 'var(--color-silver-glow)', opacity: 0.75, marginTop: '4px', margin: 0 }}>
                         Sold by <strong style={{ color: '#ffffff' }}>{item.store_name}</strong> • Qty: {item.quantity}
                       </p>

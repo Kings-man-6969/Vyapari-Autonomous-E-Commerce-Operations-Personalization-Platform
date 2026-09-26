@@ -27,6 +27,7 @@ import { ForgotPasswordPage } from '../src/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from '../src/pages/ResetPasswordPage';
 import { LoginPage } from '../src/pages/LoginPage';
 import { evaluatePassword } from '../src/lib/passwordPolicy';
+import VariantPicker, { resolveChoice } from '../src/components/VariantPicker';
 
 const CDN = 'https://picsum.photos/seed';
 
@@ -299,6 +300,98 @@ for (const p of reject) {
 }
 check('common-password detection is case-insensitive', evaluatePassword('PASSWORD').common);
 check('the reason for a rejection is reported, not just the verdict', evaluatePassword('abc').checks.filter((c) => !c.ok).length === 2);
+
+// ── the option picker ────────────────────────────────────────────────────────
+//
+// resolveChoice is exported precisely so the awkward part can be tested without a
+// browser: useEffect never runs under renderToString, so the seeding logic is
+// untestable here, but the rule that decides which option a set of clicks means
+// is pure and is where the bugs live.
+
+console.log('\nvariant picker: resolving a choice');
+
+const v = (id, attributes, stock, over = {}) => ({
+  id, attributes, stock_qty: stock, in_stock: stock > 0 && over.is_active !== false,
+  is_active: over.is_active !== false, is_default: !!over.is_default, price: over.price ?? 100,
+  sku: over.sku ?? null,
+});
+
+// size x colour, with Indigo Large sold out.
+const RUN = [
+  v('s-sm', { size: 'S', colour: 'Indigo' }, 4, { is_default: true }),
+  v('s-md', { size: 'M', colour: 'Indigo' }, 2),
+  v('s-lg', { size: 'L', colour: 'Indigo' }, 0),
+  v('s-mw', { size: 'M', colour: 'Madder' }, 6, { price: 120 }),
+];
+
+check('an empty choice lands on a buyable option, not the first row',
+  resolveChoice(RUN, {})?.id === 's-sm', resolveChoice(RUN, {})?.id);
+
+check('a complete choice resolves to that option',
+  resolveChoice(RUN, { size: 'M', colour: 'Madder' })?.id === 's-mw');
+
+check('a partial choice resolves within what is chosen',
+  resolveChoice(RUN, { size: 'S' })?.id === 's-sm');
+
+// The sold-out case. Returning the out-of-stock row rather than null is
+// deliberate: the page has to be able to say "that combination is gone" instead
+// of reverting the customer's clicks.
+check('a sold-out combination resolves to the out-of-stock option, not null',
+  resolveChoice(RUN, { size: 'L', colour: 'Indigo' })?.id === 's-lg'
+    && resolveChoice(RUN, { size: 'L', colour: 'Indigo' }).in_stock === false);
+
+check('a combination that does not exist resolves to null',
+  resolveChoice(RUN, { size: 'XXL', colour: 'Indigo' }) === null);
+
+// Preferring a buyable option matters on a product with a sold-out default:
+// without it, opening the picker on the default shows a price for something
+// nobody can buy.
+const STALE_DEFAULT = [
+  v('a', { size: 'M' }, 0, { is_default: true }),
+  v('b', { size: 'L' }, 3),
+];
+check('a sold-out default does not win over an available option',
+  resolveChoice(STALE_DEFAULT, {})?.id === 'b', resolveChoice(STALE_DEFAULT, {})?.id);
+
+check('no options resolves to null', resolveChoice([], {}) === null);
+check('a missing options list resolves to null rather than throwing',
+  resolveChoice(undefined, {}) === null);
+
+console.log('\nvariant picker: rendering');
+
+// useEffect does not run here, so choice is {} -- which is itself the case
+// worth rendering, since it is what a customer's first paint of the picker is.
+const pickerHtml = squashed(
+  renderToString(
+    <VariantPicker
+      axes={[
+        { key: 'size', label: 'Size', values: [{ value: 'S' }, { value: 'M' }, { value: 'L' }] },
+        { key: 'colour', label: 'Colour', values: [{ value: 'Indigo' }, { value: 'Madder' }] },
+      ]}
+      variants={RUN}
+      onChange={() => {}}
+    />
+  )
+);
+
+check('axis labels render', pickerHtml.includes('Size') && pickerHtml.includes('Colour'));
+check('every value renders', ['>S<', '>M<', '>L<', '>Indigo<', '>Madder<'].every((n) => pickerHtml.includes(n)));
+
+// Sold out, so Large cannot be picked before a size and colour are chosen. This
+// is the assertion that a naive `available > 0` check would also pass, which is
+// the point: the interesting half is exercised in resolveChoice above, where the
+// other axis actually filters.
+const disabledPills = (pickerHtml.match(/cursor:not-allowed/g) || []).length;
+check('a sold-out value is not selectable', disabledPills >= 1, `${disabledPills} disabled`);
+
+check('an available product says nothing about being out of stock',
+  !pickerHtml.includes('This combination is out of stock'));
+
+console.log('\nvariant picker: a product with no options');
+const bareHtml = squashed(
+  renderToString(<VariantPicker axes={[]} variants={[{ id: 'x', attributes: {}, stock_qty: 3, in_stock: true }]} />)
+);
+check('renders nothing at all, not an empty control', bareHtml.trim() === '', JSON.stringify(bareHtml.slice(0, 60)));
 
 console.log(`\n${failed === 0 ? 'PASS' : `FAIL (${failed} check${failed === 1 ? '' : 's'})`}`);
 if (failed > 0) {

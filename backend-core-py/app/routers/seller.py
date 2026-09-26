@@ -17,6 +17,7 @@ from app.auth.dependencies import require_auth, require_role
 from app.config import settings
 from app.db import get_db, get_pool
 from app.utils import to_valid_uuid
+from app.variants import describe_attributes
 
 router = APIRouter()
 
@@ -390,7 +391,10 @@ async def seller_orders(status: str | None = None, user: dict = _seller_or_admin
                  'product_id', oi.product_id,
                  'product_title', p.title,
                  'quantity', oi.quantity,
-                 'unit_price', oi.price_at_purchase
+                 'unit_price', oi.price_at_purchase,
+                 'variant_id', oi.variant_id,
+                 'variant_snapshot', oi.variant_snapshot,
+                 'sku_at_purchase', oi.sku_at_purchase
                )) AS items
         FROM orders o
         JOIN order_items oi ON o.id = oi.order_id
@@ -405,7 +409,32 @@ async def seller_orders(status: str | None = None, user: dict = _seller_or_admin
     sql += " GROUP BY o.id, o.shipping_address, u.name, u.email ORDER BY o.created_at DESC"
 
     rows = await db.fetch(sql, *params)
-    return {"success": True, "data": [dict(r) for r in rows]}
+
+    # Two things happen here that the SQL cannot.
+    #
+    # json_agg comes back as a *string* on this pool, which has no jsonb codec
+    # registered. The order table guards on Array.isArray(items) and so treated
+    # every order as having no items at all -- the seller was shown an empty
+    # Items column on every row and the customer was shown nothing to complain
+    # about. Parsing it here fixes that without a global codec change, which
+    # would double-parse the routes that already json.loads what they read.
+    #
+    # And the option label is formatted by describe_attributes, not by SQL.
+    # jsonb does not preserve key order -- it reorders by length then bytewise --
+    # so a SQL concatenation would assemble the values in an order nobody
+    # chooses and cannot change. The format is decided once, in Python, and this
+    # is the fourth caller.
+    out = []
+    for r in rows:
+        row = dict(r)
+        raw_items = row.get("items")
+        items = json.loads(raw_items) if isinstance(raw_items, (str, bytes)) else (raw_items or [])
+        for item in items:
+            item["variant_label"] = describe_attributes(item.pop("variant_snapshot", None))
+        row["items"] = items
+        out.append(row)
+
+    return {"success": True, "data": out}
 
 
 class FulfillOrderBody(BaseModel):

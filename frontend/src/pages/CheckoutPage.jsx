@@ -4,6 +4,7 @@ import { ShieldCheck, Lock, ArrowLeft, CheckCircle2, CreditCard, ShoppingBag, Za
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import LineOption from '../components/LineOption';
 
 export const CheckoutPage = () => {
   const { items, totalAmount, clearCart } = useCart();
@@ -77,11 +78,18 @@ export const CheckoutPage = () => {
 
     try {
       // 1. Create order with backend atomic transaction (SELECT FOR UPDATE)
+      //
+      // The option id has to come from the bag line, not be left off. The server
+      // accepts an order line with no option and falls back to the product's
+      // default -- so without this, a customer who picked Large is charged for
+      // and shipped Medium, and nothing on the screen looks wrong. The bag is
+      // the record of the choice; the order has to be built from it.
       const orderPayload = {
         shipping_address: address,
         items: items.map(i => ({
           product_id: i.product_id,
-          quantity: i.quantity
+          quantity: i.quantity,
+          ...(i.variant_id ? { variant_id: i.variant_id } : {})
         }))
       };
 
@@ -324,6 +332,12 @@ export const CheckoutPage = () => {
                 <div key={i.cart_item_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', paddingBottom: '12px', borderBottom: '1px solid var(--color-border-steel)' }}>
                   <div style={{ flex: 1, paddingRight: '12px' }}>
                     <p style={{ fontWeight: 500, color: '#ffffff', margin: 0, fontSize: '13px' }}>{i.title}</p>
+                    {/* The customer chose this option two screens ago; restating it
+                        here is what makes the review step checkable. */}
+                    <LineOption
+                      label={i.variant_label}
+                      note={i.option_retired ? 'This option is no longer available' : null}
+                    />
                     <span style={{ fontSize: '11px', color: 'var(--color-ash-label)' }}>Qty: {i.quantity}</span>
                   </div>
                   <span style={{ fontWeight: 600, color: '#ffffff' }}>

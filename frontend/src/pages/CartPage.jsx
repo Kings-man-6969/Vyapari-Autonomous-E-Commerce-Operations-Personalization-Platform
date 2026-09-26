@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Trash2, ArrowRight, ShoppingBag, ShieldCheck, Lock, ChevronRight, Zap } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
+import LineOption from '../components/LineOption';
 
 export const CartPage = () => {
   const { items, totalAmount, updateQuantity, removeFromCart, clearCart } = useCart();
@@ -136,6 +137,13 @@ export const CartPage = () => {
                         <Trash2 size={16} />
                       </button>
                     </div>
+
+                    {/* Which option this line is. A bag holding one shirt in two
+                        sizes is otherwise two identical rows. */}
+                    <LineOption
+                      label={item.variant_label}
+                      note={item.option_retired ? 'This option was retired — pick another to check out' : null}
+                    />
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--color-ash-label)', marginBottom: '16px' }}>
                       <span>Merchant: <strong style={{ color: 'var(--color-silver-glow)' }}>{item.store_name}</strong></span>

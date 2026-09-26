@@ -38,11 +38,23 @@ export const CartProvider = ({ children }) => {
     fetchCart();
   }, [user, isAuthenticated]);
 
-  const addToCart = async (productId, quantity = 1) => {
+  /**
+   * Adds a line to the bag.
+   *
+   * `variantId` is the option the customer chose on the PDP. It is optional and
+   * it is not merely a passthrough: a product with options will fall back to its
+   * default server-side, which is what keeps a buy button working for a client
+   * that has no picker yet. A picker that sends the wrong id is rejected rather
+   * than silently corrected, so the bag cannot end up holding a size nobody
+   * picked.
+   */
+  const addToCart = async (productId, quantity = 1, variantId = null) => {
     const resolvedId = typeof productId === 'object' && productId !== null 
       ? (productId.id || productId.product_id) 
       : productId;
-    await api.post('/cart/items', { product_id: resolvedId, quantity });
+    const body = { product_id: resolvedId, quantity };
+    if (variantId) body.variant_id = variantId;
+    await api.post('/cart/items', body);
     await fetchCart();
   };
 

@@ -1048,6 +1048,70 @@ class ProductCreateVariantTests(_Base):
         self.assertEqual(detail["variant_count"], 0)
 
 
+# ── the seller's side ────────────────────────────────────────────────────────
+
+@skip_without_db
+class SellerFacingLineTests(_Base):
+    """
+    The seller's order list is the page a seller packs a box from. It is the one
+    place the option has to appear for the transaction to work at all: a line
+    reading "2x Cotton Kurta" with no size is a return.
+    """
+
+    ADDRESS = {"line1": "12 Gopalbari", "city": "Jaipur", "pincode": "302001", "country": "India"}
+
+    async def place_order(self, items):
+        return await self.api(
+            "POST", "/api/orders",
+            json={"shipping_address": self.ADDRESS, "items": items},
+        )
+
+    async def seller_orders(self):
+        return await self.client.get(
+            "/api/seller/orders",
+            headers={**self.seller_headers, "X-Forwarded-For": self.ip},
+        )
+
+    async def test_the_seller_sees_the_option_on_each_line(self):
+        product = await self.make_product(price=100.0)
+        big = await self.make_variant(
+            product, {"size": "XL", "colour": "Indigo"}, price=275.0, stock=5, is_default=True
+        )
+        await self.set_has_variants(product, True)
+        r = await self.place_order([{"product_id": str(product), "variant_id": str(big), "quantity": 2}])
+        self.assertEqual(r.status_code, 201, r.text)
+
+        res = await self.seller_orders()
+        self.assertEqual(res.status_code, 200, res.text)
+        rows = res.json()["data"]
+        self.assertEqual(len(rows), 1)
+
+        # The aggregate arrives parsed. json_agg is a *string* on this pool, and
+        # the order table guards on Array.isArray(items) -- so before the router
+        # parsed it, every seller's order list showed an empty Items column and
+        # nothing anywhere said so.
+        items = rows[0]["items"]
+        self.assertIsInstance(items, list, f"items came back as {type(items).__name__}")
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["quantity"], 2)
+
+        # Values only, formatted by the same function the bag and the order page
+        # use. jsonb does not preserve key order -- it reorders by length, so
+        # "size" (4) precedes "colour" (7) however the seller listed them. That
+        # could not be assembled in SQL, and it is why the label is built here
+        # rather than in the aggregate.
+        self.assertEqual(items[0]["variant_label"], "XL / Indigo")
+
+    async def test_a_plain_product_line_has_no_option_label(self):
+        product = await self.make_product(price=100.0, stock=4)
+        r = await self.place_order([{"product_id": str(product), "quantity": 1}])
+        self.assertEqual(r.status_code, 201, r.text)
+
+        items = (await self.seller_orders()).json()["data"][0]["items"]
+        self.assertEqual(items[0]["variant_label"], "")
+        self.assertIsNone(items[0]["variant_id"])
+
+
 # ── pure helpers ─────────────────────────────────────────────────────────────
 
 class VariantHelperTests(unittest.TestCase):
