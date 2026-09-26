@@ -925,6 +925,29 @@ button:active {
   to { opacity: 1; }
 }
 
+/* Spinner utility.
+
+   This project styles everything in index.css with no Tailwind installed, so
+   the `animate-spin` class that AdminProductsPage.jsx references resolved to
+   nothing. Both spellings are defined here so that existing call site -- and
+   any new one -- actually animates. */
+@keyframes vyapariSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin,
+.animate-spin {
+  animation: vyapariSpin 0.85s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin,
+  .animate-spin {
+    animation-duration: 2.4s;
+  }
+}
+
 /* Responsive Product Grid */
 .product-grid-catalog {
   display: grid;

@@ -22,6 +22,7 @@ import { AccountPage } from './pages/AccountPage';
 import { AddressesPage } from './pages/AddressesPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { StoreFrontPage } from './pages/StoreFrontPage';
+import { SellerShowcasePage } from './pages/SellerShowcasePage';
 
 // Informational Pages
 import { AboutPage } from './pages/AboutPage';
@@ -109,6 +110,10 @@ export const App = () => {
             <Route path="/search" element={<ExplorePage />} />
             <Route path="/products/:id" element={<ProductDetailPage />} />
             <Route path="/stores/:sellerId" element={<StoreFrontPage />} />
+            {/* Instagram-style seller showcase page. Public by design: these are
+                indexable and are the upsell surface for paid seller plans. The
+                handle is resolved by the API, which 404s unpublished pages. */}
+            <Route path="/store/:handle" element={<SellerShowcasePage />} />
             <Route path="/cart" element={<CartPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />

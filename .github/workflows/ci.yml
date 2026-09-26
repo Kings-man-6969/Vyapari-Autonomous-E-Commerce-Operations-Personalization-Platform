@@ -6,13 +6,133 @@ on:
   pull_request:
     branches: [ main, master ]
 
+# Don't burn runner minutes on superseded commits.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ----------------------------------------------------------------------------
+  # Job 0: Database Migrations against a real pgvector instance
+  #
+  # This job did not exist before, which is how a V5 -> V6 ordering bug that
+  # aborted every sequential migration run shipped unnoticed: no job ever
+  # executed a line of SQL in db/. It now proves V1..Vn apply cleanly in order,
+  # are idempotent, and that a legacy init.sql database can be upgraded.
+  # ----------------------------------------------------------------------------
+  test-migrations:
+    name: Database Migrations
+    runs-on: ubuntu-latest
+
+    services:
+      pgvector:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: vyapari
+          POSTGRES_USER: vyapari_admin
+          POSTGRES_PASSWORD: vyapari_secure_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vyapari_admin -d vyapari"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://vyapari_admin:vyapari_secure_password@localhost:5432/vyapari
+      LEGACY_DATABASE_URL: postgresql://vyapari_admin:vyapari_secure_password@localhost:5432/vyapari_legacy
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install asyncpg==0.30.0
+
+      - name: Migrations apply in order on an empty database
+        run: |
+          python scripts/migrate.py apply
+          echo "--- runner must now report a clean schema ---"
+          python scripts/migrate.py apply
+
+      - name: Migration files are named correctly and none are duplicated
+        run: python scripts/migrate.py status
+
+      - name: Legacy init.sql database upgrades cleanly
+        run: |
+          # Simulate the deployment that predates the runner: provisioned from
+          # init.sql, no schema_migrations table. Must baseline and then apply.
+          PGPASSWORD=vyapari_secure_password psql -h localhost -U vyapari_admin \
+            -d postgres -c "CREATE DATABASE vyapari_legacy;"
+          PGPASSWORD=vyapari_secure_password psql -q -h localhost -U vyapari_admin \
+            -d vyapari_legacy -f db/init.sql
+          DATABASE_URL="$LEGACY_DATABASE_URL" python scripts/migrate.py baseline --upto V1
+          DATABASE_URL="$LEGACY_DATABASE_URL" python scripts/migrate.py apply
+
+      - name: V7 seller-page objects exist and constraints hold
+        run: |
+          set -euo pipefail
+          q() { PGPASSWORD=vyapari_secure_password psql -qtA -h localhost -U vyapari_admin -d vyapari -c "$1"; }
+
+          for t in seller_pages seller_media seller_highlights seller_highlight_items \
+                   seller_page_blocks seller_subscriptions seller_page_follows; do
+            test "$(q "SELECT count(*) FROM pg_tables WHERE tablename='$t'")" = "1" \
+              || { echo "MISSING TABLE: $t"; exit 1; }
+          done
+
+          # seller_pages must reference seller_media (circular FK added in V7)
+          test "$(q "SELECT count(*) FROM pg_constraint WHERE conname IN ('fk_seller_page_avatar','fk_seller_page_cover')")" = "2" \
+            || { echo "MISSING avatar/cover FKs"; exit 1; }
+
+          # updated_at triggers must exist
+          test "$(q "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgname LIKE 'trg_seller%'")" = "5" \
+            || { echo "MISSING updated_at triggers"; exit 1; }
+
+          # least-privilege role from V5/V6 must exist with its grants
+          test "$(q "SELECT count(*) FROM pg_roles WHERE rolname='vyapari_agent'")" = "1" \
+            || { echo "MISSING vyapari_agent role"; exit 1; }
+
+          echo "All V7 schema assertions passed."
+
+  # ----------------------------------------------------------------------------
   # Job 1: Backend Core Test Suite (FastAPI + P0 Guarantees)
+  #
+  # Now backed by a real pgvector instance. Previously this job had no database
+  # whatsoever, so every test was mock-based and no SQL was ever executed. The
+  # seller-page suite (tests/test_seller_pages.py) skips itself when
+  # TEST_DATABASE_URL is absent, so setting it here is what turns it on.
   # ----------------------------------------------------------------------------
   test-backend-core:
     name: Backend Core Tests
     runs-on: ubuntu-latest
+
+    services:
+      pgvector:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: vyapari_test
+          POSTGRES_USER: vyapari_admin
+          POSTGRES_PASSWORD: vyapari_secure_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vyapari_admin -d vyapari_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgresql://vyapari_admin:vyapari_secure_password@localhost:5432/vyapari_test
+      DATABASE_URL: postgresql://vyapari_admin:vyapari_secure_password@localhost:5432/vyapari_test
 
     steps:
       - name: Checkout code
@@ -30,10 +150,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Unit and P0 Correctness Tests
-        working-directory: ./backend-core-py
+      - name: Provision the test schema from db/migrations
         run: |
-          python -m unittest discover -s tests -p "test_*.py"
+          python -m pip install asyncpg==0.30.0
+          python scripts/migrate.py apply
+
+      - name: Run Unit, P0 and database integration tests
+        working-directory: ./backend-core-py
+        run: python -m unittest discover -s tests -p "test_*.py"
 
   # ----------------------------------------------------------------------------
   # Job 2: AI Microservices Tests (Seller Agent & Recommendation)
@@ -50,6 +174,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
 
       - name: Test Seller Agent Service
         working-directory: ./service-seller-agent
@@ -89,3 +214,10 @@ jobs:
       - name: Build Production SPA Bundle
         working-directory: ./frontend
         run: npm run build
+
+      # Renders components to a string and asserts on the markup. Catches
+      # render-time failures a successful bundle cannot, with no browser, no
+      # backend and no database.
+      - name: Component render smoke tests
+        working-directory: ./frontend
+        run: npm run smoke

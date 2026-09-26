@@ -23,8 +23,10 @@ from app.routers.notifications import router as notifications_router
 from app.routers.orders import router as orders_router
 from app.routers.payments import router as payments_router
 from app.routers.products import router as products_router
+from app.routers.public_pages import router as public_pages_router
 from app.routers.reviews import router as reviews_router
 from app.routers.seller import router as seller_router
+from app.routers.seller_pages import router as seller_pages_router
 from app.routers.stores import router as stores_router
 from app.routers.telemetry import router as telemetry_router
 from app.routers.uploads import router as uploads_router
@@ -235,6 +237,11 @@ app.include_router(uploads_router, prefix="/api/uploads")
 app.include_router(telemetry_router, prefix="/api/telemetry")
 app.include_router(admin_router, prefix="/api/admin")
 app.include_router(reviews_router, prefix="/api/reviews")
+# Seller showcase pages. Kept under /api/public/ rather than extending
+# /api/stores/ so the handle-based public pages never collide with the existing
+# UUID storefront routes, which stay exactly where they are.
+app.include_router(seller_pages_router, prefix="/api/seller-pages")
+app.include_router(public_pages_router, prefix="/api/public/stores")
 
 
 if __name__ == "__main__":
