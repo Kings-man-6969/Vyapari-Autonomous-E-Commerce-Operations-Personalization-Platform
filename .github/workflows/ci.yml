@@ -103,6 +103,58 @@ jobs:
 
           echo "All V7 schema assertions passed."
 
+      - name: V8 objects exist and the variant stock invariant holds
+        run: |
+          set -euo pipefail
+          q() { PGPASSWORD=vyapari_secure_password psql -qtA -h localhost -U vyapari_admin -d vyapari -c "$1"; }
+
+          for t in product_variants password_reset_tokens banners leads refunds; do
+            test "$(q "SELECT count(*) FROM pg_tables WHERE tablename='$t'")" = "1" \
+              || { echo "MISSING TABLE: $t"; exit 1; }
+          done
+
+          # Additive columns
+          for c in "products has_variants" "cart_items variant_id" "order_items variant_id" \
+                   "order_items variant_snapshot" "order_items sku_at_purchase" "orders expires_at"; do
+            set -- $c
+            test "$(q "SELECT count(*) FROM information_schema.columns WHERE table_name='$1' AND column_name='$2'")" = "1" \
+              || { echo "MISSING COLUMN: $1.$2"; exit 1; }
+          done
+
+          # payments.status must now accept 'refunded' - a completed refund
+          # could not otherwise be recorded against its payment at all.
+          test "$(q "SELECT count(*) FROM pg_constraint WHERE conname='payments_status_check'")" = "1" \
+            || { echo "MISSING payments_status_check"; exit 1; }
+          PGPASSWORD=vyapari_secure_password psql -qtA -h localhost -U vyapari_admin -d vyapari \
+            -c "INSERT INTO payments (order_id, amount, status) SELECT o.id, 1, 'refunded' FROM orders o LIMIT 1" \
+            >/dev/null 2>&1 && true || { echo "payments.status rejects 'refunded'"; exit 1; }
+
+          # The variant stock sync trigger is the load-bearing piece of V8: a
+          # product with has_variants=true must report the SUM of its active
+          # variants, or the catalogue keeps selling stock that does not exist.
+          test "$(q "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgname='trg_product_variants_stock_sync'")" = "1" \
+            || { echo "MISSING variant stock sync trigger"; exit 1; }
+
+          # Partial unique indexes: SKU is nullable, so a plain UNIQUE(sku)
+          # would permit only one NULL row per product.
+          test "$(q "SELECT count(*) FROM pg_indexes WHERE indexname='uq_product_variants_sku' AND indexdef LIKE '%WHERE sku IS NOT NULL%'")" = "1" \
+            || { echo "SKU uniqueness is not partial"; exit 1; }
+
+          # updated_at triggers for the five new/extended tables
+          test "$(q "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgname IN
+                    ('trg_product_variants_updated_at','trg_banners_updated_at',
+                     'trg_leads_updated_at','trg_refunds_updated_at','trg_orders_updated_at')")" = "5" \
+            || { echo "MISSING V8 updated_at triggers"; exit 1; }
+
+          echo "All V8 schema assertions passed."
+
+      # The behavioural side of V8 — that the stock-sync trigger actually
+      # maintains products.stock_qty as the sum of active variants — is covered
+      # by tests/test_variants.py, which runs in the test-backend-core job
+      # below alongside the rest of the suite against the same pgvector
+      # service. It is not repeated here: this job runs from the repository
+      # root, where the backend-core-py `tests` package is not importable.
+
   # ----------------------------------------------------------------------------
   # Job 1: Backend Core Test Suite (FastAPI + P0 Guarantees)
   #

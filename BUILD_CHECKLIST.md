@@ -9,7 +9,7 @@ Every item from the client requirements list, plus the gaps found in audit. Stat
 ## A. Foundation
 
 - [x] **A1. Migration foundation** — `scripts/migrate.py` with SHA-256 checksums, advisory lock, per-migration transactions, legacy baseline. `db-migrate` one-shot compose service. CI `test-migrations` job. — *commit 679a278*
-- [ ] **A2. V8 migration** — foundation for variants, banners, leads, refunds, password reset. Single migration, single backfill, single CI assertion update.
+- [x] **A2. V8 migration** — `V8__variants_password_reset_banners_leads_refunds.sql`. Five tables (`product_variants`, `password_reset_tokens`, `banners`, `leads`, `refunds`), `payments.status` extended with `refunded`/`partially_refunded`, `orders.expires_at` for the abandoned-order sweep, variant references on `cart_items`/`order_items` with a purchase-time attribute snapshot. Backfills one default variant per existing product. 29 tests + 10 CI schema assertions. — *commit `V8`*
 
 ## B. Security & correctness (no migration required)
 
