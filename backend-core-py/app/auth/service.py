@@ -73,6 +73,16 @@ def generate_opaque_refresh_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def generate_reset_token() -> str:
+    """A single-use password-reset token.
+
+    256 bits from the same CSPRNG as the refresh token. The stored value is
+    always hash_token() of this, never the token itself, so a database dump
+    does not yield working reset links.
+    """
+    return secrets.token_urlsafe(32)
+
+
 def hash_token(token: str) -> str:
     """Cryptographic SHA-256 hash for database token lookup."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()

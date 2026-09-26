@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { User, Store, ShoppingBag, ShieldCheck, UserPlus } from 'lucide-react';
+import { User, Store, ShoppingBag, ShieldCheck, UserPlus, Check, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { evaluatePassword } from '../lib/passwordPolicy';
 
 export const RegisterPage = () => {
   const [searchParams] = useSearchParams();
@@ -17,6 +18,8 @@ export const RegisterPage = () => {
   const [storeName, setStoreName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const policy = useMemo(() => evaluatePassword(password), [password]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -242,23 +245,50 @@ export const RegisterPage = () => {
 
           <div>
             <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '12px' }}>
-              Password (min. 8 characters)
+              Password
             </label>
             <input
               type="password"
               required
-              minLength={8}
+              autoComplete="new-password"
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="input-field"
-              style={{ backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-border-steel)' }}
+              style={{
+                backgroundColor: 'var(--color-obsidian-graphite)',
+                borderColor: password && !policy.ok ? 'var(--color-error)' : 'var(--color-border-steel)'
+              }}
             />
+            {/* The server enforces this too. Showing it here means nobody
+                discovers the rule by being rejected. */}
+            {password.length > 0 && (
+              <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                {policy.checks.map((c) => (
+                  <li key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '11px' }}>
+                    {c.ok
+                      ? <Check size={12} color="var(--color-icy-steel)" />
+                      : <X size={12} color="var(--color-ash-label)" />}
+                    <span style={{ color: c.ok ? 'var(--color-icy-steel)' : 'var(--color-ash-label)' }}>
+                      {c.label}
+                    </span>
+                  </li>
+                ))}
+                {policy.common && (
+                  <li style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '11px' }}>
+                    <X size={12} color="var(--color-error)" />
+                    <span style={{ color: 'var(--color-error)' }}>
+                      That password is too common. Choose another.
+                    </span>
+                  </li>
+                )}
+              </ul>
+            )}
           </div>
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !policy.ok}
             className="btn-primary"
             style={{ width: '100%', padding: '14px', marginTop: '8px', fontSize: '14px' }}
           >

@@ -42,6 +42,17 @@ class Settings(BaseSettings):
     # S3 Storage
     S3_BUCKET_NAME: str = "vyapari-products"
 
+    # Transactional email. No provider is wired yet — see app/email.py, which
+    # logs instead of sending. Set EMAIL_PROVIDER (and EMAIL_API_KEY for
+    # resend) to turn on real delivery.
+    EMAIL_PROVIDER: str | None = None
+    EMAIL_API_KEY: str | None = None
+    EMAIL_FROM: str = "Vyapari <no-reply@vyapari.live>"
+
+    # Password reset token lifetime. Short on purpose: a reset link sitting in
+    # an inbox for a week is a standing credential.
+    PASSWORD_RESET_TOKEN_TTL_MINUTES: int = 60
+
     # Redis (Supports direct REDIS_URL or host/port/auth/ssl params)
     REDIS_URL: str | None = None
     REDIS_HOST: str = "redis"

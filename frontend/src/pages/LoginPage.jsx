@@ -131,14 +131,27 @@ export const LoginPage = () => {
           </div>
 
           <div>
-            <label className="form-label" style={{ display: 'block', marginBottom: '6px', fontSize: '12px' }}>
+            <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px', fontSize: '12px' }}>
               Password
+              <Link
+                to="/forgot-password"
+                style={{
+                  fontSize: '11px',
+                  color: 'var(--color-icy-steel)',
+                  textDecoration: 'none',
+                  opacity: 0.85,
+                  fontWeight: 500
+                }}
+              >
+                Forgot password?
+              </Link>
             </label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <Lock size={16} color="var(--color-ash-label)" style={{ position: 'absolute', left: '12px' }} />
               <input
                 type="password"
                 required
+                autoComplete="current-password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

@@ -1,10 +1,13 @@
 """
-Auth routes — exact port of backend-core/src/routes/auth.js
+Auth routes — port of backend-core/src/routes/auth.js, extended with the
+password-reset flow.
 
 POST /api/auth/register
 POST /api/auth/login
 POST /api/auth/refresh
 POST /api/auth/logout
+POST /api/auth/forgot-password
+POST /api/auth/reset-password
 GET  /api/auth/me
 """
 import json
@@ -17,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr
 
 from app.auth.dependencies import require_auth
 from app.auth.service import (
+    generate_reset_token,
     generate_tokens,
     hash_password,
     hash_token,
@@ -24,6 +28,12 @@ from app.auth.service import (
 )
 from app.config import settings
 from app.db import get_db
+from app.email import (
+    PasswordPolicyError,
+    dev_expose_link,
+    send_password_reset,
+    validate_password,
+)
 from app.rate_limit import limit_for, rate_limit
 
 router = APIRouter()
@@ -59,6 +69,17 @@ class RefreshBody(BaseModel):
     refreshToken: str | None = None
 
 
+class ForgotPasswordBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    email: EmailStr
+
+
+class ResetPasswordBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    token: str
+    password: str
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _set_refresh_cookie(response: Response, refresh_token: str, is_production: bool) -> None:
@@ -90,6 +111,17 @@ async def register(
         raise HTTPException(
             status_code=400,
             detail={"code": "INVALID_ROLE", "message": "Role must be either customer or seller."},
+        )
+
+    # Registration previously accepted any string at all, including an empty
+    # one. bcrypt was never asked to store something trivial, but that is a
+    # poor substitute for actually checking.
+    try:
+        validate_password(body.password)
+    except PasswordPolicyError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "WEAK_PASSWORD", "message": str(exc)},
         )
 
     # Check duplicate
@@ -312,6 +344,134 @@ async def logout(request: Request, response: Response, db=Depends(get_db)) -> di
             pass
     response.delete_cookie("refresh_token")
     return {"success": True, "message": "Logged out successfully."}
+
+
+# ── Password reset ────────────────────────────────────────────────────────────
+#
+# Two rules govern everything below.
+#
+# 1. /forgot-password answers 200 identically whether or not the address
+#    exists. A different response is a free account-enumeration oracle, and
+#    this endpoint is unauthenticated, so that is the whole attack. The only
+#    asymmetry permitted is timing, and bcrypt is not called on the miss path
+#    precisely to avoid that too.
+#
+# 2. A successful reset revokes every refresh session for the account. Without
+#    that, a thief who logged in before the owner resets their password keeps
+#    a valid 7-day refresh token and simply re-issues access tokens forever —
+#    which would make the reset button decorative.
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    body: ForgotPasswordBody,
+    request: Request,
+    _rl=Depends(_limit("auth.forgot")),
+    db=Depends(get_db),
+) -> dict:
+    email = body.email.lower().strip()
+    ttl_minutes = max(1, settings.PASSWORD_RESET_TOKEN_TTL_MINUTES)
+
+    user = await db.fetchrow(
+        "SELECT id, email, is_active FROM users WHERE email = $1", email
+    )
+
+    dev_link = None
+    if user and user["is_active"]:
+        # Retire outstanding tokens first. Two live links for one account means
+        # whichever the user opens second silently invalidates the first, which
+        # reads as a broken product rather than a security property.
+        await db.execute(
+            "DELETE FROM password_reset_tokens WHERE user_id = $1 AND used_at IS NULL",
+            user["id"],
+        )
+
+        raw_token = generate_reset_token()
+        await db.execute(
+            """INSERT INTO password_reset_tokens
+                 (user_id, token_hash, expires_at, request_ip, user_agent)
+               VALUES ($1, $2, NOW() + ($3 || ' minutes')::interval, $4, $5)""",
+            user["id"],
+            hash_token(raw_token),
+            str(ttl_minutes),
+            (request.client.host if request.client else None),
+            (request.headers.get("user-agent") or "")[:255] or None,
+        )
+        await send_password_reset(user["email"], raw_token)
+        dev_link = dev_expose_link(raw_token)
+
+    data: dict[str, Any] = {
+        "message": "If an account exists for that address, a reset link is on its way.",
+        "expires_in_minutes": ttl_minutes,
+    }
+    if dev_link:
+        data["dev_reset_link"] = dev_link
+
+    return {"success": True, "data": data}
+
+
+@router.post("/reset-password")
+async def reset_password(
+    body: ResetPasswordBody,
+    response: Response,
+    _rl=Depends(_limit("auth.reset")),
+    db=Depends(get_db),
+) -> dict:
+    # Policy first: a user who picked a weak password should be told why
+    # before their one-shot token is spent on a failed attempt.
+    try:
+        validate_password(body.password)
+    except PasswordPolicyError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "WEAK_PASSWORD", "message": str(exc)},
+        )
+
+    token_h = hash_token(body.token)
+
+    # Claim the token atomically. The used_at IS NULL check inside the UPDATE
+    # is the whole concurrency control: two simultaneous requests with the same
+    # token cannot both see it unused, because the second UPDATE matches zero
+    # rows once the first has committed.
+    claimed = await db.fetchval(
+        """UPDATE password_reset_tokens
+              SET used_at = NOW()
+            WHERE token_hash = $1
+              AND used_at IS NULL
+              AND expires_at > NOW()
+          RETURNING user_id""",
+        token_h,
+    )
+
+    if not claimed:
+        # Deliberately one message for "unknown", "expired" and "already used".
+        # Distinguishing them would let someone probe token validity.
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "INVALID_RESET_TOKEN",
+                "message": "This reset link is invalid or has expired. Please request a new one.",
+            },
+        )
+
+    await db.execute(
+        "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2",
+        hash_password(body.password),
+        claimed,
+    )
+
+    # Kill every existing session. See rule 2 above.
+    await db.execute(
+        "UPDATE refresh_token_sessions SET revoked_at = CURRENT_TIMESTAMP "
+        "WHERE user_id = $1 AND revoked_at IS NULL",
+        claimed,
+    )
+    response.delete_cookie("refresh_token")
+
+    return {
+        "success": True,
+        "message": "Your password has been reset. Please sign in with your new password.",
+    }
 
 
 @router.get("/me")

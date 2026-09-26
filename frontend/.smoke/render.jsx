@@ -23,6 +23,10 @@ import { AuthProvider } from '../src/context/AuthContext';
 import { CartProvider } from '../src/context/CartContext';
 import { WishlistProvider } from '../src/context/WishlistContext';
 import { StoreView } from '../src/pages/SellerShowcasePage';
+import { ForgotPasswordPage } from '../src/pages/ForgotPasswordPage';
+import { ResetPasswordPage } from '../src/pages/ResetPasswordPage';
+import { LoginPage } from '../src/pages/LoginPage';
+import { evaluatePassword } from '../src/lib/passwordPolicy';
 
 const CDN = 'https://picsum.photos/seed';
 
@@ -236,9 +240,70 @@ check('accent falls back to the default', hostileHas('#38bdf8'));
 check('owner sees the draft notice', hostileHas('private draft'));
 check('owner is pointed at the editor', hostileHas('/seller/page'));
 
+// ── scenario 3: password recovery ────────────────────────────────────────────
+//
+// The recovery flow is the one a locked-out user reaches, so it has to render
+// without a session. Each page is rendered in isolation: useEffect never runs
+// under renderToString, so these assert the initial states only, which is
+// exactly the set of states that differ by route.
+
+const bare = (node, entry = '/') =>
+  renderToString(
+    <MemoryRouter initialEntries={[entry]}>
+      <AuthProvider>
+        <CartProvider>
+          <WishlistProvider>{node}</WishlistProvider>
+        </CartProvider>
+      </AuthProvider>
+    </MemoryRouter>
+  );
+
+console.log('\nforgot password');
+const forgot = squashed(bare(<ForgotPasswordPage />, '/forgot-password'));
+check('email field is an email input', forgot.includes('type="email"'));
+check('promises a link, not a confirmation', forgot.includes('We will email you a link'));
+// The single most important property of this page: it must not become an
+// account-existence oracle by saying something different on the way out.
+check('no enumeration tell in the initial copy', !/no account|not found|does not exist|unknown email/i.test(forgot));
+check('offers a way back to sign in', forgot.includes('href="/login"'));
+check('form posts to the recovery endpoint', api.post !== undefined);
+
+console.log('\nreset password');
+const resetNoToken = squashed(bare(<ResetPasswordPage />, '/reset-password'));
+check('a missing token does not show the form', !resetNoToken.includes('type="password"'));
+check('missing token explains itself', resetNoToken.includes('include a token'));
+check('missing token routes back to a new request', resetNoToken.includes('href="/forgot-password"'));
+
+const resetWithToken = squashed(bare(<ResetPasswordPage />, '/reset-password?token=abc123'));
+check('token in the url produces the form', (resetWithToken.match(/type="password"/g) || []).length === 2);
+check('new and confirm fields are distinguishable', resetWithToken.includes('Confirm New Password'));
+check('states the link is single-use', resetWithToken.includes('This link works once'));
+check('submit is disabled until the policy is met', /<button[^>]*disabled/.test(resetWithToken));
+check('the token is not echoed into the markup', !resetWithToken.includes('abc123'));
+check('no enumeration tell', !/invalid token|expired|already used/i.test(resetWithToken));
+
+console.log('\nlogin page entry point');
+const login = squashed(bare(<LoginPage />, '/login'));
+check('offers a forgot-password link', login.includes('href="/forgot-password"'));
+
+console.log('\nclient-side password policy');
+// The server is the authority; this copy exists so nobody has to be rejected to
+// learn the rules. It must agree with validate_password() in app/email.py.
+const accept = ['Password123!', 'ValidPass123!', 'OriginalPass123', 'a1b2c3d4', 'correcthorsebattery1'];
+const reject = ['', 'abc', 'abcdefgh', '12345678', 'password', 'Password1', 'password123', 'qwertyui', 'hunter2'];
+for (const p of accept) {
+  check(`accepts ${JSON.stringify(p)}`, evaluatePassword(p).ok, JSON.stringify(evaluatePassword(p)));
+}
+for (const p of reject) {
+  check(`rejects ${JSON.stringify(p)}`, !evaluatePassword(p).ok, JSON.stringify(evaluatePassword(p)));
+}
+check('common-password detection is case-insensitive', evaluatePassword('PASSWORD').common);
+check('the reason for a rejection is reported, not just the verdict', evaluatePassword('abc').checks.filter((c) => !c.ok).length === 2);
+
 console.log(`\n${failed === 0 ? 'PASS' : `FAIL (${failed} check${failed === 1 ? '' : 's'})`}`);
 if (failed > 0) {
   fs.writeFileSync('.smoke/rendered.html', pro);
-  console.log('wrote .smoke/rendered.html for inspection');
+  fs.writeFileSync('.smoke/rendered-reset.html', resetWithToken);
+  console.log('wrote .smoke/rendered*.html for inspection');
 }
 process.exit(failed === 0 ? 0 : 1);

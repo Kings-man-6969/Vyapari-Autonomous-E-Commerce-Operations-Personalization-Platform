@@ -172,6 +172,12 @@ LIMITS = {
     "auth.register": (5, 3600),     # 5 per hour: blocks scripted account farms
     "auth.login": (5, 60),          # 5 per minute: blocks credential stuffing
     "auth.refresh": (30, 60),       # 30 per minute: a busy SPA refreshes often
+    # Password reset. Both are tight because each one is a lever on an
+    # account: forgot-password mails a live credential, and reset-password
+    # brute-forces the token. The token is 256 bits, so guessing it is not the
+    # risk — flooding a victim's inbox and exhausting mail quota is.
+    "auth.forgot": (3, 3600),       # 3 per hour per identity
+    "auth.reset": (10, 3600),       # 10 per hour per identity
     # Catalog reads.
     "products.list": (120, 60),     # 120 per minute: normal browsing + fast paging
     "products.suggest": (60, 60),   # autocomplete fires on every keystroke
