@@ -5,6 +5,17 @@
 > **Foundation:** Built on the Implementation Plan (architecture, schema, APIs) and DESIGN.md (visual language).
 > **Anti-overengineering:** Every specification decision must serve a real user task.
 
+### Which parts describe reality?
+
+| Parts | Status |
+|---|---|
+| 0–30 | **Design spec**, written pre-implementation against a light theme. Structure, states and interaction rules still govern. Visual token values are **superseded by `DESIGN.md`** (Metallic Dark). |
+| 31 | **Built.** `/store/:handle` public showcase page — implemented, covered by 37 real-DB integration tests and 33 server-render assertions. Never opened in a browser. |
+| 32 | **Not built.** `/seller/page` editor. Three inbound links currently 404. Highest-priority outstanding item. |
+| 33 | **Deferred.** Mobile app. No work started. |
+
+**Two upstream corrections worth knowing before reading Part 0:** the order state is `'pending'`, not `'pending_payment'`, and payment success is `'success'`, not `'captured'` — the schema `CHECK` constraints are authoritative. And the payment-failure recovery endpoint in C3 (`GET /api/payments/status/:orderId`) **does not exist**; the order state machine has no `confirmed` value.
+
 ---
 
 ## Part 0 — Contract Corrections
@@ -73,22 +84,34 @@ All values derived from [DESIGN.md](./DESIGN.md) with the Inter font substitutio
 
 | Token | Size | Weight | Use |
 |-------|------|--------|-----|
-| `--text-display-xl` | 28px / 700 | Page hero headlines |
-| `--text-display-lg` | 22px / 500 | Product detail h1 |
-| `--text-display-md` | 21px / 700 | Section headings |
-| `--text-display-sm` | 20px / 600 | Sub-section titles |
-| `--text-title-md` | 16px / 600 | Card titles, nav labels |
-| `--text-title-sm` | 16px / 500 | Footer column heads |
-| `--text-body-md` | 16px / 400 | Running text |
-| `--text-body-sm` | 14px / 400 | Card meta, captions |
-| `--text-caption` | 14px / 500 | Input labels, segment labels |
-| `--text-caption-sm` | 13px / 400 | Legal, timestamps |
-| `--text-badge` | 11px / 600 | Floating badge text |
-| `--text-button-md` | 16px / 500 | Primary CTA labels |
-| `--text-button-sm` | 14px / 500 | Pill/secondary labels |
-| `--text-nav-link` | 16px / 600 | Top nav links |
+| `--text-display-xl` | 28px | 700 | Page hero headlines |
+| `--text-display-lg` | 22px | 500 | Product detail h1 |
+| `--text-display-md` | 21px | 700 | Section headings |
+| `--text-display-sm` | 20px | 600 | Sub-section titles |
+| `--text-title-md` | 16px | 600 | Card titles, nav labels |
+| `--text-title-sm` | 16px | 500 | Footer column heads |
+| `--text-body-md` | 16px | 400 | Running text |
+| `--text-body-sm` | 14px | 400 | Card meta, captions |
+| `--text-caption` | 14px | 500 | Input labels, segment labels |
+| `--text-caption-sm` | 13px | 400 | Legal, timestamps |
+| `--text-badge` | 11px | 600 | Floating badge text |
+| `--text-button-md` | 16px | 500 | Primary CTA labels |
+| `--text-button-sm` | 14px | 500 | Pill/secondary labels |
+| `--text-nav-link` | 16px | 600 | Top nav links |
 
 ### 1.3 Color Palette
+
+> ⚠️ **Superseded by `DESIGN.md`.** This table is the **light theme** this spec was written against. The shipped implementation uses **Metallic Dark** — see `DESIGN.md` for the real token table. Concretely, the values below that changed:
+>
+> | Was (light) | Now (Metallic Dark) |
+> |---|---|
+> | `--color-primary: #ff385c` | `--color-pure-white: #ffffff` (Liquid Platinum CTAs) |
+> | `--color-canvas: #ffffff` | `--color-obsidian-graphite: #090a0d` |
+> | `--color-surface-soft: #f7f7f7` | `--color-gunmetal-dark: #12151b` / `--color-titanium-brushed: #181d26` |
+> | `--color-hairline: #dddddd` | `--color-border-steel: #282e3b` |
+> | `--color-ink: #222222` | `--color-brushed-aluminum: #e2e8f0` |
+>
+> **`DESIGN.md` is the single source of truth for color.** This table is retained as the design *intent* of Part 0 and for the states it names, not as the values to implement.
 
 | Token | Value | Use |
 |-------|-------|-----|
@@ -270,6 +293,8 @@ Used while data is loading. Never show spinners for content that will populate a
 
 - Product cards: gray rounded rectangle (1:1 ratio) + 3 lines below
 - Text lines: gray rounded rectangles of varying width (80%, 60%, 40%)
+
+> ⚠️ **Theme note for Parts 1–30.** Written as a pre-implementation contract against a light theme. The shipped implementation is **Metallic Dark** — see `DESIGN.md` (authoritative) and the mapping at §1.3. Structure, spacing, breakpoints, states and interaction rules below still govern; only the visual token values are superseded. Part 31 onward is written against the real theme.
 - Animation: subtle left-to-right shimmer using CSS animation
 - Show after 200ms delay (prevents flash for fast loads)
 
@@ -2509,3 +2534,197 @@ Before writing any application code:
 ```
 
 This checklist is the exit condition for Phase 0 before Phase 1 work begins.
+
+---
+
+## Part 31 — Seller Showcase Page (`/store/:handle`)
+
+> **Status:** The public page is built and verified by server-render assertions plus 37 real-database integration tests. **The `/seller/page` editor (Part 32) does not exist**, so the page currently has no way to be populated from the UI. The page has also never been viewed in a browser.
+
+### 31.1 Purpose
+
+A premium, Instagram-style public landing page per seller. It is the platform's monetization surface: a free-tier seller gets a functional page, and the page is public and indexable so the upgrade is discoverable. This is the reason a seller would pay.
+
+### 31.2 Routing
+
+| Surface | URL | Auth |
+|---|---|---|
+| Showcase page | `/store/:handle` | **Public** — indexable by design |
+| Legacy storefront | `/stores/:sellerId` | Public — UUID-keyed, pre-dates this, both coexist |
+| Editor | `/seller/page` | Seller — **not built** |
+
+`/store` (singular) is chosen deliberately so it does not collide with the existing `/stores` (plural) route. The public API base is `/api/public/stores` for the same reason.
+
+**Handle format:** `^[a-z0-9][a-z0-9_-]{2,29}$` — 3–30 characters, lowercase alphanumeric plus `_` and `-`, must start alphanumeric. Validation returns a **distinct 400 code per failure mode** (bad charset, wrong length, leading punctuation) rather than one generic error, so a seller knows what to fix.
+
+### 31.3 Plan Tiers
+
+Every seller has a page on the free tier. Premium is the upsell.
+
+| Capability | free | pro | elite |
+|---|---|---|---|
+| Media items | 12 | 120 | 600 |
+| Highlights | 0 | 8 | 20 |
+| Content blocks | 2 | 8 | 20 |
+| Video media | ❌ | ✅ | ✅ |
+| Reels | ❌ | ✅ | ✅ |
+| Custom theme accent | ❌ | ✅ | ✅ |
+| Announcement strip | ❌ | ✅ | ✅ |
+| Analytics | ❌ | ✅ | ✅ |
+
+Gate failures surface as **HTTP 402** with `PLAN_UPGRADE_REQUIRED` (feature not on plan) or `PLAN_LIMIT_REACHED` (capacity exhausted, with the limit and current count in `details`).
+
+**Billing is entitlement-only.** No Razorpay Subscriptions wiring exists: an admin or the gateway grants a `seller_subscriptions` row, and billing attaches to an existing entitlement later. One live subscription per seller is enforced by a **partial** unique index, so plan history is permitted.
+
+> **A seller must never be able to grant themselves a plan.** `POST /api/seller-pages/mine/plan` is admin-only. This is a privilege-escalation boundary, not a UX preference.
+
+Entitlements are cached for **300 s**, so a lapsed subscription can serve premium content for up to five minutes. That is the intended trade — a hard expiry on every request would make page loads a cache-miss storm.
+
+### 31.4 Page Composition (top to bottom)
+
+1. **Announcement strip** — pro+ only, time-windowed, dismissible.
+2. **Owner draft banner** — visible only to the owning seller while unpublished.
+3. **Profile header** — avatar, handle, tagline, bio, follower count, follow button.
+4. **Hero banner** — uses the page cover.
+5. **Highlights** — circular story covers, pro+ only.
+6. **Content blocks** — all six types render, in `sort_order`.
+7. **Gallery / Listings tabs** — paginated 3-column lazy grid.
+
+**Follow button** uses an optimistic update with rollback on failure: the count and button state change immediately, and revert if the request errors. Users must never be left in a state that disagrees with the server.
+
+### 31.5 Block Types
+
+| Block type | Min plan | Behavior |
+|---|---|---|
+| `announcement` | pro | Top strip, time-windowed |
+| `hero_banner` | free | Uses the page cover |
+| `media_grid` | free | Paginated, infinite scroll |
+| `featured_collection` | free | Curated product set |
+| `reels` | pro | Video |
+| `testimonials` | free | Seller-curated quotes |
+
+> **All six must render.** An earlier implementation read only 2 of the 6 — `featured_collection`, `media_grid`, `reels` and `testimonials` were paid-for content the page silently dropped. A block that is stored, paid for, and invisible is worse than a block that does not exist. A new block type must add a renderer, with a visible fallback for types not yet implemented, so the failure mode is "plain" rather than "missing".
+
+Blocks are **time-windowed**: a block renders only while `NOW()` is within `[starts_at, ends_at]`, either bound nullable for open-ended scheduling. This is what makes scheduled promotions possible without a second scheduling system.
+
+### 31.6 Publish Gate
+
+A page is invisible to the public API until `is_published = true`. The gate requires:
+- a valid handle,
+- a tagline,
+- at least one media item.
+
+Each failure returns a `400` with a per-condition code. `launched_at` is stamped on first publish and is what the public feed orders by.
+
+**An unpublished page returns 404 from the public API** — deliberately indistinguishable from a nonexistent handle, so draft pages cannot be enumerated by trying handles.
+
+### 31.7 Shoppable Media
+
+A `seller_media` row may carry a `product_id`. When it does, the grid item links to the product. This is what turns the page from a brochure into a storefront, and it is the main reason a seller pays for the media tier.
+
+### 31.8 Security — Seller Content Is Untrusted
+
+Every seller-writable value is defended **twice**: constrained in SQL, and re-validated at render.
+
+| Field | SQL constraint | Client check |
+|---|---|---|
+| `cta_href` | `^/` or `^https://` only | `safeHref` — neutralizes `javascript:` and `data:` |
+| `theme_accent` | `^#[0-9a-fA-F]{6}$` | `safeAccent` |
+| Media URLs | — | `validate_media_url` host allowlist at write time |
+
+> **The database constraint is not the security boundary.** A value that reaches a DOM attribute must be validated where it is used. Defense in depth is not paranoia here — these are attacker-controllable strings from a multi-tenant system, and a stored XSS on a public page owned by one seller would reach every visitor.
+
+Avatar and cover URLs resolve through **one shared SQL join**. An earlier version had a hand-rolled response that omitted the `seller_media` join, so avatar and cover silently never resolved — invisible to mocks, caught immediately by real-database tests.
+
+### 31.9 Loading, Empty & Error States
+
+| State | Behavior |
+|---|---|
+| Loading | Skeleton placeholders matching final layout — no layout shift on arrival |
+| Empty media | Empty state, not a broken grid |
+| Unpublished (public) | 404 page |
+| Unpublished (owner) | Page renders with the owner draft banner |
+| Load failure | Error state with retry; the rest of the page stays usable |
+
+### 31.10 Performance
+
+- **Lazy grid** — pages load in chunks; `IntersectionObserver` triggers the next page as the user nears the end.
+- **Keyboard-navigable lightbox** — focus trap, `Escape` to close, arrow keys to move between media.
+- **Sort order must stay unique under partial reorder.** Duplicated `sort_order` values silently break keyset pagination, dropping or duplicating items mid-scroll. This was a real bug, found by real-database tests.
+
+### 31.11 Accessibility
+
+- Follow button, lightbox controls and tabs are keyboard-operable.
+- Media carries `alt_text`; it is not decorative by default.
+- Contrast meets WCAG AA against the Metallic Dark surfaces (see `DESIGN.md`).
+- `prefers-reduced-motion` is respected for all transitions.
+
+### 31.12 Acceptance Criteria
+
+| # | Criterion |
+|---|---|
+| 1 | An unpublished page returns 404 from the public API; the owner sees a draft banner instead |
+| 2 | A free-tier seller exceeding 12 media receives 402 `PLAN_LIMIT_REACHED`, not a silent truncation |
+| 3 | A pro feature requested on the free tier returns 402 `PLAN_UPGRADE_REQUIRED` |
+| 4 | All six block types render; an unknown type renders a visible fallback rather than nothing |
+| 5 | A video post without a poster is rejected at the database level |
+| 6 | `cta_href = "javascript:alert(1)"` cannot be stored, and does not execute if it somehow is |
+| 7 | `theme_accent = "red"` is rejected; only a 6-digit hex triplet is accepted |
+| 8 | Media reorder preserves uniqueness of `sort_order`; infinite scroll neither drops nor duplicates items |
+| 9 | The follow button updates optimistically and rolls back on failure |
+| 10 | A handle collision returns 409 with a code distinct from a validation failure |
+| 11 | Avatar and cover resolve through the shared join on every render path |
+| 12 | The page renders with correct markup for both a populated pro page and an empty free draft |
+
+---
+
+## Part 32 — Seller Showcase Page Editor (`/seller/page`) — NOT BUILT
+
+> **This is the highest-priority outstanding item on the platform.** `SellerShowcasePage` links to `/seller/page` from three places — the Edit Page button, the owner draft banner, and the owner preview. All three currently 404.
+
+The 19 owner endpoints under `/api/seller-pages` are implemented and covered by integration tests. **No UI calls them.**
+
+### 32.1 Required Surface
+
+| Area | Endpoints |
+|---|---|
+| Profile — handle, tagline, bio, theme accent | `GET /mine`, `PUT /mine` |
+| Media — add, edit caption/alt, reorder, soft-delete | `POST /mine/media`, `PATCH /mine/media/{id}`, `DELETE /mine/media/{id}`, `PUT /mine/media/order` |
+| Highlights — create, reorder, delete | `POST /mine/highlights`, `PUT /mine/highlights/order`, `DELETE /mine/highlights/{id}` |
+| Blocks — add, reorder, delete, schedule | `POST /mine/blocks`, `PUT /mine/blocks/order`, `DELETE /mine/blocks/{id}` |
+| Publish | `POST /mine/publish` |
+| Analytics | `GET /mine/analytics` (pro+) |
+| Plans | `GET /plans` — for upgrade cards |
+
+### 32.2 Design Constraints
+
+- Must stay inside the **Metallic Dark** token system (`DESIGN.md`). No new colors, no Tailwind, no ad-hoc utility classes — `index.css` is hand-written plain CSS and an undefined class is silently dead.
+- Show the current plan and remaining capacity inline (`12 / 120 media`), so a seller hits the limit by *seeing* it, not by being rejected.
+- Render plan upgrade cards from `GET /api/seller-pages/plans` rather than hardcoding them.
+- Publish is gated and must surface the specific unmet condition, not a generic failure.
+
+### 32.3 Open Questions
+
+- **Media upload depends on Appwrite Storage**, which is not yet wired. Until it is, the editor can reference URLs but cannot upload. The UI is designed for `storage_provider = 'appwrite'`; the backend stub is the blocker.
+- Whether to allow editing a published page in place, or require unpublish → edit → republish. In-place with a live preview is friendlier; a version history would be safer.
+- Whether the analytics view is worth building before there is a payments rail producing real data.
+
+---
+
+## Part 33 — Deferred: Mobile Application
+
+Out of scope for the web platform; to be planned separately with a Play Store target.
+
+### 33.1 Blocking Prerequisites
+
+| Prerequisite | Why the mobile app cannot ship without it |
+|---|---|
+| **Forgot / reset password** | Zero routes, zero token tables exist. A mobile user who forgets their password has no recovery path. **Mandatory before a store submission.** |
+| **Token storage strategy** | Refresh is an HttpOnly cookie scoped to `/api/auth/refresh`. React Native has no cookie jar that behaves like a browser, so this needs either secure native storage (Keychain / Keystore) or a separate non-cookie refresh endpoint returning a token in the body. |
+| **Real payments** | A mobile checkout that simulates payment is not submittable. |
+
+### 33.2 Recommended Path
+
+**React Native + Expo, built with EAS.** Rationale: one codebase for iOS and Android, over-the-air updates for review-rejection fixes without a store round-trip, and fast native module access for camera and push.
+
+This is a recommendation, not a decision — no mobile work has started.

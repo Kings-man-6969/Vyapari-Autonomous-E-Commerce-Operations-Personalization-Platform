@@ -1,17 +1,27 @@
 # Vyapari — Pragmatic Production-Grade Technical Specification
 
+> **Status of this document.** This is a **roadmap**, not a description of the system. Phases 0–12 below were written as a target sequence; several are complete, several are partial, and several are untouched. Each phase now carries a **status line** stating what actually shipped. The authoritative description of the current system is `README.md` and `PROJECT_DOCUMENTATION.md`; the authoritative list of what is *missing* is `PROJECT_DOCUMENTATION.md` §15.
+
+---
+
 ## Current System State
 
 Vyapari is a multi-role autonomous e-commerce platform running as a Docker Compose stack:
 
 | Service | Technology Stack | Network Port | Status |
 |---|---|---|---|
-| **Frontend** | React 18 + Vite SPA, 37 pages | `:3000` | Running |
-| **Backend Core** | **Python FastAPI** (`backend-core-py`), 15 routers, asyncpg, pydantic v2, python-jose | `:8000` | Running (29/29 unit tests passing) |
-| **Service-Recommendation** | Python FastAPI + `all-MiniLM-L6-v2` (SentenceTransformers) + pgvector | `:8001` | Running |
-| **Service-Seller-Agent** | Python FastAPI + Google Gemini 1.5 Flash (Listing, Inventory Advisor, Support RAG) | `:8002` | Running |
-| **Database** | PostgreSQL 16 + pgvector (384-dim HNSW index) | `:5432` | Running |
-| **Cache & Broker** | Redis 7 | `:6379` | Running |
+| **Frontend** | React 18 + Vite SPA, 38 pages, plain CSS | `:3000` | Deployed |
+| **Backend Core** | **Python FastAPI** (`backend-core-py`), 19 routers, asyncpg, pydantic v2, python-jose | `:8000` | Deployed (83/83 tests passing) |
+| **Service-Recommendation** | Python FastAPI + `all-MiniLM-L6-v2` (SentenceTransformers) + pgvector | `:8001` | ⚠️ **Not deployed** — compute-heavy |
+| **Service-Seller-Agent** | Python FastAPI + Google Gemini 1.5 Flash (Listing, Inventory Advisor, Support RAG) | `:8002` | ⚠️ **Not deployed** — compute-heavy |
+| **Database** | PostgreSQL 16 + pgvector (384-dim HNSW index), 7 migrations | `:5432` | Deployed (Render) |
+| **Cache & Broker** | Redis 7 | `:6379` | Deployed |
+| **Media** | Appwrite Storage (agreed; **not yet wired**) | — | Pending |
+| **Migrations** | `scripts/migrate.py`, one-shot `db-migrate` job | — | Shipped |
+
+**What "not deployed" costs you.** Search degrades from pgvector similarity to `ILIKE`; `GET /api/ai/similar/{id}` returns empty so the "You may also like" rail silently vanishes; the seller AI console, listing studio, inventory advisor and Support RAG desk are all non-functional. None of these error loudly — they degrade, which is the more dangerous failure mode.
+
+**Counting correction.** The table above previously read "15 routers" and "29/29 unit tests". The real figures are **19 routers** and **83 tests** across 5 files, 37 of which are real-database integration tests. The earlier count omitted the seller-page suite entirely.
 
 ---
 
@@ -22,12 +32,14 @@ We strictly distinguish between **necessary correctness/security guarantees** an
 | Area | Overengineered Approach (Rejected) | Pragmatic Production Approach (Adopted) |
 |---|---|---|
 | **Tenant Isolation** | Complex PostgreSQL Row-Level Security (RLS) on 5+ tables with connection-pool session variables (`SET LOCAL app.seller_id`) | **Hard DB role privileges** (`vyapari_agent` physically lacks write access) + strict JWT-derived query parameterization (`WHERE seller_id = $1`). Simple, zero pool leakage risk. |
-| **Image Security / SSRF** | Multi-bucket quarantine pipelines, ClamAV Lambda/ECS containers, S3 event fanout | **Direct S3 presigned PUT** (max 5MB, JPEG/PNG/WebP only) + fast in-memory Pillow validation (rejects SVGs, corrupt bytes, bounds dimensions). |
+| **Image Security / SSRF** | Multi-bucket quarantine pipelines, ClamAV Lambda/ECS containers, S3 event fanout | **Direct presigned PUT** (max 5MB, JPEG/PNG/WebP only) + fast in-memory Pillow validation (rejects SVGs, corrupt bytes, bounds dimensions). ⚠️ **The MIME validation is real; the presigned URL is fabricated** (`uploads.py:61` contacts no bucket). Agreed replacement is **Appwrite Storage** — CDN, WebP transforms, and video, which also unblocks the premium media tiers. |
 | **Payment Webhooks** | 7-state distributed transition machine with out-of-order replay queues | **HMAC-SHA256 signature verification** + atomic `payment_events` insertion + single-transaction conditional order update (`WHERE payment_status = 'pending'`). |
 | **Order Idempotency** | Distributed multi-tier lease management and lock managers | **Single-transaction DB insert**: `INSERT INTO idempotency_records ... ON CONFLICT (user_id, key) DO NOTHING` in the same transaction as order creation. |
 | **Background Tasks** | Custom PostgreSQL task leasing tables with heartbeat polling | **Standard Celery + Redis** with `task_acks_late=True` and simple deduplication against `agent_tasks`. |
 | **Database Roles** | 4 separate users with granular DDL/DML permission matrices | **2 clean roles**: `vyapari_app` (backend-core full DML) and `vyapari_agent` (read catalog, write drafts/approval queue, no write to commerce tables). |
-| **Frontend Telemetry** | Full user-agent parsing pipelines, network speed monitoring, device fingerprinting | **React Error Boundary** logging fatal crashes to `/api/telemetry/errors` with payload limits (10 KB) and strict IP rate limiting. |
+| **Frontend Telemetry** | Full user-agent parsing pipelines, network speed monitoring, device fingerprinting | **React Error Boundary** logging fatal crashes to `/api/telemetry/errors` with a 10 KB payload limit. ⚠️ The "strict IP rate limiting" half of this decision **was not implemented** — `TTL_RATE_LIMIT` is defined at `redis_client.py:34` and never referenced. |
+| **Seller Page Billing** | Razorpay Subscriptions, invoicing, proration, dunning, tax invoices | **Entitlement-only.** An admin- or gateway-granted `seller_subscriptions` row with plan, status and price. Razorpay Subscriptions attach to an existing entitlement later. One live subscription per seller via a partial unique index. **A seller cannot self-upgrade** — `POST /mine/plan` is admin-only, because otherwise it is a privilege-escalation bug. |
+| **Seller Page Media** | Per-tenant S3 buckets with lifecycle policies and signed cookies | **Appwrite Storage** with URLs denormalised onto the media row. The FastAPI gateway stays stateless and the frontend needs no vendor SDK. `storage_provider` defaults to `'appwrite'` in V7. |
 
 ---
 
@@ -88,36 +100,77 @@ We strictly distinguish between **necessary correctness/security guarantees** an
 ## Target Implementation Sequence (Phases 0–12)
 
 ```text
-0. Establish baseline, backup automation, & DR test script
+0. Establish baseline, backup automation, & DR test script        [PARTIAL]
         ↓
-1. Authorization, input validation, & strict CORS
+1. Authorization, input validation, & strict CORS                  [DONE]
         ↓
 2. Order & payment correctness (Atomic idempotency & signature-verified webhooks)
+                                                                [PARTIAL — no cancel/refund/restore]
         ↓
-3. Database role privilege separation (Agent write restriction)
+3. Database role privilege separation (Agent write restriction)   [DONE]
         ↓
-4. Direct S3 presigned image uploads (SSRF elimination & Pillow validation)
+4. Direct presigned image uploads (SSRF elimination & Pillow validation)
+                                                                [HOLLOW — URL is fabricated]
         ↓
 5. Authentication & session hardening (Opaque refresh token family rotation, CSRF defense)
+                                                                [PARTIAL — no rate limiting, no password reset]
         ↓
 6. Automated test suite for all P0 guarantees (Concurrency, idempotency, webhooks, roles)
+                                                                [DONE — 83 tests]
         ↓
-7. Observability, metrics, tracing, & React error boundary
+7. Observability, metrics, tracing, & React error boundary        [DONE]
         ↓
-8. Agent reliability, quota budgeting, & immutable audit logging
+8. Agent reliability, quota budgeting, & immutable audit logging  [DONE — but service undeployed]
         ↓
 9. Recommendation improvements (Percentile ranking, time decay, cold-start fallback)
+                                                                [BLOCKED — seed embeddings are fake hash vectors]
         ↓
-10. Background jobs with standard Celery + Redis
+10. Background jobs with standard Celery + Redis                  [DONE — worker/beat services exist]
         ↓
 11. Docker multi-stage container optimization (1 worker for ML service)
+                                                                [N/A — ML service not deployed]
         ↓
-12. Cloud infrastructure (IaC) & CI/CD deployment
+12. Cloud infrastructure (IaC) & CI/CD deployment                 [DONE — 4 CI jobs]
 ```
+
+### Work landed outside the original phase list
+
+Three things were built that this sequence never anticipated:
+
+| Work | Commit | Why it was needed |
+|---|---|---|
+| **Migration runner** — SHA-256 checksums, advisory lock, per-migration transactions, `baseline` for legacy DBs | `679a278` | Schema changes were being applied by hand. Without checksums there is no way to know what a given database actually received. |
+| **Premium seller showcase pages** — 7 tables, 26 endpoints, public page, plan gating | `d6b920b` | The monetization surface. Gated behind free/pro/elite tiers. |
+| **Frontend render smoke tests** — hermetic `react-dom/server` assertions | `d6b920b` | `npm run build` proves the code compiles. It does not prove a component renders correct markup. |
+
+### Priority order for what remains
+
+Ordered by dependency, then by cost-to-claim-risk. The top item is not the most valuable feature — it is the cheapest broken link.
+
+1. **`/seller/page` editor.** Three live links currently 404. The 19 owner endpoints are built and tested; only the UI is missing. **Urgency over value.**
+2. **Visual/browser pass on `/store/:handle`.** Never viewed. Ships broken or fine, unknown.
+3. **Fix the `GET /api/products` 500** (`products.py:442`). A core public endpoint fails on some query combinations.
+4. **Real Appwrite uploads.** Replaces the fabricated presign; unblocks editor media and the video tiers.
+5. **Real Razorpay.** Write `razorpay_order_id` at creation → implement `POST /api/payments/create` → remove `pay_rzp_mock_${Date.now()}` from `CheckoutPage.jsx:96`.
+6. **Refunds, cancel, stock restoration, abandoned-order sweep.** Inventory is currently burned permanently by abandoned checkouts.
+7. **Forgot / reset password.** Also the hard prerequisite for the mobile app.
+8. **Rate limiting.** `TTL_RATE_LIMIT` is already defined; nothing calls it.
+9. **Product variants**, then **code splitting** (zero `React.lazy`/`Suspense`, single ~657 kB chunk). Note: `frontend/dist` is already gitignored and untracked — that part of the original concern is resolved.
+10. **Real admin analytics** writing `product_stats_daily` — today six integers are computed inline.
+11. **Banners/promotions + CMS-lite**, **leads/enquiries**, **GA4** (requires relaxing CSP `script-src 'self'` at the same time), **instrument `/api/ai/interactions`**.
+12. **Semantic search groundwork**: add `pg_trgm` + `tsvector` now (cheap, useful immediately); then a one-time re-embed of the ~10k catalog through a hosted embedding API — **mandatory**, the current vectors are fake hash functions; then pgvector in-process.
 
 ---
 
 ## Phase 0 — Baseline & Disaster Recovery
+
+> **Status: partial.** Backup and restore-drill scripts exist. **Schema governance was the bigger gap and is now closed** — see "Work landed outside the original phase list" above for `scripts/migrate.py`. Before it, nothing recorded what schema a given database had actually received; changes were applied by hand.
+>
+> ⚠️ **The production database's migration state is still unverified.** It is unknown whether `refresh_token_sessions`, `idempotency_records`, `payment_events`, `agent_audit_log` or the `vyapari_agent` role exist on the Render instance. The proven remediation:
+> ```bash
+> python scripts/migrate.py baseline --upto V1 && python scripts/migrate.py apply
+> ```
+> Until this is run and confirmed, "the production database is on the current schema" is an assumption.
 
 - **Target RPO**: ≤ 5 minutes (RDS automated backups + transaction logs).
 - **Target RTO**: ≤ 30 minutes (restoration from custom dump).
@@ -151,6 +204,8 @@ A lightweight script restores the backup to a temporary database, executes table
 ---
 
 ## Phase 1 — Authorization, Input Validation, & CORS
+
+> **Status: done.** Strict Pydantic models, ownership enforcement, and the CORS allowlist are all in place. One consequence worth knowing: the global `RequestValidationError` handler maps request-shape failures to **HTTP 400 `VALIDATION_ERROR`**, not FastAPI's default 422. Business-rule rejections raised inside handlers still use 422. Clients must branch on `error.code`, not on the class of 4xx. The CORS allowlist permits only `localhost:3000` / `127.0.0.1:3000` and the production origin — **Vite's default 5173 is not allowed**, so `npm run dev` needs `--port 3000`.
 
 ### 1.1 Strict Pydantic Request Models
 Every POST/PUT endpoint parses request bodies through strict Pydantic v2 models with `extra="forbid"`.
@@ -194,6 +249,12 @@ app.add_middleware(
 ---
 
 ## Phase 2 — Order & Payment Correctness
+
+> **Status: partial.** Concurrency-safe order creation and idempotency are **done and tested**. The cancellation, refund, and stock-restoration half of this phase **does not exist at all** — no cancel route, no refund state, no abandoned-order sweeper. `POST /api/orders` decrements stock inside the order transaction and no code path ever increments it back, so an abandoned `pending` order permanently consumes its inventory.
+>
+> The Razorpay integration is also half-wired: HMAC verification and event dedup are real, but `create_order` never writes `razorpay_order_id`, so the webhook's `WHERE razorpay_order_id = $2` branch can never match. `CheckoutPage.jsx:96` sends a literal `pay_rzp_mock_${Date.now()}`.
+>
+> **The database filename below is wrong.** The shipped migration is `V3__idempotency_and_payments.sql`, and it creates both `idempotency_records` and `payment_events`.
 
 ### 2.1 Concurrency-Safe Transactional Order Idempotency
 
@@ -341,6 +402,12 @@ async def razorpay_webhook(request: Request):
 
 ## Phase 3 — Database Role Privilege Separation
 
+> **Status: done** (`V5__agent_privileges.sql`, extended by `V6__agent_audit_log.sql`). The `vyapari_agent` role can read the catalog and write drafts, approvals and the audit trail, and is hard-revoked from `UPDATE`/`DELETE` across the board.
+>
+> ⚠️ **Production migration state is unverified.** If `V5` was never applied to the Render database, this boundary does not exist there. See the Phase 0 remediation command.
+>
+> One pre-existing defect nearby: `seller.py:483` contains a broken `INSERT INTO agent_approval_queue` referencing columns that do not exist.
+
 Instead of complex RLS policies across every table, enforce the agent security boundary via standard PostgreSQL user permissions:
 
 ```sql
@@ -362,7 +429,15 @@ REVOKE UPDATE, DELETE ON agent_approval_queue, agent_audit_log FROM vyapari_agen
 
 ---
 
-## Phase 4 — S3 Presigned Uploads & In-Memory Image Validation (SSRF Elimination)
+## Phase 4 — Presigned Uploads & In-Memory Image Validation (SSRF Elimination)
+
+> **Status: hollow.** The Pillow byte validation in `service-seller-agent` is real and well tested. The upload path is not: `uploads.py:61` **fabricates** an S3 presigned URL. No bucket is contacted, no signature is computed against real credentials, and no bytes are ever stored. `.env.example` has no `AWS_*` variables, confirming there is no S3 integration.
+>
+> The response has the correct *shape*, which is exactly what makes this easy to mistake for working code during a demo.
+>
+> **Agreed replacement: Appwrite Storage.** CDN delivery, server-side WebP transforms, and video support. It unblocks both this gap and the video/highlights/reels tiers on premium seller pages — the V7 schema is already shaped for it (`storage_provider` defaults to `'appwrite'`, with `storage_id`, `url`, `thumbnail_url`, `poster_url` columns).
+>
+> **How to test the claim cheaply:** have someone upload a product photo through the seller console, then look for the file. There is no file.
 
 Arbitrary URL fetching is completely removed. Sellers upload images directly to private S3 buckets.
 
@@ -390,9 +465,15 @@ Gemini Vision (Safe ingestion)
 
 No external virus microservices or complex quarantine pipelines needed.
 
+> ⚠️ Reminder from the phase header: the **validation** half of this pipeline is real and tested. The **upload** half is not — `uploads.py:61` fabricates the presigned URL and stores nothing.
+
 ---
 
 ## Phase 5 — Authentication & Session Hardening
+
+> **Status: partial.** Refresh token family rotation (5.1) and security headers/CSP (5.3) are **done**. **Rate limiting (5.2) is entirely absent** — `TTL_RATE_LIMIT` is defined at `redis_client.py:34` and never referenced. There is no throttling on login, signup, order placement, search, uploads, or the unauthenticated telemetry endpoint.
+>
+> **Also missing: forgot / reset password.** Zero routes, zero token tables. A user who forgets their password has no recovery path at all. This is the hard prerequisite for the planned mobile app.
 
 ### 5.1 Opaque Refresh Tokens with Family Rotation
 Refresh tokens are 256-bit cryptographically random strings (`secrets.token_urlsafe(32)`), NOT JWTs. Only their SHA-256 hash is stored in PostgreSQL:
@@ -416,10 +497,15 @@ CREATE INDEX IF NOT EXISTS idx_refresh_family ON refresh_token_sessions(family_i
 - If an already-revoked token is presented: revoke the entire `family_id` immediately, forcing re-login (theft detection).
 
 ### 5.2 Layered Rate Limiting
+
+> ❌ **Not implemented.** This is the specification only. `redis_client.py:34` defines `TTL_RATE_LIMIT` and nothing calls it — the constant is dead code. Treat the limits below as unimplemented intent.
+
 - **Client IP**: 300 req/min general limit.
 - **Login Brute-Force Protection**:
   - Max 10 attempts per 15 min per Client IP.
   - Max 5 attempts per 15 min per account email (`login:{email}`).
+
+The login limit is the urgent one: `POST /api/auth/login` is unauthenticated and unthrottled, so credential stuffing is currently unopposed.
 
 ### 5.3 Security Headers & Explicit CSP
 ```python
@@ -439,6 +525,8 @@ CSP_DIRECTIVES = (
 ---
 
 ## Phase 6 — Automated Test Suite for All P0 Guarantees
+
+> ✅ **Done — 83 tests, all passing.** The code below is the *original design sketch* using `pytest` and `pytest.mark.asyncio`. The shipped suite runs on **`unittest`** (`python -m unittest discover -s tests -p "test_*.py"`), because the CI image does not install `pytest-asyncio`. `test_p0_correctness.py` (7 tests) covers items P0.2–P0.4 and the security-header assertion.
 
 #### [NEW] `backend-core-py/tests/test_p0_correctness.py`
 ```python
@@ -508,6 +596,8 @@ async def test_agent_db_role_cannot_update_products(agent_db_conn):
 
 ## Phase 7 — Observability & React Error Boundary
 
+> **Status: done**, with one gap carried over from Phase 5.2 — the telemetry endpoint's rate limit does not exist.
+
 ### 7.1 React Global Error Boundary
 Catches unhandled frontend errors and logs them to `/api/telemetry/errors`:
 
@@ -546,7 +636,7 @@ export class GlobalErrorBoundary extends Component<{ children: ReactNode }, { ha
 }
 ```
 
-Endpoint `/api/telemetry/errors` is rate-limited to 20 req/min per IP and caps request size to 10 KB.
+Endpoint `/api/telemetry/errors` caps request size to 10 KB. ⚠️ **The 20 req/min per-IP rate limit is not implemented.** `TTL_RATE_LIMIT` is defined at `redis_client.py:34` and never referenced. The same phase's rate-limiting item (5.2) was also not implemented, and since this endpoint is unauthenticated it is the one place in the platform where that gap is directly exploitable.
 
 ### 7.2 Request Correlation & Low-Cardinality Prometheus Metrics
 - `X-Request-ID` validated as UUIDv4, passed to all microservices and response headers.
@@ -555,6 +645,8 @@ Endpoint `/api/telemetry/errors` is rate-limited to 20 req/min per IP and caps r
 ---
 
 ## Phase 8 — Agent Reliability, Budgeting, & Audit Trail
+
+> **Status: implemented but moot.** Tenacity backoff, Redis quota enforcement and the immutable audit trail are all real and unit-tested. The service is **not deployed**, so none of it runs in production.
 
 ### 8.1 Error Classification & Exponential Backoff with Jitter
 ```python
@@ -591,14 +683,23 @@ Atomic Redis counter checks prevent excessive API bills:
 
 ## Phase 9 — Recommendation Algorithmic Improvements
 
-1. **Database-Layer Stock Filtering**: Candidate vector queries enforce `WHERE stock_qty > 0 AND status = 'active'` directly in SQL.
-2. **Percentile Normalization**: Prevents extreme BM25 outliers from squashing vector similarity scores.
-3. **Time-Decayed Popularity**: Weights views, carts, and purchases with an exponential decay ($\lambda = 0.05$, ~14-day half-life).
-4. **Cold-Start Fallback**: If user has 0 interactions, return top time-decayed popular + fresh products. Never return a 500 error.
+> ⚠️ **This phase is blocked, and the blockage is upstream of it.** The service is not deployed, and more importantly the seeded embeddings are **deterministic hash vectors** (`scraper_bot.py:416`), not `all-MiniLM-L6-v2` output. They satisfy the `vector(384)` type and cosine-compute without error while encoding no semantics. Every item below would run correctly and produce meaningless output. The work is worthless until the catalog is re-embedded.
+
+1. **Database-Layer Stock Filtering**: Candidate vector queries enforce `WHERE stock_qty > 0 AND status = 'active'` directly in SQL. *(implemented)*
+2. **Percentile Normalization**: Prevents extreme BM25 outliers from squashing vector similarity scores. *(implemented, unit-tested)*
+3. **Time-Decayed Popularity**: Weights views, carts, and purchases with an exponential decay ($\lambda = 0.05$, ~14-day half-life). *(implemented, but **no data source** — nothing writes `user_interactions` or `product_stats_daily`.)*
+4. **Cold-Start Fallback**: If a user has 0 interactions, return top time-decayed popular + fresh products. Never return a 500. *(implemented at `GET /api/ai/popular`.)*
+
+**Prerequisite, in order:**
+1. Add `pg_trgm` and `tsvector` indexes now — cheap, and genuinely useful for typo-tolerant search even with no embeddings at all.
+2. **Re-embed the ~10k catalog** through a hosted embedding API. One-time cost, no in-process model, no GPU. This is mandatory.
+3. Move pgvector in-process for serving once real vectors exist.
 
 ---
 
 ## Phase 10 — Background Tasks with Standard Celery + Redis
+
+> **Status: built, but inert.** `service-seller-agent-worker` and `service-seller-agent-beat` are defined in Compose. The service is not deployed, so nothing is ever queued.
 
 - `service-seller-agent` uses standard Celery with Redis broker for asynchronous listing generation and inventory scanning.
 - Tasks check `agent_tasks.status` before calling Gemini to avoid duplicate inference on worker retries.
@@ -607,6 +708,8 @@ Atomic Redis counter checks prevent excessive API bills:
 ---
 
 ## Phase 11 — Docker Multi-Stage Optimization
+
+> **Status: partially moot.** The ML service is not deployed, so 1-worker memory tuning has no current effect. The configuration remains correct if the service is ever deployed.
 
 ### 11.1 ML Service Container Memory
 `service-recommendation` runs with **1 worker per container**:
@@ -634,17 +737,34 @@ HEALTHCHECK --interval=15s --timeout=3s --retries=3 \
    Step 3: Deploy Frontend SPA to S3 / CloudFront (invalidate /index.html only)
    ```
 
+> **What actually shipped for CI is not this.** The live deployment uses Render (backend), Appwrite (frontend) and Render/managed Redis — not Terraform on AWS. What exists in the repository is a 4-job GitHub Actions workflow: `test-migrations` (ordering, checksum integrity, legacy `init.sql` upgrade, V7 constraint assertions), `test-backend-core` (full suite against real PostgreSQL + pgvector), `test-ai-services`, and `build-frontend` (build + render smoke tests). **There is no IaC in this repository**; the Terraform described above was never written.
+
 ---
 
 ## Verification & Sign-Off Checklist
 
-- [ ] **P0.1**: Concurrency test verifies exactly one 201 and one 409 for competing orders on stock=1.
-- [ ] **P0.2**: Same-key concurrency test verifies both requests return 201 with identical order_id and 1 DB order.
-- [ ] **P0.3**: Reusing idempotency key with modified payload returns 422 Unprocessable Entity.
-- [ ] **P0.4**: Webhook with invalid HMAC signature returns 400. Replayed webhook returns 200 with duplicate ignored.
-- [ ] **P0.5**: PostgreSQL role `vyapari_agent` cannot UPDATE or DELETE products, orders, payments, or audit logs.
-- [ ] **P0.6**: Product image uploads accept presigned S3 PUT only; backend URL fetching is completely absent.
-- [ ] **P1.1**: Rate limiting triggers 429 on 11th rapid login attempt from same IP.
-- [ ] **P1.2**: Revoked refresh token reuse triggers family revocation.
-- [ ] **P2.1**: Recommendation endpoint returns cold-start results with zero exceptions for a brand new user.
-- [ ] **P2.2**: Recommendation service runs 1 worker per container, keeping memory below 800 MB.
+- [x] **P0.1**: Concurrency test verifies exactly one 201 and one 409 for competing orders on stock=1. *(covered by `test_p0_correctness.py`)*
+- [x] **P0.2**: Same-key concurrency test verifies both requests return 201 with identical order_id and 1 DB order. *(covered)*
+- [x] **P0.3**: Reusing an idempotency key with a modified payload returns 422 `IDEMPOTENCY_PAYLOAD_MISMATCH`. *(covered)*
+- [x] **P0.4**: Webhook with invalid HMAC signature returns 400. Replayed webhook returns 200 with duplicate ignored. *(covered)*
+- [x] **P0.5**: PostgreSQL role `vyapari_agent` cannot UPDATE or DELETE products, orders, payments, or audit logs. *(enforced by `V5`/`V6` grants)*
+- [ ] **P0.6**: Product image uploads accept presigned PUT only; backend URL fetching is completely absent. ⚠️ **Half-met.** The MIME whitelist and size limits are real and tested. The presigned URL is fabricated — no bucket is contacted and no bytes are stored. A test that only asserts the URL *looks* like an S3 URL will pass while nothing is uploaded.
+- [ ] **P1.1**: Rate limiting triggers 429 on 11th rapid login attempt from same IP. ⚠️ **Not implemented at all.** `TTL_RATE_LIMIT` is defined at `redis_client.py:34` and never called. No endpoint anywhere is throttled.
+- [x] **P1.2**: Revoked refresh token reuse triggers family revocation. *(V2 `refresh_token_sessions`, family UUID replay detection)*
+- [ ] **P2.1**: Recommendation endpoint returns cold-start results with zero exceptions for a brand new user. ⚠️ Endpoint exists at `GET /api/ai/popular`, but the service is undeployed so it returns empty.
+- [ ] **P2.2**: Recommendation service runs 1 worker per container, keeping memory below 800 MB. ⚠️ Dockerfile is correct; service is not deployed, so this is untested in practice.
+
+### Added since this checklist was written
+
+| ID | Criterion | Status |
+|---|---|---|
+| **V7.1** | Migrations apply in order on an empty database with matching checksums | ✅ shipped (`test-migrations` CI job) |
+| **V7.2** | A legacy `init.sql` database upgrades cleanly to head | ✅ shipped (same job) |
+| **V7.3** | A modified applied migration is reported as tampering, not silently re-run | ✅ shipped (SHA-256 checksums) |
+| **V7.4** | A free-tier seller exceeding 12 media gets 402 `PLAN_LIMIT_REACHED` | ✅ covered by real-DB integration tests |
+| **V7.5** | A pro feature on the free tier gets 402 `PLAN_UPGRADE_REQUIRED` | ✅ covered |
+| **V7.6** | All six block types render; unknown types get a visible fallback | ✅ `npm run smoke` |
+| **V7.7** | `cta_href` with `javascript:` cannot be stored and does not execute | ✅ SQL CHECK + `safeHref` |
+| **V7.8** | A seller cannot grant themselves a plan | ✅ `POST /mine/plan` is admin-only |
+| **V7.9** | An unpublished page 404s from the public API | ✅ covered |
+| **V7.10** | **A human opens `/store/:handle` in a browser and confirms layout, images, lightbox, scroll** | ❌ **outstanding — no browser was ever attached** |

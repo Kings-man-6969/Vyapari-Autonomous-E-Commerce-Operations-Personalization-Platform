@@ -99,6 +99,53 @@ Vyapari's signature design language is rooted in industrial aerospace luxury: a 
 
 ---
 
+## Implementation Notes
+
+> **Read this before adding a component.** These are not stylistic preferences — they are the constraints that make the theme work, learned from building the seller showcase pages.
+
+### There Is No CSS Framework
+
+`frontend/src/index.css` is **hand-written plain CSS**. There is no Tailwind, no Bootstrap, no utility-class system.
+
+**The practical consequence:** any `animate-*` or utility class referenced in JSX is **silently dead** unless it is defined in `index.css`. Nothing errors — the element just does nothing. This is not hypothetical: `AdminProductsPage.jsx` referenced `.animate-spin` for months and rendered a motionless spinner because no such class existed.
+
+**Before using a class in JSX, confirm it is defined in `index.css`.** If it isn't, add it there.
+
+### Motion
+
+| Class | Behavior |
+|---|---|
+| `.spin` / `.animate-spin` | Continuous rotation, for loading indicators |
+| `prefers-reduced-motion` | All transitions and animations are reduced for users who request it |
+
+Motion should be **specular and brief** — a hover lift, a fade, a slide. Nothing bounces, nothing pulses for decoration. Icy Steel (`#38bdf8`) is reserved for genuinely live data (telemetry dots, status beacons); using it as decoration breaks the signal it carries.
+
+### Skeleton Loading
+
+Skeletons must **match the final layout's geometry** — a 1:1 media placeholder where an image will land, and the right number of text lines at roughly the right widths (80% / 60% / 40%). A skeleton of the wrong shape causes a visible layout shift when real content arrives, which is worse than a spinner.
+
+Never use a spinner for content that will populate a grid or list.
+
+### Untrusted Content — Seller-Writable Values
+
+A seller showcase page is a **multi-tenant surface**: one seller can author text and URLs that every visitor sees. Treat every seller-controlled value as attacker input.
+
+| Value | Rule |
+|---|---|
+| Link `href` | Same-origin or `https://` only. **Never** `javascript:`, `data:`, or `vbscript:`. Enforce with `safeHref` at render. |
+| Accent / theme color | 6-digit hex triplet only, enforced with `safeAccent` at render. |
+| Image / video `src` | Host allowlist validated at write time. |
+
+**Validate where the value is used, not only where it is stored.** A database `CHECK` constraint is a useful second layer, not the security boundary — one unchecked write path, a migration, or a direct DB edit and the constraint stops being the only thing standing between a seller and stored XSS on a public page.
+
+Prefer `safeHref`-style helpers at the point of render over inline ternaries. Centralizing the check means the next component inherits the protection instead of re-deriving it.
+
+### Surfaces That Aren't Yet Built
+
+The seller showcase page (`/store/:handle`) is live and follows everything above. Its editor (`/seller/page`) is **not built** — when it is, these tokens apply to it unchanged.
+
+---
+
 ## Do's and Don'ts
 
 ### Do:
@@ -112,3 +159,7 @@ Vyapari's signature design language is rooted in industrial aerospace luxury: a 
 - Never use bright oversaturated non-metallic colors as primary card fills.
 - Never use pure stark flat black (`#000000`) without metallic undertones.
 - Never use heavy clunky drop shadows — use hairline specular borders and subtle inset white bevel highlights (`rgba(255, 255, 255, 0.03)`).
+- **Never reference a CSS class that isn't defined in `index.css`.** There is no Tailwind here; an undefined utility class fails silently and looks like a bug nobody can find.
+- **Never trust seller-authored `href` or color values at render.** Route them through `safeHref` / `safeAccent`.
+- Never use Icy Steel for decoration — it means "live", and diluting that signal makes the real indicators stop reading.
+- Never use a spinner where a layout-matched skeleton belongs.
