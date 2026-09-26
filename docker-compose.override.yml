@@ -1,0 +1,19 @@
+# ==============================================================================
+# LOCAL DEVELOPMENT OVERRIDE (docker-compose.override.yml)
+# ==============================================================================
+# This file is automatically merged by docker-compose for local development.
+# In production environments (or CI), execute:
+#   docker-compose -f docker-compose.yml up
+# to enforce strict zero-public-port isolation on internal AI microservices.
+# ==============================================================================
+
+services:
+  # Expose seller agent locally on 127.0.0.1 loopback only (never on 0.0.0.0)
+  service-seller-agent:
+    ports:
+      - "127.0.0.1:8002:8002"
+
+  # Expose recommendation engine locally on 127.0.0.1 loopback only
+  service-recommendation:
+    ports:
+      - "127.0.0.1:8001:8001"

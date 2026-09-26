@@ -1,10 +1,14 @@
 import os
 import json
+import time
+import uuid
 import logging
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi.responses import JSONResponse, Response as PlainResponse
+from pydantic import BaseModel, Field
 import asyncpg
 import httpx
 from dotenv import load_dotenv
@@ -20,22 +24,27 @@ except ImportError:
     def wait_random_exponential(*args, **kwargs): return None
     def retry_if_exception(f): return None
 
-from src.quota import check_and_increment_quota
+from src.quota import check_and_increment_quota, ping_redis
+from src.metrics import metrics
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
 logger = logging.getLogger("service-seller-agent")
 
-app = FastAPI(
-    title="Vyapari Seller Agentic Operations Service",
-    description="Team B AI Agentic microservice powered by Google Gemini (Listing Agent, Inventory Advisor, Support RAG Agent, Approval Queue Engine).",
-    version="1.0.0"
-)
+START_TIME = time.time()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://vyapari_admin:vyapari_secure_password@db:5432/vyapari")
+# Support least-privilege agent database role with fallback to standard DATABASE_URL
+DATABASE_URL = os.getenv(
+    "AGENT_DATABASE_URL",
+    os.getenv("DATABASE_URL", "postgresql://vyapari_admin:vyapari_secure_password@db:5432/vyapari")
+)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+GEMINI_TIMEOUT_SECONDS = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "15.0"))
 
 # Immutable Prompt Versions for Audit Log Tracking
 PROMPT_VERSIONS = {
@@ -44,10 +53,12 @@ PROMPT_VERSIONS = {
     "support": "support_v1.1"
 }
 
+
 # Error Classification for Gemini Call Retries
 class RetryableGeminiError(Exception):
     """Transient LLM provider error eligible for exponential backoff retry."""
     pass
+
 
 def should_retry_gemini(exc: BaseException) -> bool:
     if isinstance(exc, RetryableGeminiError):
@@ -61,6 +72,7 @@ def should_retry_gemini(exc: BaseException) -> bool:
         return True
     return False
 
+
 # Initialize Gemini Client if key exists
 _gemini_client = None
 if GEMINI_API_KEY:
@@ -72,91 +84,245 @@ if GEMINI_API_KEY:
     except Exception as e:
         logger.warning(f"Failed to initialize Gemini SDK: {e}")
 
+
 @retry(
     retry=retry_if_exception(should_retry_gemini),
     stop=stop_after_attempt(3),
     wait=wait_random_exponential(min=1, max=10),
     reraise=False
 )
-async def call_llm(prompt: str, system_instruction: str = "") -> str:
-    """Invokes Gemini with exponential backoff & jitter; fallback to deterministic intelligence template."""
+async def call_llm(prompt: str, system_instruction: str = "", correlation_id: str = "") -> str:
+    """Invokes Gemini with exponential backoff, explicit timeout & jitter; fallback to deterministic template."""
+    metrics.inc_gemini_request()
     if _gemini_client:
         try:
             full_prompt = f"System: {system_instruction}\nUser: {prompt}" if system_instruction else prompt
-            response = _gemini_client.generate_content(full_prompt)
+            import asyncio
+            response = await asyncio.wait_for(
+                asyncio.to_thread(_gemini_client.generate_content, full_prompt),
+                timeout=GEMINI_TIMEOUT_SECONDS
+            )
             return response.text
         except Exception as e:
+            metrics.inc_gemini_error()
             if should_retry_gemini(e):
-                logger.warning(f"Transient Gemini failure ({e}), triggering exponential backoff retry...")
+                metrics.inc_gemini_retry()
+                logger.warning(f"[cid:{correlation_id}] Transient Gemini failure ({e}), triggering exponential backoff retry...")
                 raise RetryableGeminiError(str(e)) from e
-            logger.error(f"Non-retryable Gemini call failed ({e}), falling back to deterministic agent template")
-    
+            logger.error(f"[cid:{correlation_id}] Non-retryable Gemini call failed ({e}), falling back to deterministic agent template")
+
     # Deterministic fallback response to keep the local test and demonstration functioning
     return ""
 
+
+# Database Connection Pool with Lifespan Management
 async def get_db_pool():
-    if not hasattr(app.state, "pool"):
+    if not hasattr(app.state, "pool") or app.state.pool is None:
         try:
-            app.state.pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+            app.state.pool = await asyncpg.create_pool(
+                DATABASE_URL,
+                min_size=1,
+                max_size=10,
+                command_timeout=10.0,
+                timeout=5.0
+            )
         except Exception as e:
             logger.error(f"Failed to connect to database: {e}")
             return None
     return app.state.pool
 
-@app.on_event("shutdown")
-async def shutdown():
-    if hasattr(app.state, "pool") and app.state.pool:
-        await app.state.pool.close()
 
-# Request Models
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    # Startup: eager initialize pool
+    logger.info("Initializing Seller Agent Service...")
+    try:
+        application.state.pool = await asyncpg.create_pool(
+            DATABASE_URL,
+            min_size=1,
+            max_size=10,
+            command_timeout=10.0,
+            timeout=5.0
+        )
+        logger.info("Database connection pool established successfully.")
+    except Exception as e:
+        logger.warning(f"Database connection pool initialization deferred (db offline or starting up): {e}")
+        application.state.pool = None
+
+    yield
+
+    # Shutdown: cleanly close pool
+    logger.info("Graceful shutdown: closing database connection pool...")
+    if hasattr(application.state, "pool") and application.state.pool:
+        await application.state.pool.close()
+        logger.info("Database connection pool closed.")
+
+
+app = FastAPI(
+    title="Vyapari Seller Agentic Operations Service",
+    description="Team B AI Agentic microservice powered by Google Gemini (Listing Agent, Inventory Advisor, Support RAG Agent, Approval Queue Engine).",
+    version="1.1.0",
+    lifespan=lifespan
+)
+
+
+# Correlation ID and Latency Middleware
+@app.middleware("http")
+async def correlation_and_metrics_middleware(request: Request, call_next):
+    # Extract or generate Correlation ID
+    correlation_id = (
+        request.headers.get("X-Correlation-ID")
+        or request.headers.get("X-Request-ID")
+        or str(uuid.uuid4())
+    )
+    request.state.correlation_id = correlation_id
+
+    start_time = time.time()
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        duration = time.time() - start_time
+        metrics.inc_http_request(request.method, request.url.path, 500, duration)
+        logger.error(f"[cid:{correlation_id}] Unhandled error handling {request.method} {request.url.path}: {exc}")
+        raise exc
+
+    duration = time.time() - start_time
+    response.headers["X-Correlation-ID"] = correlation_id
+    response.headers["X-Response-Time"] = f"{duration * 1000:.2f}ms"
+
+    # Instrument request metrics
+    metrics.inc_http_request(request.method, request.url.path, response.status_code, duration)
+
+    if request.url.path not in {"/health/live", "/metrics"}:
+        logger.info(f"[cid:{correlation_id}] {request.method} {request.url.path} -> {response.status_code} ({duration * 1000:.1f}ms)")
+
+    return response
+
+
+# Request Models with Strict Validation
 class ListingGenRequest(BaseModel):
     seller_id: str
-    prompt: str
+    prompt: str = Field(..., min_length=3, max_length=1500)
     category_id: Optional[str] = None
-    image_urls: List[str] = []
-    notes: Optional[str] = None
+    image_urls: List[str] = Field(default_factory=list, max_items=10)
+    notes: Optional[str] = Field(None, max_length=2000)
+
 
 class InventoryAdvisoryRequest(BaseModel):
     seller_id: str
     product_id: str
-    current_stock: int
-    sales_velocity_7d: int
+    current_stock: int = Field(..., ge=0)
+    sales_velocity_7d: int = Field(..., ge=0)
+
 
 class SupportReplyRequest(BaseModel):
     seller_id: str
-    source_type: str # order_query | review | message
+    source_type: str = "order_query"  # order_query | review | message
     source_id: Optional[str] = None
-    customer_query: str
+    customer_query: str = Field(..., min_length=1, max_length=3000)
 
-class ChatMessageRequest(BaseModel):
-    seller_id: str
-    message: str
+
+# Observability: Health Probes & Metrics
+
+@app.get("/health/live")
+async def liveness_probe():
+    """Lightweight liveness probe for orchestrators (Kubernetes / Docker)."""
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def readiness_probe():
+    """Readiness probe verifying database and Redis connectivity."""
+    db_ok = False
+    pool = await get_db_pool()
+    if pool:
+        try:
+            async with pool.acquire() as conn:
+                val = await conn.fetchval("SELECT 1")
+                db_ok = (val == 1)
+        except Exception as e:
+            logger.warning(f"Readiness probe DB check failed: {e}")
+
+    redis_ok = await ping_redis()
+
+    if db_ok and redis_ok:
+        return {
+            "status": "ready",
+            "dependencies": {
+                "database": "ok",
+                "redis": "ok"
+            }
+        }
+    
+    # Degraded mode: service is running, but dependencies not fully ready
+    return JSONResponse(
+        status_code=503,
+        content={
+            "status": "not_ready",
+            "dependencies": {
+                "database": "ok" if db_ok else "error",
+                "redis": "ok" if redis_ok else "error"
+            }
+        }
+    )
+
 
 @app.get("/health")
-async def health():
+async def diagnostic_health():
+    """Internal diagnostic health check (does not leak credentials or raw secrets)."""
+    pool = await get_db_pool()
+    db_ok = False
+    if pool:
+        try:
+            async with pool.acquire() as conn:
+                val = await conn.fetchval("SELECT 1")
+                db_ok = (val == 1)
+        except Exception:
+            db_ok = False
+
+    redis_ok = await ping_redis()
+    uptime_seconds = int(time.time() - START_TIME)
+
     return {
-        "status": "healthy",
+        "status": "ok" if (db_ok and redis_ok) else "degraded",
         "service": "seller-agent",
-        "llm_provider": "Google Gemini",
-        "model": GEMINI_MODEL,
-        "api_key_configured": bool(GEMINI_API_KEY)
+        "version": "1.1.0",
+        "uptime_seconds": uptime_seconds,
+        "database": "ok" if db_ok else "unavailable",
+        "redis": "ok" if redis_ok else "unavailable",
+        "gemini": "configured" if bool(GEMINI_API_KEY) else "not_configured",
+        "prompt_versions": PROMPT_VERSIONS
     }
 
+
+@app.get("/metrics")
+async def prometheus_metrics():
+    """Prometheus exposition format metrics scraper endpoint."""
+    body = metrics.export_prometheus_text()
+    return PlainResponse(content=body, media_type="text/plain; version=0.0.4; charset=utf-8")
+
+
+# Agent Workflows
+
 @app.post("/agents/generate-listing")
-async def generate_listing(req: ListingGenRequest):
-    # 1. Budget Quota Enforcement
+async def generate_listing(req: ListingGenRequest, request: Request):
+    cid = getattr(request.state, "correlation_id", str(uuid.uuid4()))
+
+    # 1. Budget Quota Enforcement (Distributed Redis with conservative local fallback)
     allowed, reason, retry_after = await check_and_increment_quota(req.seller_id, estimated_tokens=1500)
     if not allowed:
+        metrics.inc_quota_rejection()
+        logger.warning(f"[cid:{cid}] Quota rejected for seller {req.seller_id}: {reason}")
         return JSONResponse(
             status_code=429,
-            content={"code": "DAILY_AI_QUOTA_EXCEEDED", "message": reason},
-            headers={"Retry-After": str(retry_after)}
+            content={"code": "DAILY_AI_QUOTA_EXCEEDED", "message": reason, "correlation_id": cid},
+            headers={"Retry-After": str(retry_after), "X-Correlation-ID": cid}
         )
 
     pool = await get_db_pool()
     if not pool:
         raise HTTPException(status_code=503, detail="Database pool unavailable")
-    
+
     # 2. Prompt for Gemini
     system_prompt = (
         "You are an expert e-commerce catalog specialist. Output ONLY valid JSON with keys: "
@@ -164,18 +330,17 @@ async def generate_listing(req: ListingGenRequest):
         "'suggested_price' (number in INR), 'attributes' (key-value object of specs)."
     )
     user_prompt = f"Create an e-commerce listing for: {req.prompt}. Additional context: {req.notes or 'None'}"
-    
-    llm_output = await call_llm(user_prompt, system_prompt)
-    
-    # Parse or provide fallback structure
+
+    llm_output = await call_llm(user_prompt, system_prompt, correlation_id=cid)
+
+    # Parse or provide deterministic fallback structure
     try:
         clean_text = llm_output.strip().replace("```json", "").replace("```", "").strip()
         data = json.loads(clean_text)
     except Exception:
-        # Structured fallback
         data = {
             "title": f"Premium {req.prompt[:50]}",
-            "description": f"Engineered for exceptional performance and daily reliability. This premium product combines precision craftsmanship with durable, modern design. Ideal for both daily use and gifting.\n\nCrafted with high-grade components for extended longevity.",
+            "description": f"Engineered for exceptional performance and daily reliability. This premium product combines precision craftsmanship with durable, modern design.\n\nCrafted with high-grade components for extended longevity.",
             "tags": ["premium", "bestseller", "new-arrival"],
             "suggested_price": 2999.00,
             "attributes": {"material": "Premium Grade", "origin": "India"}
@@ -191,11 +356,11 @@ async def generate_listing(req: ListingGenRequest):
                 RETURNING id;
                 """,
                 req.seller_id,
-                json.dumps(req.dict()),
+                json.dumps({**req.dict(), "correlation_id": cid}),
                 json.dumps(data)
             )
             task_id = task_row["id"]
-            
+
             # 2. Insert into product_drafts
             draft_row = await conn.fetchrow(
                 """
@@ -212,14 +377,15 @@ async def generate_listing(req: ListingGenRequest):
                 task_id
             )
             draft_id = draft_row["id"]
-            
+
             # 3. Insert into agent_approval_queue (Seller must approve before live publish)
             approval_payload = {
                 "draft_id": str(draft_id),
                 "title": data.get("title"),
                 "suggested_price": data.get("suggested_price"),
                 "tags": data.get("tags", []),
-                "images": req.image_urls
+                "images": req.image_urls,
+                "correlation_id": cid
             }
             queue_row = await conn.fetchrow(
                 """
@@ -249,6 +415,7 @@ async def generate_listing(req: ListingGenRequest):
 
             return {
                 "success": True,
+                "correlation_id": cid,
                 "task_id": str(task_id),
                 "draft_id": str(draft_id),
                 "approval_id": str(queue_row["id"]),
@@ -256,27 +423,32 @@ async def generate_listing(req: ListingGenRequest):
                 "generated": data
             }
 
+
 @app.post("/agents/inventory-advisory")
-async def generate_inventory_advisory(req: InventoryAdvisoryRequest):
+async def generate_inventory_advisory(req: InventoryAdvisoryRequest, request: Request):
+    cid = getattr(request.state, "correlation_id", str(uuid.uuid4()))
+
     # 1. Budget Quota Enforcement
     allowed, reason, retry_after = await check_and_increment_quota(req.seller_id, estimated_tokens=500)
     if not allowed:
+        metrics.inc_quota_rejection()
+        logger.warning(f"[cid:{cid}] Quota rejected for seller {req.seller_id}: {reason}")
         return JSONResponse(
             status_code=429,
-            content={"code": "DAILY_AI_QUOTA_EXCEEDED", "message": reason},
-            headers={"Retry-After": str(retry_after)}
+            content={"code": "DAILY_AI_QUOTA_EXCEEDED", "message": reason, "correlation_id": cid},
+            headers={"Retry-After": str(retry_after), "X-Correlation-ID": cid}
         )
 
     pool = await get_db_pool()
     if not pool:
         raise HTTPException(status_code=503, detail="Database pool unavailable")
-    
+
     daily_velocity = max(req.sales_velocity_7d / 7.0, 0.1)
     days_left = round(req.current_stock / daily_velocity, 1)
-    
+
     trend = "rising" if req.sales_velocity_7d >= 10 else ("falling" if req.sales_velocity_7d <= 2 else "stable")
     recommended_reorder = max(int(daily_velocity * 30 - req.current_stock), 10) if days_left < 10 else 0
-    
+
     reasoning = (
         f"At current 7-day velocity of {req.sales_velocity_7d} units ({daily_velocity:.1f}/day), "
         f"current stock of {req.current_stock} will exhaust in approximately {days_left} days. "
@@ -292,11 +464,11 @@ async def generate_inventory_advisory(req: InventoryAdvisoryRequest):
                 RETURNING id;
                 """,
                 req.seller_id,
-                json.dumps(req.dict()),
+                json.dumps({**req.dict(), "correlation_id": cid}),
                 json.dumps({"days_left": days_left, "trend": trend, "reorder": recommended_reorder})
             )
             task_id = task_row["id"]
-            
+
             adv_row = await conn.fetchrow(
                 """
                 INSERT INTO inventory_advisories (seller_id, product_id, days_of_stock_left, demand_trend, recommended_reorder_qty, reasoning, created_by_task)
@@ -322,7 +494,12 @@ async def generate_inventory_advisory(req: InventoryAdvisoryRequest):
                 req.seller_id,
                 task_id,
                 adv_id,
-                json.dumps({"days_left": days_left, "reorder": recommended_reorder, "reasoning": reasoning}),
+                json.dumps({
+                    "days_left": days_left,
+                    "reorder": recommended_reorder,
+                    "reasoning": reasoning,
+                    "correlation_id": cid
+                }),
             )
 
             # Record Immutable Audit Log with Prompt Versioning
@@ -341,6 +518,7 @@ async def generate_inventory_advisory(req: InventoryAdvisoryRequest):
 
             return {
                 "success": True,
+                "correlation_id": cid,
                 "task_id": str(task_id),
                 "advisory_id": str(adv_id),
                 "approval_id": str(queue_row["id"]),
@@ -351,15 +529,20 @@ async def generate_inventory_advisory(req: InventoryAdvisoryRequest):
                 "reasoning": reasoning
             }
 
+
 @app.post("/agents/support-reply")
-async def generate_support_reply(req: SupportReplyRequest):
+async def generate_support_reply(req: SupportReplyRequest, request: Request):
+    cid = getattr(request.state, "correlation_id", str(uuid.uuid4()))
+
     # 1. Budget Quota Enforcement
     allowed, reason, retry_after = await check_and_increment_quota(req.seller_id, estimated_tokens=800)
     if not allowed:
+        metrics.inc_quota_rejection()
+        logger.warning(f"[cid:{cid}] Quota rejected for seller {req.seller_id}: {reason}")
         return JSONResponse(
             status_code=429,
-            content={"code": "DAILY_AI_QUOTA_EXCEEDED", "message": reason},
-            headers={"Retry-After": str(retry_after)}
+            content={"code": "DAILY_AI_QUOTA_EXCEEDED", "message": reason, "correlation_id": cid},
+            headers={"Retry-After": str(retry_after), "X-Correlation-ID": cid}
         )
 
     pool = await get_db_pool()
@@ -368,10 +551,10 @@ async def generate_support_reply(req: SupportReplyRequest):
 
     query_lower = req.customer_query.lower()
     is_refund_risk = any(w in query_lower for w in ["refund", "cancel", "broken", "damaged", "return", "complaint", "fraud"])
-    
+
     intent = "return_refund" if is_refund_risk else ("order_status" if "where is" in query_lower or "track" in query_lower else "product_question")
     risk_level = "high" if is_refund_risk else "low"
-    
+
     if is_refund_risk:
         draft = (
             "Hello! We apologize for any inconvenience caused. Per our store policy, we are happy to assist you with a replacement "
@@ -392,7 +575,7 @@ async def generate_support_reply(req: SupportReplyRequest):
                 RETURNING id;
                 """,
                 req.seller_id,
-                json.dumps(req.dict()),
+                json.dumps({**req.dict(), "correlation_id": cid}),
                 json.dumps({"intent": intent, "risk": risk_level, "draft": draft})
             )
             task_id = task_row["id"]
@@ -424,7 +607,13 @@ async def generate_support_reply(req: SupportReplyRequest):
                 task_id,
                 reply_id,
                 risk_level,
-                json.dumps({"intent": intent, "customer_query": req.customer_query, "draft_response": draft, "risk_level": risk_level})
+                json.dumps({
+                    "intent": intent,
+                    "customer_query": req.customer_query,
+                    "draft_response": draft,
+                    "risk_level": risk_level,
+                    "correlation_id": cid
+                })
             )
 
             # Record Immutable Audit Log with Prompt Versioning
@@ -443,6 +632,7 @@ async def generate_support_reply(req: SupportReplyRequest):
 
             return {
                 "success": True,
+                "correlation_id": cid,
                 "task_id": str(task_id),
                 "reply_id": str(reply_id),
                 "approval_id": str(queue_row["id"]),
