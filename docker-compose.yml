@@ -23,11 +23,35 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
       - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    # -h 127.0.0.1 forces a TCP probe. The default socket probe succeeds while
+    # the 41MB seed.sql is still loading against the temporary init server, which
+    # would let dependent services start against a half-seeded database.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vyapari_admin} -d ${POSTGRES_DB:-vyapari}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-vyapari_admin} -d ${POSTGRES_DB:-vyapari}"]
       interval: 5s
       timeout: 5s
       retries: 5
+      start_period: 30s
+
+  # ----------------------------------------------------------------------------
+  # Schema migrations: db/migrations/ applied in order, tracked in
+  # schema_migrations. Runs to completion then exits, so everything else can
+  # depend on service_completed_successfully.
+  # ----------------------------------------------------------------------------
+  db-migrate:
+    build:
+      context: ./backend-core-py
+      dockerfile: Dockerfile
+    container_name: vyapari-db-migrate
+    restart: "no"
+    command: ["python", "/app/scripts/migrate.py", "apply"]
+    volumes:
+      - ./scripts:/app/scripts:ro
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vyapari_admin}:${POSTGRES_PASSWORD:-vyapari_secure_password}@db:5432/${POSTGRES_DB:-vyapari}
+    depends_on:
+      db:
+        condition: service_healthy
 
   # ----------------------------------------------------------------------------
   # Cache & Session Store: Redis 7 Alpine
@@ -82,13 +106,14 @@ services:
       dockerfile: Dockerfile
     container_name: vyapari-seller-agent
     restart: unless-stopped
-    ports:
-      - "8002:8002"
+    expose:
+      - "8002"
     volumes:
       - ./service-seller-agent/src:/app/src
     environment:
       PORT: 8002
       DATABASE_URL: postgresql://${POSTGRES_USER:-vyapari_admin}:${POSTGRES_PASSWORD:-vyapari_secure_password}@db:5432/${POSTGRES_DB:-vyapari}
+      AGENT_DATABASE_URL: postgresql://${POSTGRES_AGENT_USER:-vyapari_agent}:${POSTGRES_AGENT_PASSWORD:-vyapari_agent_pass_change_in_prod}@db:5432/${POSTGRES_DB:-vyapari}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
@@ -98,11 +123,59 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8002/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8002/health/live || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 15s
+
+  # ----------------------------------------------------------------------------
+  # Celery Asynchronous Worker: Background listing generation & inference
+  # ----------------------------------------------------------------------------
+  service-seller-agent-worker:
+    build:
+      context: ./service-seller-agent
+      dockerfile: Dockerfile
+    container_name: vyapari-seller-agent-worker
+    restart: unless-stopped
+    command: ["celery", "-A", "src.tasks.celery_app", "worker", "-l", "info", "-c", "2"]
+    volumes:
+      - ./service-seller-agent/src:/app/src
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vyapari_admin}:${POSTGRES_PASSWORD:-vyapari_secure_password}@db:5432/${POSTGRES_DB:-vyapari}
+      AGENT_DATABASE_URL: postgresql://${POSTGRES_AGENT_USER:-vyapari_agent}:${POSTGRES_AGENT_PASSWORD:-vyapari_agent_pass_change_in_prod}@db:5432/${POSTGRES_DB:-vyapari}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ----------------------------------------------------------------------------
+  # Celery Beat Scheduler: Periodic 6-hour inventory scan schedule
+  # ----------------------------------------------------------------------------
+  service-seller-agent-beat:
+    build:
+      context: ./service-seller-agent
+      dockerfile: Dockerfile
+    container_name: vyapari-seller-agent-beat
+    restart: unless-stopped
+    command: ["celery", "-A", "src.tasks.celery_app", "beat", "-l", "info"]
+    volumes:
+      - ./service-seller-agent/src:/app/src
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vyapari_admin}:${POSTGRES_PASSWORD:-vyapari_secure_password}@db:5432/${POSTGRES_DB:-vyapari}
+      AGENT_DATABASE_URL: postgresql://${POSTGRES_AGENT_USER:-vyapari_agent}:${POSTGRES_AGENT_PASSWORD:-vyapari_agent_pass_change_in_prod}@db:5432/${POSTGRES_DB:-vyapari}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   # ----------------------------------------------------------------------------
   # Core Backend: Python FastAPI (API Gateway, Auth, Commerce, Approvals)
@@ -143,6 +216,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       service-recommendation:
