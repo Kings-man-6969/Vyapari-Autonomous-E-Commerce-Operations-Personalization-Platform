@@ -38,6 +38,20 @@ class Settings(BaseSettings):
     RAZORPAY_KEY_ID: str = "rzp_test_placeholder_key_id"
     RAZORPAY_KEY_SECRET: str = "rzp_test_placeholder_key_secret"
     RAZORPAY_WEBHOOK_SECRET: str = "rzp_test_placeholder_webhook_secret"
+    RAZORPAY_CURRENCY: str = "INR"
+
+    # How long an unpaid order holds its stock. A pending order has already had
+    # its stock decremented, so without an expiry a customer who abandons checkout
+    # -- or closes the tab during the gateway's own 3-D Secure step -- leaves the
+    # catalogue selling inventory nobody is holding. The sweep that acts on this
+    # is in app/jobs.py.
+    ORDER_PAYMENT_WINDOW_MINUTES: int = 30
+
+    # How often the abandoned-order sweep runs, and whether it runs at all. Off by
+    # default in tests, on in the app, because a background loop that writes to
+    # the database is not something a test wants to race against.
+    RUN_ORDER_SWEEP: bool = True
+    ORDER_SWEEP_INTERVAL_SECONDS: int = 300
 
     # S3 Storage
     S3_BUCKET_NAME: str = "vyapari-products"

@@ -184,6 +184,12 @@ LIMITS = {
     "ai.search": (60, 60),          # NL/semantic search proxies an outbound call
     # Writes.
     "orders.create": (10, 60),      # 10 per minute per user
+    # Opening checkout. Each call mints a gateway order, so an unbounded rate is
+    # an unbounded supply of order ids in Razorpay's dashboard that we will never
+    # reconcile -- and the frontend retries on a 502, so the honest ceiling has
+    # room for those without punishing a customer who is simply retrying.
+    "payments.create": (20, 60),    # 20 per minute per user
+    "payments.refund": (30, 3600),   # 30 per hour: money leaving, admin only
     "cart.write": (60, 60),
     "reviews.create": (5, 3600),    # 5 per hour: review spam
     # Infra.

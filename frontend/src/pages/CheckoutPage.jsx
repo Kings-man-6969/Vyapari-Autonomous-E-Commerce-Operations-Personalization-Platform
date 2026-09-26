@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ShieldCheck, Lock, ArrowLeft, CheckCircle2, CreditCard, ShoppingBag, Zap, ChevronRight } from 'lucide-react';
+import { ShieldCheck, ArrowLeft, CreditCard, ShoppingBag, Loader2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import LineOption from '../components/LineOption';
+import { openCheckout } from '../lib/razorpay';
+import { usePaymentStatus } from '../hooks/usePaymentStatus';
 
 export const CheckoutPage = () => {
   const { items, totalAmount, clearCart } = useCart();
@@ -48,9 +50,55 @@ export const CheckoutPage = () => {
     if (user) fetchSavedAddress();
   }, [user]);
 
-  const [paymentMethod, setPaymentMethod] = useState('simulated_card');
+  // One method, and it is Razorpay's. Kept as state because the radio needs
+  // something to bind to, and because the second method the brief asked for
+  // (COD) belongs next to it rather than replacing this -- see BUILD_CHECKLIST.
+  const [paymentMethod, setPaymentMethod] = useState('razorpay');
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  // The order exists from the moment the order POST succeeds, which is before
+  // anything is paid. It is kept so every later error and the polling hook can
+  // name it -- a customer who cannot pay needs the order number to raise it with
+  // support, and it is the id the status endpoint is keyed on.
+  const [orderId, setOrderId] = useState(null);
+  const [stage, setStage] = useState('idle'); // idle | starting | paying | confirming | polling
+
+  const polling = usePaymentStatus(orderId, { active: stage === 'polling' });
+
+  // The polling loop is the last thing standing between the customer and a
+  // success page once the gateway has taken the money, so the transition out of
+  // it lives here rather than inside the hook: a hook cannot navigate, and
+  // routing the customer away mid-poll would tear down the very loop that was
+  // going to tell them it worked.
+  useEffect(() => {
+    if (stage !== 'polling') return;
+    if (polling.effectiveStatus === 'success') {
+      clearCart();
+      navigate(`/orders/${orderId}?success=true`);
+    } else if (polling.effectiveStatus && ['failed', 'cancelled'].includes(polling.effectiveStatus)) {
+      setError(
+        polling.effectiveStatus === 'cancelled'
+          ? 'This order was cancelled, so its items have been released.'
+          : 'The payment did not go through. You have not been charged.'
+      );
+      setStage('idle');
+    } else if (polling.effectiveStatus === 'refunded' || polling.effectiveStatus === 'partially_refunded') {
+      clearCart();
+      navigate(`/orders/${orderId}?success=true`);
+    }
+  }, [stage, polling.effectiveStatus, orderId, clearCart, navigate]);
+
+  // Gave up polling. Saying so beats an indefinite spinner, and the status
+  // endpoint is the same one the order page will ask, so nothing is lost.
+  useEffect(() => {
+    if (stage === 'polling' && polling.attempts >= 30) {
+      setNotice(
+        'Your payment is still being confirmed. This page will keep checking -- you can also ' +
+        'open your order at any time; it updates on its own.'
+      );
+    }
+  }, [stage, polling.attempts]);
 
   if (items.length === 0) {
     return (
@@ -71,51 +119,149 @@ export const CheckoutPage = () => {
     );
   }
 
+  /** Reads a FastAPI error body out of an axios rejection, or falls back. */
+  const apiError = (err, fallback) =>
+    err?.response?.data?.error?.message || err?.message || fallback;
+
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
     setError('');
+    setNotice('');
+
+    // An order already exists, so the retry reuses it rather than creating a
+    // second one. Creating a second would take the stock twice and leave the
+    // customer with an abandoned order that is holding inventory for 30 minutes.
+    let id = orderId;
     setPlacing(true);
 
     try {
-      // 1. Create order with backend atomic transaction (SELECT FOR UPDATE)
+      if (!id) {
+        // 1. Create the order (SELECT FOR UPDATE on each product row).
+        //
+        // The option id has to come from the bag line, not be left off. The
+        // server accepts an order line with no option and falls back to the
+        // product's default -- so without this, a customer who picked Large is
+        // charged for and shipped Medium, and nothing on the screen looks wrong.
+        // The bag is the record of the choice; the order is built from it.
+        const orderPayload = {
+          shipping_address: address,
+          items: items.map(i => ({
+            product_id: i.product_id,
+            quantity: i.quantity,
+            ...(i.variant_id ? { variant_id: i.variant_id } : {})
+          }))
+        };
+
+        setStage('starting');
+        const orderRes = await api.post('/orders', orderPayload);
+        if (!orderRes.data?.success) {
+          throw new Error(orderRes.data?.error?.message || 'Could not start the order.');
+        }
+        id = orderRes.data.data.order_id;
+        setOrderId(id);
+      }
+
+      // 2. Ask the server to open a gateway order.
       //
-      // The option id has to come from the bag line, not be left off. The server
-      // accepts an order line with no option and falls back to the product's
-      // default -- so without this, a customer who picked Large is charged for
-      // and shipped Medium, and nothing on the screen looks wrong. The bag is
-      // the record of the choice; the order has to be built from it.
-      const orderPayload = {
-        shipping_address: address,
-        items: items.map(i => ({
-          product_id: i.product_id,
-          quantity: i.quantity,
-          ...(i.variant_id ? { variant_id: i.variant_id } : {})
-        }))
-      };
-
-      const orderRes = await api.post('/orders', orderPayload);
-      if (!orderRes.data?.success) {
-        throw new Error(orderRes.data?.error?.message || 'Failed to initialize order');
+      // The amount, the currency and the key id all come from here rather than
+      // from the bag total in this component. The total on screen is a number we
+      // computed; the number that gets charged has to be the one the server
+      // holds against the order, or a stale bag can be charged the old price.
+      setStage('paying');
+      let checkoutParams;
+      try {
+        const payRes = await api.post('/payments/create', { order_id: id });
+        checkoutParams = payRes.data?.data;
+        if (!checkoutParams?.key_id) {
+          throw new Error('The payment could not be prepared. Please try again.');
+        }
+      } catch (payErr) {
+        const code = payErr?.response?.data?.error?.code;
+        if (code === 'GATEWAY_NOT_CONFIGURED') {
+          // Not a payment failure and not the customer's fault. The order is
+          // saved, the stock is held, and nothing was charged -- so the honest
+          // thing is to say that, with the order number, rather than "try again"
+          // against a server that has no keys to try with.
+          setError(
+            `Payments are not switched on for this store yet. Your order ${id} is saved and ` +
+            'nothing has been charged; you can pay it now or come back to it shortly.'
+          );
+          setStage('idle');
+          return;
+        }
+        if (code === 'ORDER_EXPIRED' || code === 'ORDER_NOT_PAYABLE') {
+          // The window closed, or something else already settled it. The stock
+          // has gone back to the shop, so retrying this order cannot work.
+          setError(apiError(payErr, 'This order can no longer be paid.'));
+          setOrderId(null);
+          setStage('idle');
+          return;
+        }
+        throw payErr;
       }
 
-      const orderId = orderRes.data.data.order_id;
-
-      // 2. Simulate Razorpay payment confirmation
-      const confirmRes = await api.post(`/orders/${orderId}/confirm-payment`, {
-        razorpay_payment_id: `pay_rzp_mock_${Date.now()}`
-      });
-
-      if (confirmRes.data?.success) {
-        clearCart();
-        navigate(`/orders/${orderId}?success=true`);
+      // 3. Open Razorpay and let the customer pay.
+      //
+      // A dismissal is not a failure and is not an error -- nothing was charged
+      // and the stock is still held, so the right thing is to say so and leave
+      // the button available.
+      let payment;
+      try {
+        payment = await openCheckout(checkoutParams);
+      } catch (checkoutErr) {
+        if (checkoutErr?.reason === 'dismissed') {
+          setNotice(
+            'Payment cancelled. Your items are still reserved while you finish checkout.'
+          );
+          setStage('idle');
+          return;
+        }
+        setError(apiError(checkoutErr, 'The payment did not go through. You have not been charged.'));
+        setStage('idle');
+        return;
       }
+
+      // 4. Hand the gateway's three fields to the server to verify.
+      //
+      // This is the step that used to send a made-up payment id and mark the
+      // order paid on the browser's word alone. The server now checks the
+      // signature and asks Razorpay what actually happened.
+      setStage('confirming');
+      const confirmRes = await api.post(`/orders/${id}/confirm-payment`, payment);
+      const confirmData = confirmRes.data?.data;
+
+      if (confirmData?.status === 'pending_verification') {
+        // The signature checked out but the capture has not been confirmed yet.
+        // The webhook will do it; poll until it lands rather than claiming
+        // success or dumping the customer back on an unpaid order.
+        setNotice(
+          'Payment received. Confirming it with the bank now -- this usually takes a few seconds.'
+        );
+        setStage('polling');
+        return;
+      }
+
+      clearCart();
+      navigate(`/orders/${id}?success=true`);
     } catch (err) {
-      console.error('Order creation error:', err);
-      setError(err.response?.data?.error?.message || err.message || 'Checkout failed.');
+      console.error('Checkout error:', err);
+      setError(apiError(err, 'Checkout failed. You have not been charged.'));
+      setStage('idle');
     } finally {
       setPlacing(false);
     }
   };
+
+  // One string for the button, so it can never read "Placing your order..." over
+  // a step that is not placing an order -- which is most of them.
+  const buttonLabel = (() => {
+    if (stage === 'starting') return 'Reserving your items...';
+    if (stage === 'paying') return 'Opening secure payment...';
+    if (stage === 'confirming') return 'Verifying your payment...';
+    if (stage === 'polling') return 'Confirming payment with the bank...';
+    if (placing) return 'Working...';
+    return `Place Your Order • ₹${totalAmount.toLocaleString('en-IN')}`;
+  })();
 
   return (
     <div style={{ backgroundColor: 'var(--color-obsidian-graphite)', minHeight: 'calc(100vh - 76px)', padding: '48px 0' }}>
@@ -147,12 +293,48 @@ export const CheckoutPage = () => {
             color: 'var(--color-error)',
             borderRadius: '10px',
             border: '1px solid rgba(244, 63, 94, 0.3)',
-            marginBottom: '24px',
+            marginBottom: '16px',
             fontWeight: 500,
-            fontSize: '13px'
+            fontSize: '13px',
+            lineHeight: 1.5
           }}>
             {error}
           </div>
+        )}
+
+        {/* Not an error. A dismissed payment and a payment awaiting the webhook
+            are both ordinary states, and colouring them red would train people to
+            ignore the one message on this page that is genuinely alarming. */}
+        {notice && (
+          <div style={{
+            padding: '14px 18px',
+            backgroundColor: 'rgba(44, 123, 229, 0.12)',
+            color: 'var(--color-icy-steel)',
+            borderRadius: '10px',
+            border: '1px solid rgba(44, 123, 229, 0.3)',
+            marginBottom: '24px',
+            fontWeight: 500,
+            fontSize: '13px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '10px',
+            lineHeight: 1.5
+          }}>
+            {stage === 'polling' && (
+              <Loader2 size={15} style={{ marginTop: '1px', flexShrink: 0, animation: 'vyapariSpin 0.85s linear infinite' }} />
+            )}
+            <span>{notice}</span>
+          </div>
+        )}
+
+        {/* The window the sweep runs on, stated before it is used rather than
+            after. A customer who is told "your items are reserved" and is not
+            told for how long will read the next stall as a problem. */}
+        {stage === 'idle' && orderId && !error && (
+          <p style={{ fontSize: '11px', color: 'var(--color-silver-glow)', opacity: 0.7, margin: '0 0 16px' }}>
+            Order {orderId} is saved. Items are held for 30 minutes, so you can finish paying
+            without anything selling out from under you.
+          </p>
         )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '40px', alignItems: 'start' }}>
@@ -285,9 +467,9 @@ export const CheckoutPage = () => {
                   <input
                     type="radio"
                     name="payment"
-                    value="simulated_card"
-                    checked={paymentMethod === 'simulated_card'}
-                    onChange={() => setPaymentMethod('simulated_card')}
+                    value="razorpay"
+                    checked={paymentMethod === 'razorpay'}
+                    onChange={() => setPaymentMethod('razorpay')}
                     style={{ accentColor: 'var(--color-icy-steel)' }}
                   />
                   <div style={{ flex: 1 }}>
@@ -296,7 +478,7 @@ export const CheckoutPage = () => {
                       <span>Razorpay (UPI, Credit/Debit Card, NetBanking)</span>
                     </div>
                     <span style={{ fontSize: '11px', color: 'var(--color-silver-glow)', opacity: 0.7, marginTop: '2px', display: 'block' }}>
-                      Safe and encrypted checkout powered by Razorpay
+                      UPI, cards, wallets and net banking, on Razorpay's own secure form
                     </span>
                   </div>
                 </label>
@@ -305,12 +487,38 @@ export const CheckoutPage = () => {
 
             <button
               type="submit"
-              disabled={placing}
+              disabled={placing || stage === 'polling'}
               className="btn-primary"
-              style={{ width: '100%', padding: '16px', fontSize: '14px', fontWeight: 600 }}
+              style={{
+                width: '100%',
+                padding: '16px',
+                fontSize: '14px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                // Disabled while the webhook is being waited on: pressing Pay
+                // again would open a second gateway order for an order that is
+                // already being paid.
+                opacity: placing || stage === 'polling' ? 0.75 : 1,
+                cursor: placing || stage === 'polling' ? 'default' : 'pointer'
+              }}
             >
-              {placing ? 'Placing your order...' : `Place Your Order • ₹${totalAmount.toLocaleString('en-IN')}`}
+              {stage === 'polling' && <Loader2 size={16} style={{ animation: 'vyapariSpin 0.85s linear infinite' }} />}
+              {buttonLabel}
             </button>
+
+            {stage === 'idle' && orderId && error && (
+              <button
+                type="button"
+                onClick={handlePlaceOrder}
+                className="btn-secondary"
+                style={{ width: '100%', padding: '13px', fontSize: '13px', fontWeight: 600 }}
+              >
+                Try payment again
+              </button>
+            )}
           </form>
 
           {/* Order Summary & Stock Lock Assurance */}

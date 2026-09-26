@@ -1,9 +1,11 @@
+import asyncio
 import logging
 import re
 import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -12,6 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.auth.router import router as auth_router
 from app.config import settings
 from app.db import close_pool, init_pool
+from app.jobs import order_sweep_loop
 from app.redis_client import close_redis, init_redis
 from app.routers.admin import router as admin_router
 from app.routers.ai import router as ai_router
@@ -53,10 +56,30 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Could not initialize Redis on startup: {e}. Fallback active.")
 
-    yield
-    logger.info("Closing database and Redis connections...")
-    await close_pool()
-    await close_redis()
+    # The abandoned-order sweep. The counterpart to the stock decrement in
+    # POST /api/orders: an unpaid order holds real inventory for a limited
+    # window, and this is what returns it when the window closes. Cancelled
+    # cleanly on shutdown so a container stop does not leave a half-swept batch
+    # -- the sweep takes row locks, and a killed process holding those would
+    # block the next one until they expire.
+    sweep_task = None
+    if settings.RUN_ORDER_SWEEP:
+        sweep_task = asyncio.create_task(order_sweep_loop(), name="order-sweep")
+    else:
+        logger.info("Abandoned-order sweep disabled (RUN_ORDER_SWEEP is off)")
+
+    try:
+        yield
+    finally:
+        if sweep_task:
+            sweep_task.cancel()
+            try:
+                await sweep_task
+            except asyncio.CancelledError:
+                pass
+        logger.info("Closing database and Redis connections...")
+        await close_pool()
+        await close_redis()
 
 
 app = FastAPI(
@@ -71,12 +94,27 @@ app = FastAPI(
 
 UUID_REGEX = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", re.IGNORECASE)
 
+# One list, two places it has to appear: the API's own responses (this header,
+# and /api/docs) and the static host serving the SPA -- which keeps its copy in
+# the deployment config, because Render does not read one from the repository.
+# The two have drifted before, and the symptom is a checkout that silently does
+# nothing in the browser while every test passes, so the origins that the payment
+# flow genuinely needs are named here and in BUILD_CHECKLIST's deployment notes.
+#
+# checkout.razorpay.com in script-src: the checkout script itself.
+# api.razorpay.com in connect-src and frame-src: the payment form is served in an
+#   iframe and posts back to Razorpay. Without frame-src the modal renders blank
+#   -- no error, no console message on our side, just an empty box.
+# checkout.razorpay.com in frame-src: the newer hosted page is framed from here
+#   rather than api.razorpay.com depending on the integration mode.
 CSP_DIRECTIVES = (
     "default-src 'self'; "
-    "script-src 'self'; "
-    "style-src 'self' 'unsafe-inline'; "
+    "script-src 'self' https://checkout.razorpay.com; "
+    "style-src 'self' 'unsafe-inline' https://checkout.razorpay.com; "
     "img-src 'self' https: data: blob:; "
-    "connect-src 'self' https://api.vyapari.live http://api.vyapari.live https://api.vyapari.com https://api.razorpay.com; "
+    "connect-src 'self' https://api.vyapari.live http://api.vyapari.live https://api.vyapari.com "
+    "https://api.razorpay.com https://lumberjack.razorpay.com; "
+    "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com; "
     "font-src 'self' https: data:; "
     "object-src 'none'; "
     "frame-ancestors 'none'; "
@@ -154,11 +192,19 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     code = "ERROR"
     message = "An error occurred."
     details = None
+    data = None
 
     if isinstance(exc.detail, dict):
         code = exc.detail.get("code", "NOT_FOUND" if exc.status_code == 404 else "ERROR")
         message = exc.detail.get("message", "An error occurred.")
         details = exc.detail.get("details")
+        # 'data' is the fourth key routes put in a detail dict, and it was being
+        # dropped here: 115 raise sites across 18 routers pass structured detail
+        # this way -- how much is still refundable, which field failed a check, the
+        # current status of a conflicting resource -- and none of it ever reached
+        # the client. A frontend asking "how much can I still refund?" got the
+        # message with no number in it.
+        data = exc.detail.get("data")
     elif isinstance(exc.detail, str):
         if exc.status_code == 404 and exc.detail == "Not Found":
             code = "ROUTE_NOT_FOUND"
@@ -174,16 +220,22 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     # Retry-After in expose_headers for a header that could never be sent.
     headers = dict(exc.headers or {})
 
+    error = {"code": code, "message": message, "details": details}
+    # Only when a route supplied it, so the shape of every other error is
+    # unchanged for the clients already parsing it.
+    if data is not None:
+        # Routes hand this straight out of asyncpg rows, so it arrives holding
+        # datetimes, UUIDs and Decimals -- none of which json.dumps will take. A
+        # 409 whose error body cannot be encoded would be reported as a 500,
+        # telling the client the server broke when the server was right.
+        try:
+            error["data"] = jsonable_encoder(data)
+        except Exception:
+            error["data"] = {"value": str(data)}
+
     return JSONResponse(
         status_code=exc.status_code,
-        content={
-            "success": False,
-            "error": {
-                "code": code,
-                "message": message,
-                "details": details,
-            },
-        },
+        content={"success": False, "error": error},
         headers=headers,
     )
 

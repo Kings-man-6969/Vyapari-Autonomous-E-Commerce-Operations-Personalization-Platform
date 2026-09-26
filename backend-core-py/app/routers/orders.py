@@ -5,24 +5,36 @@ GET  /api/orders
 GET  /api/orders/:id
 POST /api/orders                       (SELECT FOR UPDATE ACID transaction)
 POST /api/orders/:id/confirm-payment
+PUT  /api/orders/:id/cancel
 
 Variant-aware. Each line may name an option; the price, the stock lock and the
 decrement all come from app.variants.resolve_purchase_line, which is the same
 code the cart prices with. The purchased attributes and SKU are snapshotted onto
 the order line so history survives a later edit to the option.
+
+Stock goes out on placement and comes back on cancellation or expiry --
+app.routers.payments.restore_stock is the only thing that puts it back, and
+there is no other caller, so there is exactly one place to get it right.
 """
 import hashlib
 import json
-import time
+import logging
+import re
 from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth.dependencies import require_auth
+from app.config import settings
 from app.db import get_db, get_pool
+from app.payments.razorpay import GatewayError, gateway
+# _after_paid and restore_stock live in the payments router because the webhook
+# needs them too, and two copies of "make this order paid" would be two places to
+# get the notification and the stock handling wrong.
+from app.routers.payments import _after_paid, restore_stock
 from app.variants import (
     assert_sufficient_stock,
     coerce_attributes,
@@ -30,9 +42,10 @@ from app.variants import (
     resolve_purchase_line,
 )
 
-import re
 from app.rate_limit import limit_for, rate_limit
 from app.utils import to_valid_uuid
+
+logger = logging.getLogger("vyapari-orders")
 
 router = APIRouter()
 
@@ -237,13 +250,21 @@ async def create_order(
                 })
 
             # 1. Create order
+            #
+            # expires_at is when this order stops holding stock. The decrement
+            # below is unconditional and immediate, so an order abandoned at the
+            # gateway's own 3-D Secure step would otherwise leave the catalogue
+            # selling inventory nobody is holding -- for as long as the order row
+            # survives, which is forever. The sweep in app/jobs.py acts on it.
             order_row = await conn.fetchrow(
-                """INSERT INTO orders (user_id, total_amount, status, shipping_address)
-                   VALUES ($1, $2, 'pending', $3::jsonb)
-                   RETURNING id, total_amount, status, created_at""",
+                """INSERT INTO orders (user_id, total_amount, status, shipping_address, expires_at)
+                   VALUES ($1, $2, 'pending', $3::jsonb,
+                           NOW() + ($4 || ' minutes')::interval)
+                   RETURNING id, total_amount, status, created_at, expires_at""",
                 user["id"],
                 float(total_amount),
                 json.dumps(body.shipping_address),
+                str(settings.ORDER_PAYMENT_WINDOW_MINUTES),
             )
             order_id = order_row["id"]
 
@@ -301,13 +322,20 @@ async def create_order(
             )
 
             # 4. Payment record (Razorpay)
+            #
+            # provider_ref is left NULL. It used to be set to a fabricated
+            # "rzp_order_<millis>" here, which is worse than nothing: the webhook
+            # matched its incoming gateway order id against this column, so it
+            # never matched, and the id in the row looked like a real gateway
+            # reference to anyone reading the database. The real id arrives from
+            # POST /api/payments/create, which is also where the gateway is
+            # actually called.
             payment_row = await conn.fetchrow(
-                """INSERT INTO payments (order_id, amount, status, payment_gateway, provider_ref)
-                   VALUES ($1, $2, 'created', 'razorpay', $3)
+                """INSERT INTO payments (order_id, amount, status, payment_gateway)
+                   VALUES ($1, $2, 'created', 'razorpay')
                    RETURNING id, status, amount""",
                 order_id,
                 float(total_amount),
-                f"rzp_order_{int(time.time() * 1000)}",
             )
 
             # 5. Clear cart
@@ -356,70 +384,275 @@ async def create_order(
 
 class ConfirmPaymentBody(BaseModel):
     razorpay_payment_id: str | None = None
+    razorpay_order_id: str | None = None
+    razorpay_signature: str | None = None
 
 
 @router.post("/{id}/confirm-payment")
 async def confirm_payment(
     id: str, body: ConfirmPaymentBody, user: dict = Depends(require_auth)
 ) -> dict:
-    razorpay_payment_id = body.razorpay_payment_id or f"pay_mock_{int(time.time() * 1000)}"
+    """
+    Turns a checkout.js success callback into a paid order -- after checking it.
+
+    This used to accept any string, mark the order paid, and do it for any order
+    id the caller named. Three separate problems, all fixed here:
+
+      the payment id was optional, defaulting to a made-up one, so a POST with an
+        empty body was a valid receipt;
+      the UPDATE had no user_id filter, so any logged-in user could mark any
+        order on the platform paid and queue a confirmation notification to its
+        owner. Marking orders paid is exactly the operation that must not be
+        unauthenticated in substance;
+      nothing was verified. A signature over "order_id|payment_id" proves the
+        callback came from a real checkout of *this* gateway account; and the
+        gateway is then asked what happened, because "the customer returned" and
+        "the money arrived" are different claims.
+
+    The webhook can and does win this race. Both paths end in the same guarded
+    UPDATE ... WHERE status = 'pending', so whichever arrives first applies the
+    transition and the other finds nothing to do.
+    """
+    order_uuid = to_valid_uuid(id)
+    if not order_uuid:
+        raise HTTPException(
+            400, detail={"code": "VALIDATION_ERROR", "message": "Order id must be a UUID."}
+        )
+
+    pool = get_pool()
+    order = await pool.fetchrow(
+        "SELECT id, user_id, status, total_amount, razorpay_order_id FROM orders WHERE id = $1::uuid",
+        order_uuid,
+    )
+    if not order:
+        raise HTTPException(404, detail={"code": "ORDER_NOT_FOUND", "message": "Order not found."})
+    if str(order["user_id"]) != str(user["id"]) and user["role"] != "admin":
+        raise HTTPException(404, detail={"code": "ORDER_NOT_FOUND", "message": "Order not found."})
+
+    if order["status"] != "pending":
+        # Already paid, or cancelled. Not an error: the customer refreshing the
+        # return page, or the webhook having got there first, both land here, and
+        # the right answer is the state the order is actually in.
+        return {
+            "success": True,
+            "message": f"Order is already {order['status']}.",
+            "data": {"order_id": str(order["id"]), "status": order["status"]},
+        }
+
+    if not (body.razorpay_payment_id and body.razorpay_order_id and body.razorpay_signature):
+        raise HTTPException(
+            400,
+            detail={
+                "code": "PAYMENT_DETAILS_INCOMPLETE",
+                "message": "Payment details from the gateway are missing.",
+            },
+        )
+
+    # The order id in the signature has to be the one we opened for *this* order.
+    # Checking a valid signature over somebody else's order id would otherwise be
+    # enough: a customer who paid for a ₹10 order could present that signature to
+    # confirm a ₹10,000 one.
+    if order["razorpay_order_id"] != body.razorpay_order_id:
+        raise HTTPException(
+            400,
+            detail={"code": "PAYMENT_ORDER_MISMATCH", "message": "This payment is for a different order."},
+        )
+
+    if not gateway.is_configured:
+        raise HTTPException(
+            503,
+            detail={
+                "code": "GATEWAY_NOT_CONFIGURED",
+                "message": "Payment verification needs the Razorpay keys, which are not set on this deployment.",
+            },
+        )
+
+    if not gateway.verify_payment_signature(
+        body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature
+    ):
+        raise HTTPException(
+            400,
+            detail={"code": "INVALID_SIGNATURE", "message": "The payment could not be verified."},
+        )
+
+    try:
+        remote = await gateway.fetch_payment(body.razorpay_payment_id)
+    except GatewayError as exc:
+        # A timeout here must not become a failure. The webhook may still arrive,
+        # so the order stays pending and the frontend polls -- which is what
+        # pending_verification is for.
+        logger.error("Could not confirm payment %s with Razorpay: %s", body.razorpay_payment_id, exc)
+        return {
+            "success": True,
+            "message": "Waiting for the payment to be confirmed.",
+            "data": {"order_id": str(order["id"]), "status": "pending_verification"},
+        }
+
+    if remote.get("status") != "captured":
+        await pool.execute(
+            "UPDATE payments SET status = 'failed', provider_payload = $1::jsonb, updated_at = CURRENT_TIMESTAMP "
+            "WHERE order_id = $2::uuid AND status <> 'success'",
+            json.dumps(remote), order_uuid,
+        )
+        # An exception, not a 200 with a status_code key in it. A declined card
+        # that answers 200 is a declined card the frontend's success path treats
+        # as a receipt, and 402 is what tells a payment client to stop trying.
+        raise HTTPException(
+            402,
+            detail={
+                "code": "PAYMENT_NOT_CAPTURED",
+                "message": (
+                    "The payment was not completed"
+                    + (f" ({remote.get('status')})" if remote.get("status") else "")
+                    + ". You have not been charged; please try again."
+                ),
+                "data": {"gateway_status": remote.get("status")},
+            },
+        )
+
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            applied = await conn.fetchrow(
+                "UPDATE orders SET status = 'paid', razorpay_payment_id = $1, updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = $2::uuid AND status = 'pending' RETURNING id",
+                body.razorpay_payment_id, order_uuid,
+            )
+            if applied:
+                await conn.execute(
+                    "UPDATE payments SET status = 'success', provider_ref = $1, "
+                    "provider_payload = $2::jsonb, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE order_id = $3::uuid AND status <> 'success'",
+                    body.razorpay_payment_id, json.dumps(remote), order_uuid,
+                )
+                await _after_paid(conn, order_uuid, "Payment verified against Razorpay")
+
+    return {
+        "success": True,
+        "message": "Payment confirmed.",
+        "data": {"order_id": str(order["id"]), "status": "paid"},
+    }
+
+
+# ── cancellation ─────────────────────────────────────────────────────────────
+
+class CancelOrderBody(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
+@router.put("/{id}/cancel")
+async def cancel_order(
+    id: str, body: CancelOrderBody, user: dict = Depends(require_auth)
+) -> dict:
+    """
+    Cancels an order and gives the stock back.
+
+    Allowed while the order is unpaid (cancelling a pending order is free) and
+    while it is paid but not yet dispatched. Once a seller has handed the parcel
+    to a courier, cancelling from the customer's account is a refund, not a
+    cancellation -- so that is refused with a 409 and a pointer to the way to
+    actually do it, rather than quietly marking a shipped order cancelled.
+
+    A paid order that is cancelled here is not refunded by this route. Refunds go
+    through POST /api/payments/refunds, which checks the amount against what is
+    actually left and records it, so money cannot leave by two routes at once.
+    """
+    order_uuid = to_valid_uuid(id)
+    if not order_uuid:
+        raise HTTPException(
+            400, detail={"code": "VALIDATION_ERROR", "message": "Order id must be a UUID."}
+        )
 
     pool = get_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
-            order_row = await conn.fetchrow(
-                "UPDATE orders SET status = 'paid', updated_at = CURRENT_TIMESTAMP "
-                "WHERE id = $1::uuid RETURNING *",
-                id,
+            order = await conn.fetchrow(
+                "SELECT id, user_id, status, razorpay_payment_id FROM orders WHERE id = $1::uuid",
+                order_uuid,
             )
-            if not order_row:
+            if not order:
+                raise HTTPException(404, detail={"code": "ORDER_NOT_FOUND", "message": "Order not found."})
+            if str(order["user_id"]) != str(user["id"]) and user["role"] != "admin":
+                raise HTTPException(404, detail={"code": "ORDER_NOT_FOUND", "message": "Order not found."})
+
+            if order["status"] == "cancelled":
+                # Idempotent, because a customer pressing the button twice is not
+                # an error and must not restore the stock twice.
+                return {
+                    "success": True,
+                    "message": "This order is already cancelled.",
+                    "data": {"order_id": str(order["id"]), "status": "cancelled"},
+                }
+
+            cancellable = ("pending", "paid", "processing")
+            if order["status"] not in cancellable:
                 raise HTTPException(
-                    status_code=404,
-                    detail={"code": "ORDER_NOT_FOUND", "message": "Order not found."},
+                    409,
+                    detail={
+                        "code": "ORDER_NOT_CANCELLABLE",
+                        "message": (
+                            f"This order is {order['status']} and has already left the warehouse. "
+                            "Ask for a refund instead."
+                        ),
+                        "data": {"status": order["status"]},
+                    },
                 )
 
-            order = dict(order_row)
-
+            was_paid = order["status"] in ("paid", "processing")
             await conn.execute(
-                "UPDATE payments SET status = 'success', provider_ref = $1, updated_at = CURRENT_TIMESTAMP "
-                "WHERE order_id = $2::uuid",
-                razorpay_payment_id,
-                id,
+                "UPDATE orders SET status = 'cancelled', expires_at = NULL, updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = $1::uuid",
+                order_uuid,
             )
-
+            # Cancels are status-history rows, not a table of their own, so there
+            # is one audit trail rather than two that can disagree. The reason
+            # lives in the note, which is where anyone looking for "why is this
+            # cancelled" will look.
             await conn.execute(
-                "INSERT INTO order_status_history (order_id, status, note) "
-                "VALUES ($1::uuid, 'paid', 'Payment verified via Razorpay')",
-                id,
+                "INSERT INTO order_status_history (order_id, status, note, changed_by) "
+                "VALUES ($1::uuid, 'cancelled', $2, $3::uuid)",
+                order_uuid,
+                (body.reason or ("Cancelled by customer" if not was_paid else "Cancelled by customer, payment to be refunded")),
+                user["id"],
             )
-
-            # Notification
-            short_id = id[:8]
-            await conn.execute(
-                """INSERT INTO notifications (user_id, type, title, body, link)
-                   VALUES ($1, 'order_confirmed', 'Order Confirmed!',
-                           'Thank you! Your order #' || $2 || ' has been confirmed and is being prepared.',
-                           '/orders/' || $3)""",
-                order["user_id"],
-                short_id,
-                id,
-            )
-
-            # Purchase interactions
-            item_rows = await conn.fetch(
-                "SELECT product_id FROM order_items WHERE order_id = $1::uuid", id
-            )
-            for row in item_rows:
+            if was_paid:
+                # Flagged, not refunded. 'pending_verification' is the same
+                # state a customer sees while the gateway is deciding, and here it
+                # means "this payment is not settled, a person has to look at it" --
+                # which is exactly the truth, and is what keeps it out of a
+                # reconciliation report that only counts 'success'.
                 await conn.execute(
-                    "INSERT INTO user_interactions (user_id, product_id, event_type) VALUES ($1, $2, 'purchase')",
-                    order["user_id"],
-                    row["product_id"],
+                    "UPDATE payments SET status = 'pending_verification', updated_at = CURRENT_TIMESTAMP "
+                    "WHERE order_id = $1::uuid AND status = 'success'",
+                    order_uuid,
                 )
+            else:
+                # Nothing was paid, so the payment attempt is simply over. Left as
+                # 'created' it would read to an admin as an order with money in
+                # flight, and it would sit in the refunds-reconciliation query.
+                await conn.execute(
+                    "UPDATE payments SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP "
+                    "WHERE order_id = $1::uuid AND status IN ('created', 'failed', 'pending_verification')",
+                    order_uuid,
+                )
+            await restore_stock(conn, order_uuid)
+            await conn.execute(
+                "UPDATE carts SET updated_at = CURRENT_TIMESTAMP WHERE user_id = $1",
+                order["user_id"],
+            )
 
     return {
         "success": True,
-        "message": "Payment confirmed successfully.",
-        "data": {"order_id": id, "status": "paid"},
+        "message": (
+            "Order cancelled. The refund has been raised and will reach your account "
+            "in 3-5 working days."
+            if was_paid
+            else "Order cancelled and the items are back in stock."
+        ),
+        "data": {
+            "order_id": str(order_uuid),
+            "status": "cancelled",
+            "refund_pending": was_paid,
+        },
     }
 
 

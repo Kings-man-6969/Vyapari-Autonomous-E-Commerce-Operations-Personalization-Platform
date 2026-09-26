@@ -34,11 +34,18 @@ Every item from the client requirements list, plus the gaps found in audit. Stat
 
 ## E. Payments & orders
 
-- [ ] **E1. Razorpay test-mode, real flow** — write `razorpay_order_id` at order creation, `POST /api/payments/create`, webhook matches on `order_id`, remove `pay_rzp_mock_${Date.now()}` from `CheckoutPage.jsx:96`.
-- [ ] **E2. Order cancellation** — customer cancels within window, stock restored.
-- [ ] **E3. Refunds** — admin-initiated, refund records, `payments.status` extended.
-- [ ] **E4. Abandoned-order sweep** — scheduled job expires stale `pending` orders and returns stock.
-- [ ] **E5. Payment failure / interruption** — frontend recovery on gateway dismissal, pending_verification polling.
+- [x] **E1. Razorpay test-mode, real flow** — `app/payments/razorpay.py` (`RazorpayClient`: httpx against the v1 API, `Decimal`-exact paise conversion, HMAC verification, `is_configured` false while the `rzp_test_placeholder_*` defaults are in place). `POST /api/payments/create` mints the gateway order and writes it to `orders.razorpay_order_id` — outside the order transaction, so the round trip does not hold catalogue row locks. Webhook matches on that column, not `payments.provider_ref`, which other code also wrote with a fabricated `rzp_order_<ms>` that made it match nothing. `pay_rzp_mock_${Date.now()}` is gone. **CSP fixed**: the API's `script-src 'self'` and the missing `frame-src` would have blocked checkout.js and rendered the modal blank; the SPA now ships a build-injected CSP meta tag (`vite.config.js`) naming `checkout.razorpay.com`. *Deploy note: if the static host also sets a CSP header, the stricter of the two wins, so it needs the same origins.*
+- [x] **E2. Order cancellation** — `PUT /api/orders/{id}/cancel`. Pending → stock back, payment closed out as `cancelled`. Paid/processing → cancelled with stock back and the payment flagged `pending_verification`; **it does not refund**, so money cannot leave by two routes. Shipped and beyond → 409 pointing at the refund route. Idempotent (the guarded `UPDATE ... WHERE status = 'pending'|'paid'` gates `restore_stock`).
+- [x] **E3. Refunds** — `POST /api/payments/refunds` (admin only) and `GET /api/payments/refunds`. Amount checked against *what is left*, not the order total, so refund-over-refund is refused with the refundable figure. Full refund cancels the order and returns stock. With no keys configured the refund is kept as `requested` rather than lost. Fixed a real bug: the lookup joined `payments` on `status = 'success'`, so the first partial refund made the order **permanently unrefundable**; and the full-refund path never set the payment to `refunded`, leaving a refunded order showing `success`. Both now go through one `_settle_refund` shared with the `refund.processed` webhook.
+- [x] **E4. Abandoned-order sweep** — `app/jobs.py`, `FOR UPDATE SKIP LOCKED` so N containers each get a disjoint batch, guarded `UPDATE ... WHERE status = 'pending'` re-checked between SELECT and UPDATE so a payment that lands mid-sweep is never refunded its stock. Wired into the lifespan, cancelled cleanly on shutdown, `RUN_ORDER_SWEEP` off in tests.
+- [x] **E5. Payment failure / interruption** — `src/lib/razorpay.js` (memoised script load, `dismissed` vs `failed` distinguished, incomplete success refused) and `src/hooks/usePaymentStatus.js` (polls `/api/payments/status/:orderId`, 1.2s→5s backoff, `pending_verification` explicitly does *not* stop it). The page reuses the order on retry instead of creating a second, and 503 `GATEWAY_NOT_CONFIGURED` is reported as "payments are not switched on, your order is saved" — not "try again" against a server with no keys.
+
+**Section E is complete.** 67 new backend tests in `tests/test_payment_flows.py`, 27 new smoke checks, 316 backend tests pass.
+
+### Two bugs found while doing E, outside E
+
+- **`main.py` error handler dropped every structured error payload.** 115 raise sites across 18 routers put `data` in `HTTPException(detail=...)`; the handler rebuilt the body from `code`/`message`/`details` only, so none of it reached a client. `POST /api/payments/refunds` answering "Only ₹50 is still refundable" with no `50` in it was the symptom. Now carried, and run through `jsonable_encoder` because the values come straight out of asyncpg rows and a datetime in `data` would turn a 409 into a 500.
+- **`confirm-payment` returned HTTP 200 for a declined card.** It built a dict containing `"status_code": 402`, which FastAPI serialises as a 200 body. A declined payment that answers 200 is a declined payment a frontend's success path treats as a receipt. Now a real 402.
 
 ## F. Admin panel parity
 

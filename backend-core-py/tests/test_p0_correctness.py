@@ -220,7 +220,14 @@ class TestP0Correctness(unittest.TestCase):
         )
         self.assertEqual(r_bad.status_code, 400)
 
-        # 2. Valid signature -> 200 processed
+        # 2. Valid signature -> 200, and 'unmatched' because rzp_order_test_123
+        # is not an order of ours. This used to expect 'processed', which was a
+        # claim the endpoint could not support: it matched nothing, so nothing was
+        # applied, and answering 'processed' meant a capture for a gateway order we
+        # do not have looked in Razorpay's dashboard exactly like one we handled.
+        # The 200 is deliberate -- a 4xx would make Razorpay redeliver an event we
+        # can never apply. The status code in the body is what tells a person.
+        # (test_payment_flows covers the matched case, end to end.)
         valid_sig = hmac.new(webhook_secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
         r_ok = self.client.post(
             "/api/payments/webhook",
@@ -228,7 +235,7 @@ class TestP0Correctness(unittest.TestCase):
             headers={"X-Razorpay-Signature": valid_sig, "Content-Type": "application/json"}
         )
         self.assertEqual(r_ok.status_code, 200)
-        self.assertEqual(r_ok.json()["status"], "processed")
+        self.assertEqual(r_ok.json()["status"], "unmatched")
 
         # 3. Duplicate delivery -> 200 duplicate_ignored
         r_dup = self.client.post(

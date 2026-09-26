@@ -31,6 +31,10 @@ import VariantPicker, { resolveChoice } from '../src/components/VariantPicker';
 import {
   findOptionClash, optionAttributes, optionKey, optionLabel, parseOptionLines
 } from '../src/lib/optionLines';
+import {
+  loadCheckoutScript, openCheckout, __resetCheckoutScript, CheckoutDismissed
+} from '../src/lib/razorpay';
+import { isSettled, nextDelay, MAX_ATTEMPTS } from '../src/hooks/usePaymentStatus';
 
 const CDN = 'https://picsum.photos/seed';
 
@@ -512,6 +516,199 @@ check('a missing list clashes with nothing', findOptionClash(undefined, { size: 
 check('the canonical key sorts the axes, so order does not matter',
   optionKey({ colour: 'Indigo', size: 'XL' }) === optionKey({ size: 'XL', colour: 'Indigo' }));
 
+async function runPaymentChecks() {
+  // ── payment: the Razorpay wrapper ────────────────────────────────────────────
+  //
+  // What is worth testing here is not that a modal opens -- there is no DOM in
+  // this harness -- but that the promise resolves with the three fields the server
+  // needs and rejects distinguishably. A checkout that cannot tell "closed the
+  // modal" from "the bank said no" makes the customer retry a card that was
+  // declined, and report a cancellation as a failure.
+
+  const withFakeRazorpay = async (body, fn) => {
+    const previousWindow = global.window;
+    const previousDocument = global.document;
+    const appended = [];
+    global.window = { Razorpay: body.Razorpay };
+    global.document = {
+      createElement: () => ({ set src(_v) { this._src = _v; }, get src() { return this._src; } }),
+      body: { appendChild: (el) => appended.push(el) }
+    };
+    try {
+      return await fn(appended);
+    } finally {
+      global.window = previousWindow;
+      global.document = previousDocument;
+      __resetCheckoutScript();
+    }
+  };
+
+  const PARAMS = {
+    order_id: '11111111-1111-1111-1111-111111111111',
+    key_id: 'rzp_test_abc',
+    amount: 249.5,
+    currency: 'INR',
+    razorpay_order_id: 'order_AAA',
+    receipt: '11111111-1111-1111-1111-111111111111',
+    name: 'Vyapari',
+    prefill: { name: 'Asha Verma', email: 'asha@example.com' }
+  };
+
+  /** Waits for the modal to be constructed. openCheckout awaits the script\n *  before it can build one, so a single tick is not enough and guessing a\n *  number of them is a flaky test. */
+const untilConstructed = async (m) => {
+  for (let i = 0; i < 100 && !m.opened.length; i += 1) {
+    await new Promise((r) => setImmediate(r));
+  }
+  if (!m.opened.length) throw new Error('the modal was never constructed');
+};
+
+const modal = (scripted) => {
+    const opened = [];
+    const Ctor = function (options) {
+      opened.push(options);
+      this.on = (event, cb) => { scripted[event] = cb; };
+      this.open = () => { opened.open = true; };
+    };
+    return { Ctor, opened, scripted };
+  };
+
+  console.log('\n── payment ──');
+
+  await withFakeRazorpay({ Razorpay: modal({}) }, async () => {
+    await loadCheckoutScript();
+    check('an already-loaded script is not fetched again', true);
+  });
+
+  await withFakeRazorpay({ Razorpay: null }, async (appended) => {
+    // A script that never registers must reject rather than hang. A promise that
+    // never settles is a checkout button that does nothing forever, with no error
+    // to show anyone.
+    const loading = loadCheckoutScript();
+    const node = appended[0];
+    node.onload();
+    let rejected = false;
+    await loading.then(() => {}, () => { rejected = true; });
+    check('a script that loads without registering is an error, not a hang', rejected);
+  });
+
+  await withFakeRazorpay({ Razorpay: null }, async (appended) => {
+    const loading = loadCheckoutScript();
+    appended[0].onerror();
+    let rejected = false;
+    await loading.then(() => {}, () => { rejected = true; });
+    check('a script that fails to load rejects with a message', rejected);
+    // The memo has to be cleared, or every later attempt on this page reuses a
+    // promise that can never settle.
+    const second = loadCheckoutScript();
+    check('a failed load is not memoised', appended.length === 2);
+    appended[1].onerror();
+    await second.catch(() => {});
+  });
+
+  await withFakeRazorpay({ Razorpay: null }, async (appended) => {
+    const m = modal({});
+    const loading = openCheckout(PARAMS);
+    const node = appended[0];
+    // Razorpay registers itself when its script finishes loading. Setting it
+    // after openCheckout has asked for the script, and before onload fires,
+    // is what makes the real load path run rather than a short circuit.
+    global.window.Razorpay = m.Ctor;
+    node.onload();
+    // openCheckout awaits the script before constructing, so give it a tick.
+    await untilConstructed(m);
+    m.scripted['payment.success']({
+      razorpay_payment_id: 'pay_XYZ',
+      razorpay_order_id: 'order_AAA',
+      razorpay_signature: 'deadbeef'
+    });
+    const result = await loading;
+
+    check('all three gateway fields come back', !!result.razorpay_payment_id
+      && !!result.razorpay_order_id && !!result.razorpay_signature);
+    check('rupees are converted to paise for the modal',
+      m.opened[0].amount === 24950, `got ${m.opened[0].amount}`);
+    check('the key id is the publishable one, never a secret',
+      m.opened[0].key === 'rzp_test_abc' && !('key_secret' in m.opened[0]));
+    check('the gateway order id we opened is the one handed to checkout',
+      m.opened[0].order_id === 'order_AAA');
+    check('the order id is passed as a note so support can match a screenshot',
+      m.opened[0].notes?.order_id === PARAMS.order_id);
+    check('the address the customer already typed is prefilled',
+      m.opened[0].prefill?.email === 'asha@example.com');
+  });
+
+  await withFakeRazorpay({ Razorpay: null }, async (appended) => {
+    const m = modal({});
+    const loading = openCheckout(PARAMS);
+    // Razorpay registers itself when its script finishes loading. Setting it
+    // after openCheckout has asked for the script, and before onload fires,
+    // is what makes the real load path run rather than a short circuit.
+    global.window.Razorpay = m.Ctor;
+    appended[0].onload();
+    await untilConstructed(m);
+    m.scripted['payment.dismissed']();
+    let caught = null;
+    await loading.catch((e) => { caught = e; });
+    check('a dismissed modal is its own outcome, not a failure',
+      caught instanceof CheckoutDismissed && caught.reason === 'dismissed');
+  });
+
+  await withFakeRazorpay({ Razorpay: null }, async (appended) => {
+    const m = modal({});
+    const loading = openCheckout(PARAMS);
+    // Razorpay registers itself when its script finishes loading. Setting it
+    // after openCheckout has asked for the script, and before onload fires,
+    // is what makes the real load path run rather than a short circuit.
+    global.window.Razorpay = m.Ctor;
+    appended[0].onload();
+    await untilConstructed(m);
+    m.scripted['payment.failed']({ error: { description: 'Your card was declined', code: 'BAD_CARD_ERROR' } });
+    let caught = null;
+    await loading.catch((e) => { caught = e; });
+    check("a declined payment carries the bank's reason to the page",
+      caught?.reason === 'failed' && /declined/i.test(caught.message), caught?.message);
+  });
+
+  await withFakeRazorpay({ Razorpay: null }, async (appended) => {
+    const m = modal({});
+    const loading = openCheckout(PARAMS);
+    // Razorpay registers itself when its script finishes loading. Setting it
+    // after openCheckout has asked for the script, and before onload fires,
+    // is what makes the real load path run rather than a short circuit.
+    global.window.Razorpay = m.Ctor;
+    appended[0].onload();
+    await untilConstructed(m);
+    // A success event with nothing in it cannot be confirmed by the server, so
+    // resolving with it would send a confirm-payment the server must reject.
+    m.scripted['payment.success']({});
+    let caught = null;
+    await loading.catch((e) => { caught = e; });
+    check('a success with no payment id is not a success', caught?.reason === 'failed');
+  });
+
+  // The polling loop: the states that stop it, and the ones that must not.
+  console.log('── payment status polling ──');
+
+  check('success stops the loop', isSettled('success'));
+  check('a declined payment stops the loop', isSettled('failed'));
+  check('a cancelled order stops the loop', isSettled('cancelled'));
+  check('a refund stops the loop', isSettled('refunded') && isSettled('partially_refunded'));
+
+  check('"pending_verification" does not stop it -- that is the state it exists for',
+    !isSettled('pending_verification'), 'the customer has paid and the capture is unconfirmed');
+
+  check('an order with no gateway order yet is still being polled', !isSettled('created'));
+  check('a missing status is not treated as settled', !isSettled(null) && !isSettled(undefined));
+
+  check('the wait widens as the attempts go on', nextDelay(1) < nextDelay(6));
+  check('but never past five seconds', nextDelay(500) === 5000, `got ${nextDelay(500)}`);
+  check('and never zero on a first attempt', nextDelay(1) >= 1000);
+
+  check('the loop gives up eventually', MAX_ATTEMPTS <= 60, `${MAX_ATTEMPTS} attempts`);
+
+}
+
+runPaymentChecks().then(() => {
 console.log(`\n${failed === 0 ? 'PASS' : `FAIL (${failed} check${failed === 1 ? '' : 's'})`}`);
 if (failed > 0) {
   fs.writeFileSync('.smoke/rendered.html', pro);
@@ -519,3 +716,4 @@ if (failed > 0) {
   console.log('wrote .smoke/rendered*.html for inspection');
 }
 process.exit(failed === 0 ? 0 : 1);
+});
