@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from app.auth.dependencies import optional_auth, require_auth, require_role
 from app.db import get_db, get_pool
+from app.rate_limit import limit_for, rate_limit
 from app.redis_client import cache
 
 router = APIRouter(tags=["reviews"])
@@ -179,6 +180,7 @@ class CreateReviewBody(BaseModel):
 async def create_review(
     body: CreateReviewBody,
     user: dict = Depends(require_auth),
+    _rl=Depends(rate_limit("reviews.create", *limit_for("reviews.create"))),
     db=Depends(get_db),
 ) -> dict:
     if not body.product_id or body.rating is None or not body.comment:

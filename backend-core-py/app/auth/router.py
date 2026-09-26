@@ -24,8 +24,15 @@ from app.auth.service import (
 )
 from app.config import settings
 from app.db import get_db
+from app.rate_limit import limit_for, rate_limit
 
 router = APIRouter()
+
+
+def _limit(scope: str):
+    """Build a limiter dependency from the shared table in app.rate_limit."""
+    n, window = limit_for(scope)
+    return rate_limit(scope, n, window)
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -70,7 +77,12 @@ def _set_refresh_cookie(response: Response, refresh_token: str, is_production: b
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 @router.post("/register", status_code=201)
-async def register(body: RegisterBody, response: Response, db=Depends(get_db)) -> dict:
+async def register(
+    body: RegisterBody,
+    response: Response,
+    _rl=Depends(_limit("auth.register")),
+    db=Depends(get_db),
+) -> dict:
     name = body.name.strip()
     email = body.email.lower().strip()
 
@@ -135,7 +147,12 @@ async def register(body: RegisterBody, response: Response, db=Depends(get_db)) -
 
 
 @router.post("/login")
-async def login(body: LoginBody, response: Response, db=Depends(get_db)) -> dict:
+async def login(
+    body: LoginBody,
+    response: Response,
+    _rl=Depends(_limit("auth.login")),
+    db=Depends(get_db),
+) -> dict:
     email = body.email.lower().strip()
 
     user = await db.fetchrow(
@@ -195,7 +212,11 @@ async def login(body: LoginBody, response: Response, db=Depends(get_db)) -> dict
 
 @router.post("/refresh")
 async def refresh_token(
-    request: Request, response: Response, body: RefreshBody | None = None, db=Depends(get_db)
+    request: Request,
+    response: Response,
+    body: RefreshBody | None = None,
+    _rl=Depends(_limit("auth.refresh")),
+    db=Depends(get_db),
 ) -> dict:
     token = request.cookies.get("refresh_token") or (body.refreshToken if body else None)
 

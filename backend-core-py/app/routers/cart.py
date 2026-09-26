@@ -14,6 +14,13 @@ from pydantic import BaseModel
 
 from app.auth.dependencies import require_auth
 from app.db import get_db, get_pool
+from app.rate_limit import limit_for, rate_limit
+
+
+def _limit(scope: str):
+    """Build a limiter dependency from the shared table in app.rate_limit."""
+    n, window = limit_for(scope)
+    return rate_limit(scope, n, window)
 
 router = APIRouter()
 
@@ -82,7 +89,10 @@ class AddItemBody(BaseModel):
 
 @router.post("/items")
 async def add_to_cart(
-    body: AddItemBody, user: dict = Depends(require_auth), db=Depends(get_db)
+    body: AddItemBody,
+    user: dict = Depends(require_auth),
+    _rl=Depends(_limit("cart.write")),
+    db=Depends(get_db),
 ) -> dict:
     if body.quantity <= 0:
         raise HTTPException(

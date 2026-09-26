@@ -91,6 +91,21 @@ class InMemoryCache:
     async def delete(self, key: str) -> int:
         return 1 if self._store.pop(key, None) is not None else 0
 
+    async def incr(self, key: str, ex: Optional[int] = None) -> int:
+        """Counter primitive. TTL is applied on first increment only."""
+        item = self._store.get(key)
+        now = time.time()
+        if item is None:
+            self._store[key] = {"value": 1, "expires_at": (now + ex) if ex else None}
+            return 1
+        count = int(item["value"]) + 1
+        item["value"] = count
+        # An expired key must restart at 1, not resurrect the stale count.
+        if item["expires_at"] and now > item["expires_at"]:
+            item["expires_at"] = (now + ex) if ex else None
+            return 1
+        return count
+
     async def delete_prefix(self, pattern: str) -> int:
         prefix = pattern.rstrip("*")
         keys_to_del = [k for k in self._store if k.startswith(prefix)]
@@ -269,6 +284,30 @@ class AsyncRedisClient:
         except Exception as e:
             logger.warning(f"Cache JSON decode error on key '{key}': {e}")
             return None
+
+    # Lua keeps INCR and the first-write EXPIRE in one atomic step. Two round
+    # trips would let a crash between them leave a counter with no TTL, which
+    # then permanently blocks that key once Redis finally comes back.
+    _INCR_LUA = """
+    local n = redis.call('INCR', KEYS[1])
+    if n == 1 then
+      redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
+    end
+    return n
+    """
+
+    async def incr(self, key: str, ex: Optional[int] = None) -> int:
+        """Increment a counter, applying `ex` seconds TTL on the first increment.
+
+        Returns the post-increment value. Used by the rate limiter.
+        """
+        if self._redis and not self.is_fallback:
+            try:
+                return int(await self._redis.eval(self._INCR_LUA, 1, key, int(ex or 60)))
+            except Exception as e:
+                self._metrics["errors"] += 1
+                logger.warning(f"Redis INCR error on key '{key}': {e}. Using fallback counter.")
+        return await self._fallback.incr(key, ex=ex)
 
     async def set_json(self, key: str, value: Any, ex: Optional[int] = None) -> bool:
         try:

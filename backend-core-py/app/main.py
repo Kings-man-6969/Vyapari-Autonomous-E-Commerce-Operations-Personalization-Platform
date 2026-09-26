@@ -94,6 +94,16 @@ async def security_and_correlation_headers(request: Request, call_next):
 
     response = await call_next(request)
 
+    # The rate limiter stashes its Decision on request.state; publish it so
+    # clients (and anyone debugging with curl) can see the budget without
+    # guessing. Retry-After on a 429 is already set by the limiter itself.
+    decision = getattr(request.state, "rate_limit", None)
+    if decision is not None:
+        response.headers["X-RateLimit-Limit"] = str(decision.limit)
+        response.headers["X-RateLimit-Remaining"] = str(decision.remaining)
+        if decision.reset_at:
+            response.headers["X-RateLimit-Reset"] = str(decision.reset_at)
+
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
@@ -156,6 +166,13 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
             code = "NOT_FOUND" if exc.status_code == 404 else "ERROR"
             message = exc.detail
 
+    # Carry the original headers onto the rewrapped response. This was dropped
+    # before: JSONResponse is built fresh, so anything a handler passed via
+    # HTTPException(headers=...) - notably Retry-After on a 429, and
+    # WWW-Authenticate on a 401 - silently vanished. CORS was even advertising
+    # Retry-After in expose_headers for a header that could never be sent.
+    headers = dict(exc.headers or {})
+
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -166,6 +183,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
                 "details": details,
             },
         },
+        headers=headers,
     )
 
 

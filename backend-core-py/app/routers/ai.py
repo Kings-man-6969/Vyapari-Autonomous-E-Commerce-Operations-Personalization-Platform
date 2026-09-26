@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from app.auth.dependencies import require_role
 from app.config import settings
 from app.db import get_db
+from app.rate_limit import limit_for, rate_limit
 from app.redis_client import (
     TTL_POPULAR,
     TTL_RECOMMENDATIONS,
@@ -138,6 +139,7 @@ async def get_popular_products(
 async def semantic_search(
     q: str = Query(None),
     limit: int = Query(12),
+    _rl=Depends(rate_limit("ai.search", *limit_for("ai.search"))),
     db=Depends(get_db),
 ) -> dict:
     if not q or not q.strip():
@@ -236,7 +238,11 @@ class InteractionBody(BaseModel):
 
 
 @router.post("/interactions")
-async def record_interaction(body: InteractionBody, db=Depends(get_db)) -> dict:
+async def record_interaction(
+    body: InteractionBody,
+    _rl=Depends(rate_limit("ai.interactions", *limit_for("ai.interactions"))),
+    db=Depends(get_db),
+) -> dict:
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
             resp = await client.post(

@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth.dependencies import require_auth
 from app.config import settings
+from app.rate_limit import limit_for, rate_limit
 
 router = APIRouter()
 
@@ -34,6 +35,7 @@ class PresignUploadBody(BaseModel):
 async def get_presigned_upload_url(
     body: PresignUploadBody,
     user: dict = Depends(require_auth),
+    _rl=Depends(rate_limit("uploads.presign", *limit_for("uploads.presign"))),
 ) -> dict[str, Any]:
     """
     Generates a presigned S3 PUT URL bound strictly to products/{seller_id}/{uuid}.{ext}.

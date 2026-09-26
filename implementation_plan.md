@@ -687,7 +687,7 @@ Atomic Redis counter checks prevent excessive API bills:
 
 1. **Database-Layer Stock Filtering**: Candidate vector queries enforce `WHERE stock_qty > 0 AND status = 'active'` directly in SQL. *(implemented)*
 2. **Percentile Normalization**: Prevents extreme BM25 outliers from squashing vector similarity scores. *(implemented, unit-tested)*
-3. **Time-Decayed Popularity**: Weights views, carts, and purchases with an exponential decay ($\lambda = 0.05$, ~14-day half-life). *(implemented, but **no data source** — nothing writes `user_interactions` or `product_stats_daily`.)*
+3. **Time-Decayed Popularity**: Weights views, carts, and purchases with an exponential decay ($\lambda = 0.05$, ~14-day half-life). *(implemented; `user_interactions` has four real writers — `products.py` (view), `cart.py` (add_to_cart), `orders.py` (purchase), `wishlist.py` (wishlist add) — but `product_stats_daily` has none, and the `POST /api/ai/interactions` proxy has no frontend call site.)*
 4. **Cold-Start Fallback**: If a user has 0 interactions, return top time-decayed popular + fresh products. Never return a 500. *(implemented at `GET /api/ai/popular`.)*
 
 **Prerequisite, in order:**

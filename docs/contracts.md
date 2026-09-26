@@ -356,4 +356,4 @@ Summarized here so contracts are not read as capabilities. The full register wit
 
 **Deployment gaps**
 - `service-recommendation` and `service-seller-agent` are not deployed
-- Nothing writes `user_interactions` or `product_stats_daily`
+- `product_stats_daily` has no application writer (`user_interactions` does — four routes insert into it)

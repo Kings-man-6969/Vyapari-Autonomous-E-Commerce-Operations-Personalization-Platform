@@ -13,7 +13,7 @@ import hashlib
 import json
 import re
 import time
-from typing import Optional
+from typing import Annotated, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from app.auth.dependencies import optional_auth, require_auth, require_role
 from app.config import settings
 from app.db import get_db, get_pool
+from app.rate_limit import limit_for, rate_limit
 from app.redis_client import (
     TTL_AUTOCOMPLETE,
     TTL_FACETS,
@@ -29,8 +30,15 @@ from app.redis_client import (
     TTL_SEARCH,
     cache,
 )
+from app.utils import uuid_query_param
 
 router = APIRouter()
+
+
+def _limit(scope: str):
+    """Build a limiter dependency from the shared table in app.rate_limit."""
+    n, window = limit_for(scope)
+    return rate_limit(scope, n, window)
 
 
 # ── NLQ Parser ────────────────────────────────────────────────────────────────
@@ -190,7 +198,11 @@ async def get_facets(db=Depends(get_db)) -> dict:
 
 
 @router.get("/suggest")
-async def suggest(q: str | None = None, db=Depends(get_db)) -> dict:
+async def suggest(
+    q: str | None = None,
+    _rl=Depends(_limit("products.suggest")),
+    db=Depends(get_db),
+) -> dict:
     if not q or not q.strip():
         return {"success": True, "data": {"products": [], "brands": [], "categories": [], "suggestions": []}}
 
@@ -256,8 +268,8 @@ async def suggest(q: str | None = None, db=Depends(get_db)) -> dict:
 @router.get("")
 @router.get("/")
 async def list_products(
-    category_id: str | None = None,
-    seller_id: str | None = None,
+    category_id: Annotated[str | None, Depends(uuid_query_param("category_id"))] = None,
+    seller_id: Annotated[str | None, Depends(uuid_query_param("seller_id"))] = None,
     min_price: float | None = None,
     max_price: float | None = None,
     brand: str | None = None,
@@ -268,12 +280,19 @@ async def list_products(
     page: int = 1,
     limit: int = 24,
     q: str | None = None,
+    _rl=Depends(_limit("products.list")),
     db=Depends(get_db),
 ) -> dict:
+    # category_id and seller_id arrive already normalised to lowercase UUID
+    # strings, validated by the dependency above. Before that existed, a
+    # non-UUID value reached asyncpg and came back as a 500 carrying the raw
+    # driver message. Validating as a dependency (not at the top of this body)
+    # also means a malformed request never checks a connection out of the pool.
+    #
     # ── Check Cache for Repeated Searches ─────────────────────────────────────
     normalized_params = {
-        "category_id": str(category_id) if category_id else None,
-        "seller_id": str(seller_id) if seller_id else None,
+        "category_id": category_id,
+        "seller_id": seller_id,
         "min_price": float(min_price) if min_price is not None else None,
         "max_price": float(max_price) if max_price is not None else None,
         "brand": brand.strip().lower() if brand else None,
@@ -437,7 +456,16 @@ async def list_products(
         LIMIT {limit_param} OFFSET {offset_param}
     """
 
-    count_sql = f"SELECT COUNT(*) AS total FROM products p WHERE {where_clause}"
+    # The join must be repeated here: the min_rating condition in where_clause
+    # references sp.rating_avg, and a count query without the FROM entry raised
+    # "missing FROM-clause entry for table sp" — so ?min_rating=4 was a 500.
+    count_sql = f"""
+        SELECT COUNT(*) AS total
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN seller_profiles sp ON p.seller_id = sp.user_id
+        WHERE {where_clause}
+    """
 
     data_rows = await db.fetch(sql, *params)
     count_row = await db.fetchrow(count_sql, *params[:-2])

@@ -880,7 +880,7 @@ The administrative portal empowers platform operators to oversee transactions, e
 
 > ⚠️ **The seeded embeddings are fake.** `scraper_bot.py:416` generates deterministic **hash vectors** rather than `all-MiniLM-L6-v2` output. They satisfy the `vector(384)` column type and will cosine-compute without error, but they encode no semantics whatsoever — every pairwise similarity is effectively arbitrary. A real re-embed of the ~10k catalog is mandatory before any semantic claim about this catalog is true. The plan is a one-time re-embed through a hosted embedding API (cheap, no in-process model), then pgvector in-process for serving.
 >
-> Related: **nothing writes `user_interactions` or `product_stats_daily`**. The `POST /api/ai/interactions` endpoint exists and is instrumented, but no frontend call site populates it, so collaborative filtering and the time-decayed popularity signal above have no data source.
+> Related: **`product_stats_daily` has no application writer**, so the `product_stats_daily` view above has no data source. `user_interactions` *is* written — four routes insert into it (`products.py` on view, `cart.py` on add-to-cart, `orders.py` on purchase, `wishlist.py` on wishlist add), so time-decayed popularity and collaborative filtering do have a real feed. What has no frontend call site is `POST /api/ai/interactions`, the proxy that forwards events to the recommendation service.
 
 ---
 
@@ -1200,7 +1200,7 @@ This is the authoritative statement of what this platform does **not** do. It ex
 ### Deployed-State Gaps
 
 - `service-recommendation` and `service-seller-agent` are **not deployed** (compute-heavy).
-- Nothing writes `user_interactions` or `product_stats_daily`, so the recommendation cache and analytics tables are permanently empty.
+- `product_stats_daily` has no application writer, so the recommendation cache and that table are permanently empty. `user_interactions` is written by four routes, so it is not.
 - The production database's migration state is **unverified**. It is unknown whether `refresh_token_sessions`, `idempotency_records`, `payment_events`, `agent_audit_log` or the `vyapari_agent` role exist there. The proven remediation is:
   ```bash
   python scripts/migrate.py baseline --upto V1 && python scripts/migrate.py apply

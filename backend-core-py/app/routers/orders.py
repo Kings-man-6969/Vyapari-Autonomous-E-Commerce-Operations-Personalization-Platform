@@ -20,9 +20,16 @@ from app.auth.dependencies import require_auth
 from app.db import get_db, get_pool
 
 import re
+from app.rate_limit import limit_for, rate_limit
 from app.utils import to_valid_uuid
 
 router = APIRouter()
+
+
+def _limit(scope: str):
+    """Build a limiter dependency from the shared table in app.rate_limit."""
+    n, window = limit_for(scope)
+    return rate_limit(scope, n, window)
 
 
 @router.get("")
@@ -105,6 +112,7 @@ async def create_order(
     body: CreateOrderBody,
     user: dict = Depends(require_auth),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    _rl=Depends(_limit("orders.create")),
 ) -> Any:
     """
     ACID transaction with SELECT ... FOR UPDATE & Idempotency-Key support.
