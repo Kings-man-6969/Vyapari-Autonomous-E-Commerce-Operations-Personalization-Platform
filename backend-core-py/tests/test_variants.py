@@ -17,6 +17,7 @@ stays green without a database.
 
     python -m unittest tests.test_variants -v
 """
+import json
 import os
 import unittest
 import uuid
@@ -73,7 +74,14 @@ class VariantSchemaTests(unittest.IsolatedAsyncioTestCase):
         defaults = {
             "price": 99.0,
             "stock_qty": 5,
-            "attributes": "{}",
+            # A fresh attribute set per call. V9's uq_product_variants_attributes
+            # rejects two variants of one product with the same attributes --
+            # correctly, since they would be indistinguishable in a picker -- and
+            # these tests insert two at a time to watch the sum. Defaulting both
+            # to '{}' made them fail on an index that has nothing to do with the
+            # trigger they exist to check. The duplicate rejection has its own
+            # test at the end of this file.
+            "attributes": json.dumps({"option": uuid.uuid4().hex[:8]}),
         }
         defaults.update(kw)
         return await self.pool.fetchval(
@@ -154,6 +162,51 @@ class VariantSchemaTests(unittest.IsolatedAsyncioTestCase):
         await self.make_variant(p, stock_qty=9)
         await self.pool.execute("DELETE FROM product_variants WHERE product_id=$1", p)
         self.assertEqual(await self.stock_of(p), 0)
+
+    # -- attribute uniqueness (V9) -----------------------------------------
+
+    async def test_two_variants_with_the_same_attributes_are_rejected(self):
+        """
+        Enforced in the index, not in a router, so an import script and a future
+        service cannot create one either.
+
+        jsonb equality is semantic, so the collision holds regardless of key
+        order -- which is what makes an index on jsonb worth having at all.
+        """
+        p = await self.make_product()
+        await self.make_variant(p, attributes=json.dumps({"size": "M", "colour": "Red"}))
+        with self.assertRaises(asyncpg.UniqueViolationError):
+            await self.make_variant(
+                p, attributes=json.dumps({"colour": "Red", "size": "M"})
+            )
+
+    async def test_the_same_attributes_on_different_products_are_fine(self):
+        """The index is scoped to the product; 'Medium' is not globally unique."""
+        a = await self.make_product()
+        b = await self.make_product()
+        await self.make_variant(a, attributes=json.dumps({"size": "M"}))
+        await self.make_variant(b, attributes=json.dumps({"size": "M"}))
+        self.assertEqual(
+            await self.pool.fetchval(
+                "SELECT count(*) FROM product_variants WHERE attributes='{\"size\":\"M\"}'::jsonb"
+            ),
+            2,
+        )
+
+    async def test_two_attribute_less_variants_are_rejected(self):
+        """
+        '{}' is an attribute set like any other, so it collides.
+
+        Worth stating explicitly because the seeded catalogue is full of
+        attribute-less default rows -- one per pre-variant product, each on its
+        own product, so none of them collide. It is only a second one on the
+        *same* product that does, and that is precisely the ambiguity a picker
+        cannot render.
+        """
+        p = await self.make_product()
+        await self.make_variant(p, attributes="{}")
+        with self.assertRaises(asyncpg.UniqueViolationError):
+            await self.make_variant(p, attributes="{}")
 
     async def test_one_variant_product_deletion_cascades(self):
         p = await self.make_product()

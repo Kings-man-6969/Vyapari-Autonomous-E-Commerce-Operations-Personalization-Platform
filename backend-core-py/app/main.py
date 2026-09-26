@@ -23,6 +23,7 @@ from app.routers.notifications import router as notifications_router
 from app.routers.orders import router as orders_router
 from app.routers.payments import router as payments_router
 from app.routers.products import router as products_router
+from app.routers.variants import router as variants_router
 from app.routers.public_pages import router as public_pages_router
 from app.routers.reviews import router as reviews_router
 from app.routers.seller import router as seller_router
@@ -241,6 +242,11 @@ app.include_router(health_router, prefix="/api/health")
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(categories_router, prefix="/api/categories")
 app.include_router(products_router, prefix="/api/products")
+# Declared after products_router: its /{product_id}/variants routes must not be
+# captured by a products_router /{id} pattern. Starlette matches in registration
+# order, so the more specific router has to be registered second to be safe, and
+# this ordering makes that explicit rather than accidental.
+app.include_router(variants_router, prefix="/api/products")
 app.include_router(cart_router, prefix="/api/cart")
 app.include_router(orders_router, prefix="/api/orders")
 app.include_router(payments_router, prefix="/api/payments")

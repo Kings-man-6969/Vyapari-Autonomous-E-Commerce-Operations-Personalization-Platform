@@ -148,6 +148,91 @@ jobs:
 
           echo "All V8 schema assertions passed."
 
+      - name: V9 cart and order lines are variant-aware, and the guards hold
+        run: |
+          set -euo pipefail
+          q() { PGPASSWORD=vyapari_secure_password psql -qtA -h localhost -U vyapari_admin -d vyapari -c "$1"; }
+
+          # The cart's identity is (cart_id, product_id, variant_id). Without the
+          # NULLS NOT DISTINCT clause, PG treats every NULL as distinct, so the
+          # same plain product could be added to one bag twice under two NULL
+          # variant rows -- the bug V9 exists to fix, reintroduced by the index
+          # being built the ordinary way.
+          test "$(q "SELECT count(*) FROM pg_index i
+                     JOIN pg_class c ON c.oid = i.indexrelid
+                    WHERE c.relname = 'uq_cart_items_product_variant'
+                      AND i.indnullsnotdistinct")" = "1" \
+            || { echo "cart line index is not NULLS NOT DISTINCT"; exit 1; }
+
+          # A bag line naming a variant that belongs to another product is
+          # unenforceable with a single-table CHECK: it spans two tables, so it
+          # has to be a trigger. Same for a historical order line whose option
+          # was later deleted -- the snapshot has to survive that.
+          test "$(q "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal
+                    AND tgname = 'trg_cart_items_variant_ownership'")" = "1" \
+            || { echo "MISSING cart variant ownership trigger"; exit 1; }
+          test "$(q "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal
+                    AND tgname = 'trg_order_items_variant_ownership'")" = "1" \
+            || { echo "MISSING order-line variant ownership trigger"; exit 1; }
+
+          # Two indistinguishable options in one picker is a support ticket, and
+          # no caller may create one -- not an API, not an import script.
+          test "$(q "SELECT count(*) FROM pg_indexes WHERE indexname='uq_product_variants_attributes'")" = "1" \
+            || { echo "MISSING variant attribute uniqueness"; exit 1; }
+          test "$(q "SELECT indexdef FROM pg_indexes WHERE indexname='uq_product_variants_attributes'")" \
+            = "CREATE UNIQUE INDEX uq_product_variants_attributes ON public.product_variants USING btree (product_id, attributes)" \
+            || { echo "variant attribute uniqueness is not scoped per product"; exit 1; }
+
+          # An authored stock_qty on a variant product is ignored by the trigger,
+          # so a hand-written number silently loses. The guard warns rather than
+          # raising, on purpose: a listing import writes products and variants in
+          # one pass and must not be turned into an outage by it. Asserted by
+          # behaviour, because the catalogue has no column for a trigger's level
+          # -- tgtype records timing and row-vs-statement, not WARNING-vs-ERROR.
+          test "$(q "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal
+                    AND tgname = 'trg_products_variant_stock_authored'")" = "1" \
+            || { echo "MISSING authored-stock warning trigger"; exit 1; }
+
+          # Builds its own rows: this database has schema but no data.
+          PGPASSWORD=vyapari_secure_password psql -qtA -h localhost -U vyapari_admin \
+            -d vyapari >/dev/null 2>authored_warn.txt <<'SQL' \
+            || { echo "authored-stock guard RAISED; a listing import would fail"; exit 1; }
+            DO $$
+            DECLARE p uuid; u uuid; c uuid;
+            BEGIN
+              SELECT id INTO u FROM users LIMIT 1;
+              IF u IS NULL THEN
+                INSERT INTO users (name, email, password_hash, role)
+                VALUES ('Probe', 'probe@example.com', 'x', 'seller') RETURNING id INTO u;
+              END IF;
+              SELECT id INTO c FROM categories LIMIT 1;
+              IF c IS NULL THEN
+                INSERT INTO categories (name, slug) VALUES ('Probe', 'probe') RETURNING id INTO c;
+              END IF;
+              INSERT INTO products (seller_id, category_id, title, slug, description, price, stock_qty, has_variants)
+              VALUES (u, c, 'Guard Probe', 'guard-probe', 'd', 100, 5, TRUE);
+              SELECT id INTO p FROM products WHERE slug = 'guard-probe';
+              -- The line that must warn rather than abort.
+              UPDATE products SET stock_qty = 4242 WHERE id = p;
+              UPDATE products SET has_variants = FALSE WHERE id = p;
+              DELETE FROM products WHERE id = p;
+            END $$;
+          SQL
+          grep -q "has variants" authored_warn.txt \
+            || { echo "authored-stock guard did not warn; the edit is silently lost"; exit 1; }
+          rm -f authored_warn.txt
+
+          # Order lines must be able to say what was bought, after the seller
+          # renames or retires the option.
+          for c in "order_items variant_snapshot" "order_items sku_at_purchase"; do
+            set -- $c
+            test "$(q "SELECT count(*) FROM information_schema.columns
+                       WHERE table_name='$1' AND column_name='$2'")" = "1" \
+              || { echo "MISSING COLUMN: $1.$2"; exit 1; }
+          done
+
+          echo "All V9 schema assertions passed."
+
       # The behavioural side of V8 — that the stock-sync trigger actually
       # maintains products.stock_qty as the sum of active variants — is covered
       # by tests/test_variants.py, which runs in the test-backend-core job

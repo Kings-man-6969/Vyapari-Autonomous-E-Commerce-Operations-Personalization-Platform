@@ -134,20 +134,47 @@ class TestAllVyapariEndpoints(unittest.TestCase):
             if "from carts where user_id = $1" in q:
                 return {"id": "cart-123"}
             if "from cart_items ci" in q and op == "fetchrow":
-                return {"id": "item-1", "stock_qty": 15}
+                # The columns update_cart_item actually selects. A cart line
+                # belongs to one option now, so variant_id is part of the record;
+                # None here because this cart holds a plain product.
+                return {
+                    "id": "item-1",
+                    "product_id": "11111111-0000-0000-0000-000000000001",
+                    "variant_id": None,
+                    "stock_qty": 15,
+                    "price": 1999.0,
+                }
+            if "coalesce(v.stock_qty, p.stock_qty)" in q and op == "fetchval":
+                # The quantity cap, resolved against the line's option. No option
+                # on this line, so the product's own stock is the ceiling.
+                return 15
             if "from cart_items ci" in q and op == "fetch":
+                # The variant_* keys are not decoration. The real SELECT joins
+                # product_variants for them and the route reads every one, so a
+                # fixture that omits a column the production query always returns
+                # becomes a 500 in a test that is only about the cart.
+                # variant_id None is the plain-product case: no choice to make.
                 return [{
                     "cart_item_id": "item-1",
                     "quantity": 2,
                     "created_at": datetime.datetime.now(),
+                    "variant_id": None,
                     "product_id": "11111111-0000-0000-0000-000000000001",
                     "title": "Silk Saree",
                     "price": 1999.0,
                     "compare_at_price": 2999.0,
                     "stock_qty": 15,
                     "status": "active",
+                    "has_variants": False,
                     "images": ["saree.jpg"],
                     "store_name": "Royal Silks",
+                    "variant_price": None,
+                    "variant_compare_at_price": None,
+                    "variant_stock": None,
+                    "variant_sku": None,
+                    "variant_attributes": None,
+                    "variant_active": None,
+                    "variant_image_url": None,
                 }]
 
             # 5. Orders & Order Items
@@ -361,6 +388,11 @@ class TestAllVyapariEndpoints(unittest.TestCase):
                     "price": 1999.0,
                     "compare_at_price": 2999.0,
                     "stock_qty": 15,
+                    # Read by resolve_purchase_line to tell "no options, charge the
+                    # product price" apart from "options exist, none chosen yet".
+                    # This fixture is a plain product, so there is no choice to make
+                    # and the product's own price stands.
+                    "has_variants": False,
                     "images": json.dumps(["https://images.example.com/saree.jpg"]),
                     "attributes": json.dumps({"brand": "FabIndia"}),
                     "status": "active",

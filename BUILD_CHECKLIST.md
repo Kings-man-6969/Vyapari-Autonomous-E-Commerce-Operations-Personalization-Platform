@@ -19,11 +19,11 @@ Every item from the client requirements list, plus the gaps found in audit. Stat
 
 ## C. Product variants
 
-- [ ] **C1. `product_variants` table** — depends on A2. Per-variant price, stock, SKU, attributes. Backfill for 10,057 seeded products.
-- [ ] **C2. Variant backend** — CRUD, stock-aware order placement, variant resolution in cart.
-- [ ] **C3. Variant selector on PDP** — `/products/:id`, swatches/size pills, price + stock per variant, URL-persisted selection.
-- [ ] **C4. Variant management for sellers** — `/seller/products/:id/edit` variant table.
-- [ ] **C5. Variant management for admin** — part of E1.
+- [x] **C1. `product_variants` table** — depends on A2. Per-variant price, stock, SKU, attributes. Backfill for 10,057 seeded products. *(V8, committed in A2; V9 adds the cart/order-line wiring.)*
+- [x] **C2. Variant backend** — CRUD, stock-aware order placement, variant resolution in cart. *(C1–C5 commit: 5 owner/admin routes, `app/variants.py` as the single price/stock authority, variant-aware bag and order placement, snapshotting. 60 new tests.)*
+- [ ] **C3. Variant selector on PDP** — `/products/:id`, swatches/size pills, price + stock per variant, URL-persisted selection. *(API is ready: `GET /api/products/:id` returns `variants`, `axes`, `variant_count`.)*
+- [ ] **C4. Variant management for sellers** — `/seller/products/:id/edit` variant table. *(API is ready: the 5 routes in `app/routers/variants.py` have no UI callers yet.)*
+- [x] **C5. Variant management for admin** — part of E1. *(The same 5 routes accept an admin token; `test_an_admin_can_touch_any_product` locks it in. No separate admin UI — it shares the seller editor.)*
 
 ## D. Media & images
 

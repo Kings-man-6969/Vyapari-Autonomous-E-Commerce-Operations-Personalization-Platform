@@ -5,6 +5,11 @@ GET  /api/orders
 GET  /api/orders/:id
 POST /api/orders                       (SELECT FOR UPDATE ACID transaction)
 POST /api/orders/:id/confirm-payment
+
+Variant-aware. Each line may name an option; the price, the stock lock and the
+decrement all come from app.variants.resolve_purchase_line, which is the same
+code the cart prices with. The purchased attributes and SKU are snapshotted onto
+the order line so history survives a later edit to the option.
 """
 import hashlib
 import json
@@ -18,6 +23,12 @@ from pydantic import BaseModel, ConfigDict
 
 from app.auth.dependencies import require_auth
 from app.db import get_db, get_pool
+from app.variants import (
+    assert_sufficient_stock,
+    coerce_attributes,
+    describe_attributes,
+    resolve_purchase_line,
+)
 
 import re
 from app.rate_limit import limit_for, rate_limit
@@ -71,10 +82,12 @@ async def get_order(id: str, user: dict = Depends(require_auth), db=Depends(get_
         )
 
     items_rows = await db.fetch(
-        """SELECT oi.*, p.title, p.images, sp.store_name
+        """SELECT oi.*, p.title, p.images, sp.store_name,
+                  v.attributes AS live_variant_attributes
            FROM order_items oi
            JOIN products p ON oi.product_id = p.id
            JOIN seller_profiles sp ON oi.seller_id = sp.user_id
+           LEFT JOIN product_variants v ON oi.variant_id = v.id
            WHERE oi.order_id = $1""",
         id,
     )
@@ -86,11 +99,29 @@ async def get_order(id: str, user: dict = Depends(require_auth), db=Depends(get_
         id,
     )
 
+    items = []
+    for r in items_rows:
+        item = dict(r)
+        # The snapshot is what was bought; the live row is what the option is
+        # called now. Both are returned because they legitimately differ, and a
+        # seller who renamed an option should be able to see that they did.
+        item["variant_snapshot"] = coerce_attributes(item.get("variant_snapshot"))
+        item["live_variant_attributes"] = coerce_attributes(item.get("live_variant_attributes"))
+        item["variant_label"] = describe_attributes(
+            item["variant_snapshot"] or item["live_variant_attributes"]
+        )
+        item["variant_renamed"] = bool(
+            item["variant_snapshot"]
+            and item["live_variant_attributes"]
+            and item["variant_snapshot"] != item["live_variant_attributes"]
+        )
+        items.append(item)
+
     return {
         "success": True,
         "data": {
             "order": dict(order_row),
-            "items": [dict(r) for r in items_rows],
+            "items": items,
             "timeline": [dict(r) for r in history_rows],
         },
     }
@@ -99,6 +130,9 @@ async def get_order(id: str, user: dict = Depends(require_auth), db=Depends(get_
 class OrderItem(BaseModel):
     product_id: str
     quantity: int
+    #: The chosen option. Optional: a product with no options, or a client with
+    #: no picker yet, sends none and the default is used.
+    variant_id: str | None = None
 
 
 class CreateOrderBody(BaseModel):
@@ -174,36 +208,32 @@ async def create_order(
                         status_code=404,
                         detail={"code": "PRODUCT_NOT_FOUND", "message": f"Product {item.product_id} no longer exists."},
                     )
-                # SELECT ... FOR UPDATE — critical stock lock
-                product = await conn.fetchrow(
-                    "SELECT id, title, price, stock_qty, status, seller_id "
-                    "FROM products WHERE id = $1::uuid FOR UPDATE",
-                    clean_p_id,
-                )
-
-                if not product:
+                clean_v_id = to_valid_uuid(item.variant_id) if item.variant_id else None
+                if item.variant_id and not clean_v_id:
                     raise HTTPException(
                         status_code=404,
-                        detail={"code": "PRODUCT_NOT_FOUND", "message": f"Product {item.product_id} no longer exists."},
+                        detail={"code": "VARIANT_NOT_FOUND", "message": "That option is no longer available."},
                     )
 
-                if product["status"] != "active" or product["stock_qty"] < item.quantity:
-                    raise HTTPException(
-                        status_code=400,
-                        detail={
-                            "code": "INSUFFICIENT_STOCK",
-                            "message": f"\"{product['title']}\" has only {product['stock_qty']} units available.",
-                        },
-                    )
+                # One resolver decides the price and the stock, under
+                # SELECT ... FOR UPDATE on both the product and the option.
+                # Locking only the option would race sync_product_stock_from_
+                # variants(), which writes the parent row.
+                line = await resolve_purchase_line(
+                    conn, clean_p_id, clean_v_id, item.quantity, lock=True
+                )
+                assert_sufficient_stock(line, item.quantity)
 
-                price = Decimal(str(product["price"]))
-                total_amount += price * item.quantity
+                total_amount += line.price * item.quantity
                 validated_items.append({
-                    "product_id": str(product["id"]),
-                    "seller_id": str(product["seller_id"]),
+                    "product_id": str(line.product_id),
+                    "seller_id": str(line.seller_id),
+                    "variant_id": str(line.variant_id) if line.variant_id else None,
                     "quantity": item.quantity,
-                    "price": float(price),
-                    "new_stock": product["stock_qty"] - item.quantity,
+                    "price": float(line.price),
+                    "variant_attributes": line.to_dict()["variant_attributes"],
+                    "sku": line.to_dict()["sku"],
+                    "new_stock": line.stock - item.quantity,
                 })
 
             # 1. Create order
@@ -219,19 +249,45 @@ async def create_order(
 
             # 2. Order items + stock decrement
             for vi in validated_items:
+                # The snapshot is what makes a historical line item legible after
+                # the seller renames "Indigo" to "Midnight Blue" or retires the
+                # option entirely. Without it, an order placed last year can no
+                # longer say what was bought.
                 await conn.execute(
-                    """INSERT INTO order_items (order_id, product_id, seller_id, quantity, price_at_purchase)
-                       VALUES ($1, $2, $3, $4, $5)""",
+                    """INSERT INTO order_items
+                         (order_id, product_id, seller_id, quantity, price_at_purchase,
+                          variant_id, variant_snapshot, sku_at_purchase)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)""",
                     order_id,
                     vi["product_id"],
                     vi["seller_id"],
                     vi["quantity"],
                     vi["price"],
+                    vi["variant_id"],
+                    json.dumps(vi["variant_attributes"]) if vi["variant_attributes"] else None,
+                    vi["sku"],
                 )
+
+                if vi["variant_id"]:
+                    # Decrement the option; the trigger keeps the product total
+                    # and, below, the product status in step.
+                    await conn.execute(
+                        """UPDATE product_variants
+                              SET stock_qty = stock_qty - $1, updated_at = CURRENT_TIMESTAMP
+                            WHERE id = $2::uuid""",
+                        vi["quantity"],
+                        vi["variant_id"],
+                    )
+                else:
+                    await conn.execute(
+                        "UPDATE products SET stock_qty = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+                        vi["new_stock"],
+                        vi["product_id"],
+                    )
+
                 new_status = "out_of_stock" if vi["new_stock"] == 0 else "active"
                 await conn.execute(
-                    "UPDATE products SET stock_qty = $1, status = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3",
-                    vi["new_stock"],
+                    "UPDATE products SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
                     new_status,
                     vi["product_id"],
                 )
@@ -262,13 +318,25 @@ async def create_order(
                 user["id"],
             )
 
+            # Every value here has to survive json.dumps() at step 6, not just
+            # FastAPI's response encoder. payment_row is a raw asyncpg record
+            # and carries a uuid.UUID id and a Decimal amount; the stdlib encoder
+            # handles neither, so storing the idempotent copy of this dict used
+            # to raise TypeError and roll the whole order back -- the order was
+            # real, the money was taken by the client on retry, and the retry
+            # created a second one. Anything added to this dict has to be
+            # cast, not just be renderable by FastAPI.
             response_data = {
                 "success": True,
                 "data": {
                     "order_id": str(order_id),
                     "total_amount": float(total_amount),
                     "status": "pending",
-                    "payment": dict(payment_row),
+                    "payment": {
+                        "id": str(payment_row["id"]),
+                        "status": payment_row["status"],
+                        "amount": float(payment_row["amount"]),
+                    },
                 },
             }
 

@@ -4,10 +4,12 @@ Products — port of backend-core/src/routes/products.js (676 lines)
 GET  /api/products/facets
 GET  /api/products/suggest
 GET  /api/products              (with NLQ + semantic search)
-GET  /api/products/:id
-POST /api/products              (seller only)
+GET  /api/products/:id          (includes variants + derived axes)
+POST /api/products              (seller only, may create with variants)
 PUT  /api/products/:id          (seller/admin)
 POST /api/products/reviews      (verified purchase gate)
+
+Option CRUD lives in app/routers/variants.py, mounted on the same prefix.
 """
 import hashlib
 import json
@@ -17,7 +19,7 @@ from typing import Annotated, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.auth.dependencies import optional_auth, require_auth, require_role
 from app.config import settings
@@ -30,7 +32,8 @@ from app.redis_client import (
     TTL_SEARCH,
     cache,
 )
-from app.utils import uuid_query_param
+from app.utils import to_valid_uuid, uuid_query_param
+from app.variants import coerce_attributes, sync_variant_flag, variants_for_display
 
 router = APIRouter()
 
@@ -547,6 +550,13 @@ async def get_product(id: str, user: dict | None = Depends(optional_auth), db=De
     if "inventory_count" not in product:
         product["inventory_count"] = product.get("stock_qty", 0)
 
+    # Variants, in the same response. A PDP that has to make a second request to
+    # discover it has options shows a "Add to bag" button that fails at
+    # checkout with VARIANT_REQUIRED, which is the bug this avoids.
+    variant_block = await variants_for_display(
+        db, str(product["id"]), product.get("price"), bool(product.get("has_variants"))
+    )
+
     reviews = await db.fetch(
         """SELECT r.id, r.rating, r.title, r.comment, r.created_at,
                   r.is_verified_purchase, u.name AS reviewer_name
@@ -574,6 +584,7 @@ async def get_product(id: str, user: dict | None = Depends(optional_auth), db=De
         "data": {
             "product": product,
             "reviews": [dict(r) for r in reviews],
+            **variant_block,
         },
     }
 
@@ -587,6 +598,27 @@ async def get_product(id: str, user: dict | None = Depends(optional_auth), db=De
     return result
 
 
+class VariantInput(BaseModel):
+    """One option as supplied by a create/update form."""
+
+    price: float | None = None
+    compare_at_price: float | None = None
+    stock_qty: int = 0
+    sku: str | None = None
+    attributes: dict | str | None = None
+    is_default: bool = False
+    is_active: bool = True
+    image_url: str | None = None
+    sort_order: int = 0
+
+    @field_validator("stock_qty")
+    @classmethod
+    def _non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("stock_qty cannot be negative")
+        return v
+
+
 class CreateProductBody(BaseModel):
     title: str
     description: str
@@ -597,8 +629,24 @@ class CreateProductBody(BaseModel):
     images: list = []
     attributes: dict = {}
     status: str = "active"
+    #: Options supplied at creation. Two or more of them makes the product a
+    #: variant product; zero or one leaves it a plain product with a single
+    #: backfilled default option, which is the same shape V8 gives every product
+    #: that already existed.
+    variants: list[VariantInput] | None = None
 
 
+# Both spellings are declared, and this needs explaining because the missing
+# one is not a 404 but a 405.
+#
+# Starlette's router does not fall back to a slash-adding redirect when a
+# *partial* match exists. GET /api/products matches this path with the wrong
+# method, which counts as a partial match, and Starlette answers 405 rather
+# than issuing the 307 that would have made POST /api/products work. So the
+# moment a GET route for the same path exists, the un-slashed POST is
+# unreachable. Every other collection route in this file declares both -- see
+# the GET "" / GET "/" pair on list_products -- and this one did not.
+@router.post("", status_code=201)
 @router.post("/", status_code=201)
 async def create_product(
     body: CreateProductBody,
@@ -642,6 +690,20 @@ async def create_product(
 
     product = dict(row)
 
+    # Options, supplied at creation.
+    #
+    # Every product gets at least one variant row, even a plain one with no
+    # options, because that is the invariant V8's backfill established for the
+    # existing catalogue: variant-aware code never has to handle a product with
+    # zero variants. Creating a product without one would leave a hole that only
+    # shows up the first time somebody writes a loop over
+    # product_variants and wonders why the newest listing is missing.
+    #
+    # A single supplied option is still created -- the seller's intent is
+    # respected -- but has_variants stays false, because one option is not a
+    # choice and the product's own price and stock remain authoritative.
+    await _write_initial_variants(db, str(product["id"]), body)
+
     # Invalidate search, suggest, facets, popular, and categories caches
     await cache.delete_prefix("search:")
     await cache.delete_prefix("suggest:")
@@ -654,7 +716,170 @@ async def create_product(
         str(product["id"]), f"{product['title']}. {product['description']}", db
     )
 
+    # Re-read so the response carries the has_variants flag the trigger just set,
+    # rather than the pre-variant value the INSERT returned.
+    product = dict(await db.fetchrow("SELECT * FROM products WHERE id = $1", product["id"]))
+
     return {"success": True, "data": {"product": product}}
+
+
+async def _reconcile_variants(db, product_id: str, submitted: list[VariantInput]) -> None:
+    """
+    Upserts the options named in a product update. Options not named are left
+    alone.
+
+    Not a replace. A PUT whose payload happened to omit an option -- because the
+    seller is editing one row in a table and the form only sent that row -- would
+    otherwise retire every other option, including ones customers are buying.
+    Deleting is an explicit DELETE against a specific option for exactly this
+    reason.
+
+    Matched on the option's attributes, not its id, because a form that creates
+    a new option has no id for it yet while a form editing an existing one
+    usually does not send the attributes it did not change. Id wins when
+    present; attributes are the fallback.
+    """
+    import json
+
+    existing = [
+        dict(r)
+        for r in await db.fetch(
+            "SELECT * FROM product_variants WHERE product_id = $1::uuid", product_id
+        )
+    ]
+    known_attributes = {tuple(sorted(coerce_attributes(r["attributes"]).items())) for r in existing}
+
+    for index, variant in enumerate(submitted):
+        attributes = coerce_attributes(variant.attributes) or {"option": f"Option {index + 1}"}
+        key = tuple(sorted(attributes.items()))
+        match = next(
+            (r for r in existing if tuple(sorted(coerce_attributes(r["attributes"]).items())) == key),
+            None,
+        )
+
+        if match:
+            await db.execute(
+                """UPDATE product_variants
+                      SET price = $1, compare_at_price = $2, stock_qty = $3,
+                          sku = COALESCE($4, sku), is_active = $5,
+                          image_url = $6, sort_order = COALESCE($7, sort_order),
+                          updated_at = NOW()
+                    WHERE id = $8::uuid""",
+                variant.price,
+                variant.compare_at_price,
+                variant.stock_qty,
+                (variant.sku or "").strip() or None,
+                variant.is_active,
+                variant.image_url,
+                variant.sort_order or index,
+                match["id"],
+            )
+        else:
+            await db.execute(
+                """INSERT INTO product_variants
+                     (product_id, price, compare_at_price, stock_qty, sku, attributes,
+                      is_default, is_active, image_url, sort_order)
+                   VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10)""",
+                product_id,
+                variant.price,
+                variant.compare_at_price,
+                variant.stock_qty,
+                (variant.sku or "").strip() or None,
+                json.dumps(attributes),
+                variant.is_default or not known_attributes,
+                variant.is_active,
+                variant.image_url,
+                variant.sort_order or index,
+            )
+            known_attributes.add(key)
+
+    await sync_variant_flag(db, product_id)
+
+
+async def _write_initial_variants(db, product_id: str, body: CreateProductBody) -> None:
+    """
+    Creates a product's opening set of options.
+
+    Always writes at least one row. The default row mirrors the product's own
+    price and stock and carries an empty attribute set, which is exactly what
+    V8's backfill produced for the 10,057 products that predate variants --
+    except that the V8 backfill set price rather than leaving it NULL, and this
+    leaves price NULL so the default row genuinely inherits. Either way
+    resolve_purchase_line() arrives at the same number, and NULL is the more
+    honest record: it says "this option has no price of its own".
+    """
+    import json
+
+    supplied = [v for v in (body.variants or [])]
+    if not supplied:
+        await db.execute(
+            """INSERT INTO product_variants (product_id, price, stock_qty, attributes, is_default, sort_order)
+               VALUES ($1, NULL, $2, '{}'::jsonb, TRUE, 0)
+               ON CONFLICT DO NOTHING""",
+            product_id,
+            body.stock_qty,
+        )
+        return
+
+    if len(supplied) == 1:
+        # A single option mirrors the product, so it carries the product's
+        # numbers rather than an empty attribute set. Creating an option with no
+        # attributes is rejected by the variants API for exactly this reason.
+        only = supplied[0]
+        await db.execute(
+            """INSERT INTO product_variants
+                 (product_id, price, compare_at_price, stock_qty, sku, attributes, is_default, image_url, sort_order)
+               VALUES ($1,$2,$3,$4,$5,$6::jsonb,TRUE,$7,$8)
+               ON CONFLICT DO NOTHING""",
+            product_id,
+            only.price if only.price is not None else body.price,
+            only.compare_at_price if only.compare_at_price is not None else body.compare_at_price,
+            only.stock_qty if only.stock_qty else body.stock_qty,
+            (only.sku or "").strip() or None,
+            json.dumps(coerce_attributes(only.attributes) or {"option": "Standard"}),
+            only.image_url,
+            only.sort_order,
+        )
+        return
+
+    # Two or more options makes this a variant product. The flag has to be TRUE
+    # *before* the rows land, because the trigger that maintains
+    # products.stock_qty is gated on it:
+    #
+    #     ... WHERE p.id = target_product AND p.has_variants = TRUE
+    #
+    # Insert first and call sync_variant_flag() afterwards, the flag is still
+    # false for every insert, no trigger fires, and the product is left
+    # reporting the stock_qty the caller sent (0, for a form that supplies its
+    # quantities per option) while its options hold 6. That is the catalogue
+    # selling a size run that appears to have nothing in it.
+    await db.execute(
+        "UPDATE products SET has_variants = TRUE, updated_at = NOW() WHERE id = $1::uuid",
+        product_id,
+    )
+
+    for index, variant in enumerate(supplied):
+        await db.execute(
+            """INSERT INTO product_variants
+                 (product_id, price, compare_at_price, stock_qty, sku, attributes,
+                  is_default, is_active, image_url, sort_order)
+               VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10)
+               ON CONFLICT DO NOTHING""",
+            product_id,
+            variant.price,
+            variant.compare_at_price,
+            variant.stock_qty,
+            (variant.sku or "").strip() or None,
+            json.dumps(coerce_attributes(variant.attributes) or {"option": f"Option {index + 1}"}),
+            variant.is_default or index == 0,
+            variant.is_active,
+            variant.image_url,
+            variant.sort_order or index,
+        )
+
+    # Now that the flag is set, the trigger has kept products.stock_qty in step
+    # on every insert. sync_variant_flag confirms the flag matches the count.
+    await sync_variant_flag(db, product_id)
 
 
 class UpdateProductBody(BaseModel):
@@ -667,6 +892,12 @@ class UpdateProductBody(BaseModel):
     images: list | None = None
     attributes: dict | None = None
     status: str | None = None
+    #: Options are edited through /api/products/:id/variants, not here. Accepted
+    #: on update only so a form that round-trips the whole product works; the
+    #: reconciliation is done by the same helper the create path uses, and any
+    #: option not in this list is left alone rather than deleted. A bulk replace
+    #: that quietly retired options would be a nasty surprise.
+    variants: list[VariantInput] | None = None
 
 
 @router.put("/{id}")
@@ -696,7 +927,27 @@ async def update_product(
     compare_at_price = body.compare_at_price if body.compare_at_price is not None else (
         float(current["compare_at_price"]) if current["compare_at_price"] else None
     )
+
+    # Stock is not authored on a variant product. It is the sum of the active
+    # options, maintained by a trigger, so accepting a new number here would be
+    # accepting an edit that does not happen -- the next option save overwrites
+    # it, and the seller concludes the form is broken. Refusing is better than
+    # accepting-and-discarding. Re-sending the current value is a no-op and is
+    # allowed, so a form that echoes every field back still works.
+    has_variants = bool(current.get("has_variants"))
+    if has_variants and body.stock_qty is not None and body.stock_qty != int(current["stock_qty"]):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "STOCK_MANAGED_BY_VARIANTS",
+                "message": (
+                    "This product's stock comes from its options. "
+                    "Change the quantity on the option instead."
+                ),
+            },
+        )
     stock_qty = body.stock_qty if body.stock_qty is not None else current["stock_qty"]
+
     cat_id = current["category_id"]
     if body.category_id and str(body.category_id).strip():
         try:
@@ -711,24 +962,53 @@ async def update_product(
 
     effective_status = "out_of_stock" if stock_qty == 0 and status == "active" else status
 
-    updated = await db.fetchrow(
-        """UPDATE products
-           SET title = $1, description = $2, price = $3, compare_at_price = $4,
-               stock_qty = $5, category_id = $6::uuid, images = $7::jsonb,
-               attributes = $8::jsonb, status = $9, updated_at = CURRENT_TIMESTAMP
-           WHERE id = $10
-           RETURNING *""",
-        title.strip(),
-        description,
-        price,
-        compare_at_price,
-        stock_qty,
-        cat_id,
-        json.dumps(images),
-        json.dumps(attributes) if isinstance(attributes, dict) else attributes,
-        effective_status,
-        id,
-    )
+    # For a variant product, stock_qty is the trigger's number, so never write
+    # it back. Reusing the column position with the existing value would be a
+    # pointless write that also trips V9's authored-stock warning, so the SET
+    # list differs by branch instead.
+    if has_variants:
+        updated = await db.fetchrow(
+            """UPDATE products
+                  SET title = $1, description = $2, price = $3, compare_at_price = $4,
+                      category_id = $5::uuid, images = $6::jsonb,
+                      attributes = $7::jsonb, status = $8, updated_at = CURRENT_TIMESTAMP
+                WHERE id = $9
+                RETURNING *""",
+            title.strip(),
+            description,
+            price,
+            compare_at_price,
+            cat_id,
+            json.dumps(images),
+            json.dumps(attributes) if isinstance(attributes, dict) else attributes,
+            # Restock and depletion are decided by the options, so the product's
+            # own status follows them rather than the other way round.
+            "out_of_stock" if int(current["stock_qty"]) == 0 and status == "active"
+            else ("active" if int(current["stock_qty"]) > 0 and status == "out_of_stock" else status),
+            id,
+        )
+    else:
+        updated = await db.fetchrow(
+            """UPDATE products
+                  SET title = $1, description = $2, price = $3, compare_at_price = $4,
+                      stock_qty = $5, category_id = $6::uuid, images = $7::jsonb,
+                      attributes = $8::jsonb, status = $9, updated_at = CURRENT_TIMESTAMP
+                WHERE id = $10
+                RETURNING *""",
+            title.strip(),
+            description,
+            price,
+            compare_at_price,
+            stock_qty,
+            cat_id,
+            json.dumps(images),
+            json.dumps(attributes) if isinstance(attributes, dict) else attributes,
+            effective_status,
+            id,
+        )
+
+    if body.variants:
+        await _reconcile_variants(db, id, body.variants)
 
     # Invalidate product detail, search, suggest, facets, and popular caches
     await cache.delete(f"product:detail:{id.strip().lower()}")

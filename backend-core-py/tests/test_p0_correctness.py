@@ -90,6 +90,11 @@ class TestP0Correctness(unittest.TestCase):
 
             # --- Product and stock checks ---
             if "from products where id = $1::uuid for update" in q:
+                # has_variants is one of the columns the real SELECT issues, and
+                # resolve_purchase_line reads it to tell "plain product, no choice
+                # needed" apart from "offers options, none chosen yet". False is
+                # the honest value for this fixture: these tests are about
+                # idempotency, on a product with no options.
                 return {
                     "id": args[0],
                     "title": "Silk Saree",
@@ -97,6 +102,7 @@ class TestP0Correctness(unittest.TestCase):
                     "stock_qty": 5,
                     "status": "active",
                     "seller_id": self.seller_id,
+                    "has_variants": False,
                 }
 
             # --- Order creation inserts ---
