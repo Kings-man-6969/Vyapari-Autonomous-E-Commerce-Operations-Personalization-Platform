@@ -19,7 +19,7 @@ from typing import Annotated, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 
 from app.auth.dependencies import optional_auth, require_auth, require_role
 from app.config import settings
@@ -33,7 +33,13 @@ from app.redis_client import (
     cache,
 )
 from app.utils import to_valid_uuid, uuid_query_param
-from app.variants import coerce_attributes, sync_variant_flag, variants_for_display
+from app.variants import (
+    VariantInput,
+    coerce_attributes,
+    sync_variant_flag,
+    variants_for_display,
+    write_initial_variants,
+)
 
 router = APIRouter()
 
@@ -598,27 +604,6 @@ async def get_product(id: str, user: dict | None = Depends(optional_auth), db=De
     return result
 
 
-class VariantInput(BaseModel):
-    """One option as supplied by a create/update form."""
-
-    price: float | None = None
-    compare_at_price: float | None = None
-    stock_qty: int = 0
-    sku: str | None = None
-    attributes: dict | str | None = None
-    is_default: bool = False
-    is_active: bool = True
-    image_url: str | None = None
-    sort_order: int = 0
-
-    @field_validator("stock_qty")
-    @classmethod
-    def _non_negative(cls, v: int) -> int:
-        if v < 0:
-            raise ValueError("stock_qty cannot be negative")
-        return v
-
-
 class CreateProductBody(BaseModel):
     title: str
     description: str
@@ -702,7 +687,14 @@ async def create_product(
     # A single supplied option is still created -- the seller's intent is
     # respected -- but has_variants stays false, because one option is not a
     # choice and the product's own price and stock remain authoritative.
-    await _write_initial_variants(db, str(product["id"]), body)
+    await write_initial_variants(
+        db,
+        str(product["id"]),
+        variants=body.variants,
+        price=body.price,
+        compare_at_price=body.compare_at_price,
+        stock_qty=body.stock_qty,
+    )
 
     # Invalidate search, suggest, facets, popular, and categories caches
     await cache.delete_prefix("search:")
@@ -793,92 +785,6 @@ async def _reconcile_variants(db, product_id: str, submitted: list[VariantInput]
             )
             known_attributes.add(key)
 
-    await sync_variant_flag(db, product_id)
-
-
-async def _write_initial_variants(db, product_id: str, body: CreateProductBody) -> None:
-    """
-    Creates a product's opening set of options.
-
-    Always writes at least one row. The default row mirrors the product's own
-    price and stock and carries an empty attribute set, which is exactly what
-    V8's backfill produced for the 10,057 products that predate variants --
-    except that the V8 backfill set price rather than leaving it NULL, and this
-    leaves price NULL so the default row genuinely inherits. Either way
-    resolve_purchase_line() arrives at the same number, and NULL is the more
-    honest record: it says "this option has no price of its own".
-    """
-    import json
-
-    supplied = [v for v in (body.variants or [])]
-    if not supplied:
-        await db.execute(
-            """INSERT INTO product_variants (product_id, price, stock_qty, attributes, is_default, sort_order)
-               VALUES ($1, NULL, $2, '{}'::jsonb, TRUE, 0)
-               ON CONFLICT DO NOTHING""",
-            product_id,
-            body.stock_qty,
-        )
-        return
-
-    if len(supplied) == 1:
-        # A single option mirrors the product, so it carries the product's
-        # numbers rather than an empty attribute set. Creating an option with no
-        # attributes is rejected by the variants API for exactly this reason.
-        only = supplied[0]
-        await db.execute(
-            """INSERT INTO product_variants
-                 (product_id, price, compare_at_price, stock_qty, sku, attributes, is_default, image_url, sort_order)
-               VALUES ($1,$2,$3,$4,$5,$6::jsonb,TRUE,$7,$8)
-               ON CONFLICT DO NOTHING""",
-            product_id,
-            only.price if only.price is not None else body.price,
-            only.compare_at_price if only.compare_at_price is not None else body.compare_at_price,
-            only.stock_qty if only.stock_qty else body.stock_qty,
-            (only.sku or "").strip() or None,
-            json.dumps(coerce_attributes(only.attributes) or {"option": "Standard"}),
-            only.image_url,
-            only.sort_order,
-        )
-        return
-
-    # Two or more options makes this a variant product. The flag has to be TRUE
-    # *before* the rows land, because the trigger that maintains
-    # products.stock_qty is gated on it:
-    #
-    #     ... WHERE p.id = target_product AND p.has_variants = TRUE
-    #
-    # Insert first and call sync_variant_flag() afterwards, the flag is still
-    # false for every insert, no trigger fires, and the product is left
-    # reporting the stock_qty the caller sent (0, for a form that supplies its
-    # quantities per option) while its options hold 6. That is the catalogue
-    # selling a size run that appears to have nothing in it.
-    await db.execute(
-        "UPDATE products SET has_variants = TRUE, updated_at = NOW() WHERE id = $1::uuid",
-        product_id,
-    )
-
-    for index, variant in enumerate(supplied):
-        await db.execute(
-            """INSERT INTO product_variants
-                 (product_id, price, compare_at_price, stock_qty, sku, attributes,
-                  is_default, is_active, image_url, sort_order)
-               VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10)
-               ON CONFLICT DO NOTHING""",
-            product_id,
-            variant.price,
-            variant.compare_at_price,
-            variant.stock_qty,
-            (variant.sku or "").strip() or None,
-            json.dumps(coerce_attributes(variant.attributes) or {"option": f"Option {index + 1}"}),
-            variant.is_default or index == 0,
-            variant.is_active,
-            variant.image_url,
-            variant.sort_order or index,
-        )
-
-    # Now that the flag is set, the trigger has kept products.stock_qty in step
-    # on every insert. sync_variant_flag confirms the flag matches the count.
     await sync_variant_flag(db, product_id)
 
 

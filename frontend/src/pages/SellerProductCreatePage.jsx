@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { findOptionClash, optionAttributes, parseOptionLines } from '../lib/optionLines';
 
 export const SellerProductCreatePage = () => {
   const navigate = useNavigate();
@@ -41,6 +42,42 @@ export const SellerProductCreatePage = () => {
     images: ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80'],
     status: user?.seller_status === 'active' ? 'active' : 'draft'
   });
+
+  // The opening set of options, entered as free "axis: value" lines per row --
+  // the same format the edit page's "Add an option" box takes, so a seller who
+  // has used one has to learn nothing for the other. Empty means a plain
+  // single-item product, which is the common case and is unchanged.
+  const [optionRows, setOptionRows] = useState([]);
+
+  const addOptionRow = () =>
+    setOptionRows((r) => [...r, { attributes: '', price: '', stock_qty: '', sku: '', is_default: false }]);
+
+  const editOptionRow = (i, field, value) =>
+    setOptionRows((r) => r.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
+
+  const dropOptionRow = (i) => setOptionRows((r) => r.filter((_, idx) => idx !== i));
+
+  // Reported per row rather than on submit, next to the line that needs fixing.
+  // Parsed with the shared helper so a row that looks fine here is exactly the
+  // structure the server's duplicate check will compare.
+  const parsedRows = optionRows.map((r) => parseOptionLines(r.attributes).attributes);
+
+  const optionErrors = optionRows
+    .map((r, i) => {
+      const { bad } = parseOptionLines(r.attributes);
+      if (bad.length > 0) return { i, msg: `needs "axis: value" on each line — "${bad[0]}" is not one` };
+      if (Object.keys(parsedRows[i]).length === 0) return { i, msg: 'needs at least one "axis: value" line' };
+
+      // Against the rows above, and case-insensitively, because the unique index
+      // is not: "XL" and "xl" both satisfy it and would create two options a
+      // customer has to choose between.
+      const clash = parsedRows.findIndex(
+        (other, j) => j < i && findOptionClash([{ attributes: other }], parsedRows[i])
+      );
+      if (clash >= 0) return { i, msg: `is the same as row ${clash + 1}` };
+      return null;
+    })
+    .filter(Boolean);
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -133,9 +170,38 @@ export const SellerProductCreatePage = () => {
       return;
     }
 
+    if (optionErrors.length > 0) {
+      setStatusMsg({
+        type: 'error',
+        text: `Option ${optionErrors[0].i + 1} ${optionErrors[0].msg}.`
+      });
+      return;
+    }
+
     try {
       setLoading(true);
       const cleanedImages = formData.images.filter((url) => url.trim().length > 0);
+
+      // Two or more options make this a variant product, and a variant product's
+      // own price and stock stop being authoritative: the stock becomes the sum
+      // of the options. The panel says so above the rows, and the payload is
+      // built so an option that leaves a field blank inherits the product's
+      // value rather than sending zero -- otherwise a run entered with only
+      // quantities and one shared price would create a product priced 0.
+      const variants = optionRows
+        .map((r, i) => ({
+          attributes: optionAttributes(r.attributes),
+          price: r.price === '' ? null : parseFloat(r.price),
+          compare_at_price: null,
+          stock_qty: r.stock_qty === '' ? 0 : parseInt(r.stock_qty, 10) || 0,
+          sku: (r.sku || '').trim() || null,
+          is_default: !!r.is_default,
+          is_active: true,
+          sort_order: i
+        }))
+        // A row that is entirely blank is an abandoned attempt, not an option.
+        .filter((v) => Object.keys(v.attributes).length > 0);
+
       const payload = {
         ...formData,
         price: parseFloat(formData.price),
@@ -143,7 +209,8 @@ export const SellerProductCreatePage = () => {
         cost_price: formData.cost_price ? parseFloat(formData.cost_price) : null,
         inventory_count: parseInt(formData.inventory_count, 10) || 0,
         images: cleanedImages.length > 0 ? cleanedImages : ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80'],
-        tags: typeof formData.tags === 'string' ? formData.tags.split(',').map((t) => t.trim()).filter(Boolean) : formData.tags
+        tags: typeof formData.tags === 'string' ? formData.tags.split(',').map((t) => t.trim()).filter(Boolean) : formData.tags,
+        ...(variants.length > 0 ? { variants } : {})
       };
 
       const res = await api.post('/seller/products', payload);
@@ -349,6 +416,123 @@ export const SellerProductCreatePage = () => {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Options. Placed after pricing because it changes what pricing
+                means: from the second option onward the product total is the sum
+                of the rows below, and the price above is only the fallback for a
+                row that leaves its own price blank. */}
+            <div className="table-card" style={{ padding: '24px', backgroundColor: 'var(--color-forest-floor)', border: '1px solid var(--color-iron-veil)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', flexWrap: 'wrap', gap: '10px' }}>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', margin: 0 }}>
+                  Options
+                </h3>
+                <button
+                  type="button"
+                  onClick={addOptionRow}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 600, color: 'var(--color-electric-lime)', background: 'none', border: '1px dashed var(--color-border-steel)', borderRadius: '6px', padding: '7px 12px', cursor: 'pointer' }}
+                >
+                  <Plus size={13} /> Add an option
+                </button>
+              </div>
+
+              <p style={{ fontSize: '12px', color: 'var(--color-tide-pool)', margin: '0 0 14px' }}>
+                Leave this empty for a product sold as one item. Add two or more and
+                buyers choose between them on the listing: from the second option on,
+                the stock above becomes the total of these rows, and an option with a
+                blank price uses the list price above.
+              </p>
+
+              {optionRows.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '14px' }}>
+                  {optionRows.map((row, i) => {
+                    const err = optionErrors.find((e) => e.i === i);
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1.4fr 1fr 90px 1fr auto',
+                          gap: '8px',
+                          alignItems: 'start',
+                          padding: '12px',
+                          borderRadius: '8px',
+                          border: `1px solid ${err ? 'var(--color-status-cancelled)' : 'var(--color-iron-veil)'}`
+                        }}
+                      >
+                        <div>
+                          <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Options</label>
+                          <textarea
+                            className="textarea-field"
+                            rows={2}
+                            placeholder={'size: XL\ncolour: Indigo'}
+                            value={row.attributes}
+                            onChange={(e) => editOptionRow(i, 'attributes', e.target.value)}
+                            style={{ fontSize: '12px' }}
+                          />
+                          {err && (
+                            <span style={{ fontSize: '11px', color: '#fca5a5' }}>
+                              This row {err.msg}.
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Price (₹)</label>
+                          <input
+                            type="number" step="0.01" min="0" className="input-field"
+                            placeholder={String(formData.price || 'list price')}
+                            value={row.price}
+                            onChange={(e) => editOptionRow(i, 'price', e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Stock</label>
+                          <input
+                            type="number" min="0" className="input-field"
+                            value={row.stock_qty}
+                            onChange={(e) => editOptionRow(i, 'stock_qty', e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>SKU</label>
+                          <input
+                            className="input-field"
+                            value={row.sku}
+                            onChange={(e) => editOptionRow(i, 'sku', e.target.value)}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => dropOptionRow(i)}
+                            title="Remove this row"
+                            style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', padding: '2px' }}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                          <label style={{ fontSize: '11px', color: 'var(--color-tide-pool)', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={row.is_default}
+                              disabled={optionRows.some((r, idx) => idx !== i && r.is_default)}
+                              onChange={(e) => editOptionRow(i, 'is_default', e.target.checked)}
+                            />
+                            Default
+                          </label>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {optionRows.length > 0 && (
+                <p style={{ fontSize: '11px', color: 'var(--color-ash-label)', margin: 0 }}>
+                  The default is the option a buyer gets if they pick a size run and then
+                  put it in the bag without choosing. Rows can be changed or removed
+                  later from the listing&apos;s edit page.
+                </p>
+              )}
             </div>
 
             {/* Product Images Card */}

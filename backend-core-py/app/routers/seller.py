@@ -17,7 +17,7 @@ from app.auth.dependencies import require_auth, require_role
 from app.config import settings
 from app.db import get_db, get_pool
 from app.utils import to_valid_uuid
-from app.variants import describe_attributes
+from app.variants import VariantInput, describe_attributes, write_initial_variants
 
 router = APIRouter()
 
@@ -215,6 +215,11 @@ class CreateSellerProductBody(BaseModel):
     images: list = []
     tags: list | str = []
     status: str | None = None
+    #: The opening set of options, same shape as POST /api/products accepts. A
+    #: seller creating a size run used to have to create a flat product and then
+    #: add every option through a second screen, which left a live listing in
+    #: between that sold as one item at the wrong price.
+    variants: list[VariantInput] | None = None
 
 
 @router.post("/products", status_code=201)
@@ -259,6 +264,25 @@ async def create_seller_product(
         final_status,
     )
     product = dict(row)
+
+    # The opening set of options, from the same helper POST /api/products uses.
+    # Without this, a seller could only ever create a flat listing and then add
+    # options afterwards, which put a live single-item product in the catalogue
+    # in between -- selling one size at the product's price, while the run they
+    # were about to type in had others in stock.
+    await write_initial_variants(
+        db,
+        str(product["id"]),
+        variants=body.variants,
+        price=body.price,
+        compare_at_price=body.compare_at_price,
+        stock_qty=stock,
+    )
+
+    # Re-read so the response carries the flag the trigger just set, rather than
+    # the pre-variant value the INSERT returned. The create form decides whether
+    # to show the options panel from this field.
+    product = dict(await db.fetchrow("SELECT * FROM products WHERE id = $1", product["id"]))
 
     # Background embedding trigger
     asyncio.ensure_future(
@@ -322,6 +346,34 @@ async def update_seller_product(
         raise HTTPException(404, detail={"code": "PRODUCT_NOT_FOUND", "message": "Product not found."})
 
     cur = dict(cur_row)
+
+    # A product with options does not have a stock of its own. The trigger
+    # maintains products.stock_qty as the sum of its active options, so writing
+    # the column here is accepted, appears to work, and is overwritten by the
+    # next option edit -- which is how a seller ends up restocking a size run to
+    # 10, seeing the confirmation, and still having 6.
+    #
+    # PUT /api/products/:id already refuses this; this route is the one the
+    # seller's own edit form calls, so it has to refuse it too or the guard is
+    # only on the door nobody walks through. Re-sending the current total is
+    # allowed, so a form that submits the whole product is not rejected for being
+    # a form.
+    if (
+        cur.get("has_variants")
+        and body.inventory_count is not None
+        and int(body.inventory_count) != int(cur["stock_qty"] or 0)
+    ):
+        raise HTTPException(
+            400,
+            detail={
+                "code": "STOCK_MANAGED_BY_VARIANTS",
+                "message": (
+                    "This product has options, so its stock is the total of their "
+                    "stock. Edit each option instead of the product total."
+                ),
+            },
+        )
+
     new_stock = body.inventory_count if body.inventory_count is not None else cur["stock_qty"]
     new_status = body.status or ("out_of_stock" if new_stock == 0 else cur["status"])
     cur_attrs = cur["attributes"] or {}

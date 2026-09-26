@@ -13,6 +13,7 @@ and "the customer was charged the wrong amount" is not.
     python -m unittest tests.test_variant_flows -v
 """
 import os
+import re
 import unittest
 import uuid
 from decimal import Decimal
@@ -127,6 +128,18 @@ class _Base(unittest.IsolatedAsyncioTestCase):
 
     async def stock(self, product_id) -> int:
         return await self.pool.fetchval("SELECT stock_qty FROM products WHERE id=$1", product_id)
+
+    async def product_field(self, product_id, column):
+        """
+        Read one column straight from the row, bypassing the API.
+
+        For "did this write land" questions, where going through the endpoint
+        under test would only re-assert the endpoint's own answer.
+        """
+        assert re.fullmatch(r"[a-z_]+", column), f"not a bare column name: {column}"
+        return await self.pool.fetchval(
+            f"SELECT {column} FROM products WHERE id=$1", product_id
+        )
 
     async def variant_stock(self, variant_id) -> int:
         return await self.pool.fetchval(
@@ -1110,6 +1123,132 @@ class SellerFacingLineTests(_Base):
         items = (await self.seller_orders()).json()["data"][0]["items"]
         self.assertEqual(items[0]["variant_label"], "")
         self.assertIsNone(items[0]["variant_id"])
+
+
+# ── the seller's own routes ──────────────────────────────────────────────────
+
+@skip_without_db
+class SellerProductRouteTests(_Base):
+    """
+    POST and PUT /api/seller/products. The create form and the edit form a seller
+    actually uses, as opposed to the admin-facing /api/products pair -- which had
+    variants support while these two did not.
+    """
+
+    async def sell_product(self, method, path, body=None):
+        return await self.client.request(
+            method, path, json=body,
+            headers={**self.seller_headers, "X-Forwarded-For": self.ip},
+        )
+
+    async def test_a_seller_can_create_a_size_run(self):
+        r = await self.sell_product("POST", "/api/seller/products", {
+            "title": "Handloom Kurta", "description": "d", "price": 1800,
+            "inventory_count": 0, "category_id": str(self.category_id),
+            "variants": [
+                {"attributes": {"size": "S"}, "price": 1800, "stock_qty": 4, "is_default": True},
+                {"attributes": {"size": "L"}, "price": 1950, "stock_qty": 6},
+            ],
+        })
+        self.assertEqual(r.status_code, 201, r.text)
+        product_id = r.json()["data"]["id"]
+
+        # The flag has to be set for the trigger to maintain the total, and the
+        # response has to report it -- the create form uses it to decide whether
+        # to show the options panel.
+        self.assertTrue(r.json()["data"]["has_variants"])
+
+        detail = (await self.client.get(f"/api/products/{product_id}")).json()["data"]
+        self.assertEqual(detail["variant_count"], 2)
+        self.assertEqual(
+            {v["attributes"]["size"] for v in detail["variants"]}, {"S", "L"}
+        )
+        # The product's own stock is the sum, not the 0 the form sent.
+        self.assertEqual(await self.stock(product_id), 10)
+
+    async def test_creating_without_options_is_unchanged(self):
+        r = await self.sell_product("POST", "/api/seller/products", {
+            "title": "Brass Bowl", "description": "d", "price": 900,
+            "inventory_count": 7, "category_id": str(self.category_id),
+        })
+        self.assertEqual(r.status_code, 201, r.text)
+        self.assertFalse(r.json()["data"]["has_variants"])
+        self.assertEqual(await self.stock(r.json()["data"]["id"]), 7)
+
+    async def test_a_seller_cannot_overwrite_the_stock_of_a_size_run(self):
+        """
+        The guard PUT /api/products/:id already carries, on the route the
+        seller's own edit form calls.
+
+        Without it the write is accepted, the seller sees a confirmation, and the
+        next option edit silently restores the derived total -- so restocking a
+        run to 10 leaves it at 6 with nothing in the logs to explain it.
+        """
+        created = await self.sell_product("POST", "/api/seller/products", {
+            "title": "Handloom Kurta", "description": "d", "price": 1800,
+            "inventory_count": 0, "category_id": str(self.category_id),
+            "variants": [
+                {"attributes": {"size": "S"}, "stock_qty": 4},
+                {"attributes": {"size": "L"}, "stock_qty": 6},
+            ],
+        })
+        product_id = created.json()["data"]["id"]
+
+        r = await self.sell_product("PUT", f"/api/seller/products/{product_id}",
+                                     {"title": "Renamed", "inventory_count": 100})
+        self.assertEqual(r.status_code, 400, r.text)
+        self.assertEqual(r.json()["error"]["code"], "STOCK_MANAGED_BY_VARIANTS")
+
+        # Refused outright, not applied-then-reverted: the title edit on the same
+        # payload did not land either, so the seller is not left believing it did.
+        self.assertEqual(await self.product_field(product_id, "title"), "Handloom Kurta")
+        self.assertEqual(await self.stock(product_id), 10)
+
+    async def test_resending_the_current_total_is_allowed(self):
+        """A form that submits the whole product is not rejected for being a form."""
+        created = await self.sell_product("POST", "/api/seller/products", {
+            "title": "Handloom Kurta", "description": "d", "price": 1800,
+            "inventory_count": 0, "category_id": str(self.category_id),
+            "variants": [
+                {"attributes": {"size": "S"}, "stock_qty": 4},
+                {"attributes": {"size": "L"}, "stock_qty": 6},
+            ],
+        })
+        product_id = created.json()["data"]["id"]
+
+        r = await self.sell_product("PUT", f"/api/seller/products/{product_id}",
+                                     {"title": "Renamed", "inventory_count": 10})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(await self.product_field(product_id, "title"), "Renamed")
+        self.assertEqual(await self.stock(product_id), 10)
+
+    async def test_omitting_the_stock_leaves_the_derived_total_alone(self):
+        created = await self.sell_product("POST", "/api/seller/products", {
+            "title": "Handloom Kurta", "description": "d", "price": 1800,
+            "inventory_count": 0, "category_id": str(self.category_id),
+            "variants": [
+                {"attributes": {"size": "S"}, "stock_qty": 4},
+                {"attributes": {"size": "L"}, "stock_qty": 6},
+            ],
+        })
+        product_id = created.json()["data"]["id"]
+
+        r = await self.sell_product("PUT", f"/api/seller/products/{product_id}",
+                                     {"title": "Renamed", "inventory_count": None})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(await self.stock(product_id), 10)
+
+    async def test_a_plain_product_still_takes_a_stock_edit(self):
+        r = await self.sell_product("POST", "/api/seller/products", {
+            "title": "Brass Bowl", "description": "d", "price": 900,
+            "inventory_count": 7, "category_id": str(self.category_id),
+        })
+        product_id = r.json()["data"]["id"]
+
+        u = await self.sell_product("PUT", f"/api/seller/products/{product_id}",
+                                     {"inventory_count": 3})
+        self.assertEqual(u.status_code, 200, u.text)
+        self.assertEqual(await self.stock(product_id), 3)
 
 
 # ── pure helpers ─────────────────────────────────────────────────────────────

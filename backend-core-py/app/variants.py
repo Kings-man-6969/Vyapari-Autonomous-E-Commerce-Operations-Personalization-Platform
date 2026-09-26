@@ -37,6 +37,7 @@ from decimal import Decimal
 from typing import Any, Iterable
 
 from fastapi import HTTPException
+from pydantic import BaseModel, field_validator
 
 # Axis keys are free-form (a category can add Capacity or Pack Size without a
 # migration), so the label is derived rather than stored. These are the ones
@@ -541,3 +542,122 @@ async def variants_for_display(conn, product_id: str, product_price: Any, has_va
         "axes": variant_axes(variants),
         "variant_count": len(variants),
     }
+
+
+# ── authoring ────────────────────────────────────────────────────────────────
+#
+# Everything above reads and resolves. This section is the other direction: a
+# form supplying options at creation time. It lives here rather than in a router
+# because two create routes need it -- POST /api/products and
+# POST /api/seller/products -- and the two bodies disagree about field names
+# (stock_qty against inventory_count), so a helper that read a body object would
+# only ever fit one of them.
+
+
+class VariantInput(BaseModel):
+    """One option as supplied by a create form."""
+
+    price: float | None = None
+    compare_at_price: float | None = None
+    stock_qty: int = 0
+    sku: str | None = None
+    attributes: dict | str | None = None
+    is_default: bool = False
+    is_active: bool = True
+    image_url: str | None = None
+    sort_order: int = 0
+
+    @field_validator("stock_qty")
+    @classmethod
+    def _non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("stock_qty cannot be negative")
+        return v
+
+
+async def write_initial_variants(
+    conn,
+    product_id: str,
+    *,
+    variants: Iterable["VariantInput"] | None,
+    price: Any,
+    compare_at_price: Any = None,
+    stock_qty: int = 0,
+) -> None:
+    """
+    Creates a product's opening set of options.
+
+    Always writes at least one row. The default row mirrors the product's own
+    price and stock and carries an empty attribute set, which is exactly what
+    V8's backfill produced for the 10,057 products that predate variants --
+    except that the V8 backfill set price rather than leaving it NULL, and this
+    leaves price NULL so the default row genuinely inherits. Either way
+    resolve_purchase_line() arrives at the same number, and NULL is the more
+    honest record: it says "this option has no price of its own".
+    """
+    supplied = list(variants or [])
+    if not supplied:
+        await conn.execute(
+            """INSERT INTO product_variants (product_id, price, stock_qty, attributes, is_default, sort_order)
+               VALUES ($1, NULL, $2, '{}'::jsonb, TRUE, 0)
+               ON CONFLICT DO NOTHING""",
+            product_id,
+            stock_qty,
+        )
+        return
+
+    if len(supplied) == 1:
+        # A single option mirrors the product, so it carries the product's
+        # numbers rather than an empty attribute set. Creating an option with no
+        # attributes is rejected by the variants API for exactly this reason.
+        only = supplied[0]
+        await conn.execute(
+            """INSERT INTO product_variants
+                 (product_id, price, compare_at_price, stock_qty, sku, attributes, is_default, image_url, sort_order)
+               VALUES ($1,$2,$3,$4,$5,$6::jsonb,TRUE,$7,$8)
+               ON CONFLICT DO NOTHING""",
+            product_id,
+            only.price if only.price is not None else price,
+            only.compare_at_price if only.compare_at_price is not None else compare_at_price,
+            only.stock_qty if only.stock_qty else stock_qty,
+            (only.sku or "").strip() or None,
+            json.dumps(coerce_attributes(only.attributes) or {"option": "Standard"}),
+            only.image_url,
+            only.sort_order,
+        )
+        return
+
+    # Two or more options makes this a variant product. The flag has to be TRUE
+    # *before* the rows land, because the trigger that maintains
+    # products.stock_qty is gated on it:
+    #
+    #     ... WHERE p.id = target_product AND p.has_variants = TRUE
+    #
+    # Insert first and call sync_variant_flag() afterwards, the flag is still
+    # false for every insert, no trigger fires, and the product is left
+    # reporting the stock_qty the caller sent (0, for a form that supplies its
+    # quantities per option) while its options hold 6. That is the catalogue
+    # selling a size run that appears to have nothing in it.
+    await conn.execute(
+        "UPDATE products SET has_variants = TRUE, updated_at = NOW() WHERE id = $1::uuid",
+        product_id,
+    )
+
+    for index, variant in enumerate(supplied):
+        await conn.execute(
+            """INSERT INTO product_variants
+                 (product_id, price, compare_at_price, stock_qty, sku, attributes,
+                  is_default, is_active, image_url, sort_order)
+               VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10)
+               ON CONFLICT DO NOTHING""",
+            product_id,
+            variant.price,
+            variant.compare_at_price,
+            variant.stock_qty,
+            (variant.sku or "").strip() or None,
+            json.dumps(coerce_attributes(variant.attributes) or {"option": f"Option {index + 1}"}),
+            variant.is_default or index == 0,
+            variant.is_active,
+            variant.image_url,
+            variant.sort_order or index,
+        )

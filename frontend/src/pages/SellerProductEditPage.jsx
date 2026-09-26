@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -10,6 +10,7 @@ import {
   Eye
 } from 'lucide-react';
 import api from '../services/api';
+import VariantEditor from '../components/VariantEditor';
 
 export const SellerProductEditPage = () => {
   const { id } = useParams();
@@ -18,6 +19,7 @@ export const SellerProductEditPage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState({ type: '', text: '' });
+  const [hasVariants, setHasVariants] = useState(false);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -33,46 +35,69 @@ export const SellerProductEditPage = () => {
     status: 'active'
   });
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [catRes, prodRes] = await Promise.all([
-          api.get('/categories'),
-          api.get(`/products/${id}`)
-        ]);
+  const fetchData = useCallback(async () => {
+    try {
+      const [catRes, prodRes] = await Promise.all([
+        api.get('/categories'),
+        // The seller's own endpoint, not /api/products/:id. It is the same row
+        // plus the two things an edit form needs and the public endpoint does
+        // not lift out of the attributes jsonb: cost_price and tags -- and it
+        // aliases stock_qty as inventory_count. The page was reading the public
+        // endpoint, whose payload nests the row under data.product, so the form
+        // loaded with a blank title and price and the seller saved the blanks
+        // over a live listing.
+        api.get(`/seller/products/${id}`)
+      ]);
 
-        const catList = catRes.data?.data?.categories || catRes.data?.categories || (Array.isArray(catRes.data?.data) ? catRes.data.data : []);
-        if (catRes.data?.success) {
-          setCategories(catList);
-        }
-
-        if (prodRes.data?.success) {
-          const p = prodRes.data.data;
-          const imgArr = Array.isArray(p.images) ? p.images : (typeof p.images === 'string' ? JSON.parse(p.images || '[]') : []);
-          const resolvedCatId = p.category_id || (catList[0]?.id || '');
-          setFormData({
-            title: p.title || '',
-            slug: p.slug || '',
-            description: p.description || '',
-            price: p.price || '',
-            compare_at_price: p.compare_at_price || '',
-            cost_price: p.cost_price || '',
-            inventory_count: p.inventory_count !== undefined ? p.inventory_count : p.stock_qty || 0,
-            category_id: resolvedCatId,
-            tags: Array.isArray(p.tags) ? p.tags.join(', ') : p.tags || '',
-            images: imgArr.length > 0 ? imgArr : ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80'],
-            status: p.status || 'active'
-          });
-        }
-      } catch (err) {
-        setStatusMsg({ type: 'error', text: 'Failed to load product details.' });
-      } finally {
-        setLoading(false);
+      const catList = catRes.data?.data?.categories || catRes.data?.categories || (Array.isArray(catRes.data?.data) ? catRes.data.data : []);
+      if (catRes.data?.success) {
+        setCategories(catList);
       }
-    };
-    fetchData();
+
+      if (prodRes.data?.success) {
+        const p = prodRes.data.data || {};
+        const imgArr = Array.isArray(p.images) ? p.images : (typeof p.images === 'string' ? JSON.parse(p.images || '[]') : []);
+        const resolvedCatId = p.category_id || (catList[0]?.id || '');
+
+        // jsonb arrives as text on this pool, so tags is '["silk","handloom"]'.
+        // Handed to the text box unparsed, the next save splits it on commas and
+        // the seller ends up with tags called '["silk"' and 'handloom"]'.
+        let tags = p.tags;
+        if (typeof tags === 'string' && tags.trim().startsWith('[')) {
+          try {
+            tags = JSON.parse(tags);
+          } catch {
+            tags = [];
+          }
+        }
+        const tagText = Array.isArray(tags) ? tags.join(', ') : (tags || '');
+
+        setFormData({
+          title: p.title || '',
+          slug: p.slug || '',
+          description: p.description || '',
+          price: p.price ?? '',
+          compare_at_price: p.compare_at_price ?? '',
+          cost_price: p.cost_price ?? '',
+          inventory_count: p.inventory_count !== undefined ? p.inventory_count : p.stock_qty || 0,
+          category_id: resolvedCatId,
+          tags: tagText,
+          images: imgArr.length > 0 ? imgArr : ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80'],
+          status: p.status || 'active'
+        });
+        setHasVariants(!!p.has_variants);
+      }
+    } catch (err) {
+      setStatusMsg({ type: 'error', text: 'Failed to load product details.' });
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchData();
+  }, [fetchData]);
 
   const handleAddImageUrl = () => {
     setFormData((prev) => ({ ...prev, images: [...prev.images, ''] }));
@@ -103,7 +128,12 @@ export const SellerProductEditPage = () => {
         price: parseFloat(formData.price),
         compare_at_price: formData.compare_at_price ? parseFloat(formData.compare_at_price) : null,
         cost_price: formData.cost_price ? parseFloat(formData.cost_price) : null,
-        inventory_count: parseInt(formData.inventory_count, 10) || 0,
+        // A product with options has no stock of its own -- the total is the sum
+        // of the options and the trigger maintains it. Sending it would be
+        // refused (STOCK_MANAGED_BY_VARIANTS) or, worse, accepted and silently
+        // overwritten by the next option edit. Omitting the field leaves the
+        // computed value alone, so the other edits on this form still save.
+        inventory_count: hasVariants ? null : (parseInt(formData.inventory_count, 10) || 0),
         images: cleanedImages.length > 0 ? cleanedImages : ['https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80'],
         tags: typeof formData.tags === 'string' ? formData.tags.split(',').map((t) => t.trim()).filter(Boolean) : formData.tags
       };
@@ -111,6 +141,12 @@ export const SellerProductEditPage = () => {
       const res = await api.put(`/seller/products/${id}`, payload);
       if (res.data?.success) {
         setStatusMsg({ type: 'success', text: 'Product modifications successfully persisted.' });
+        // has_variants can flip in either direction from the editor: the second
+        // option raises the flag, and deleting back to one lowers it and promotes
+        // that option's price onto the product. The sidebar has to know which it
+        // is now, or it keeps telling the seller to edit a total that is theirs
+        // to edit again.
+        setHasVariants(!!res.data.data?.has_variants);
       }
     } catch (err) {
       setStatusMsg({
@@ -345,6 +381,12 @@ export const SellerProductEditPage = () => {
                 </div>
               ))}
             </div>
+
+            {/* Options. Inside the form but not part of it -- no input here has a
+                name attribute and the editor renders its own type="button"
+                controls, so saving the product cannot take a live size run down
+                with a mistyped description. */}
+            <VariantEditor productId={id} onProductChanged={fetchData} />
           </div>
 
           {/* Right Sidebar Column */}
@@ -382,15 +424,38 @@ export const SellerProductEditPage = () => {
               </div>
 
               <div className="form-group">
-                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>Available Inventory Units</label>
-                <input
-                  type="number"
-                  min="0"
-                  className="input-field"
-                  value={formData.inventory_count}
-                  onChange={(e) => setFormData({ ...formData, inventory_count: e.target.value })}
-                  required
-                />
+                <label className="form-label" style={{ color: 'var(--color-ash-label)' }}>
+                  Available Inventory Units
+                </label>
+                {hasVariants ? (
+                  <>
+                    {/* A derived number is not editable. Offering a text box for
+                        it invites a seller to type a total, see it accepted, and
+                        watch the next option edit overwrite it -- the API would
+                        refuse a changed value, but not one that already matched. */}
+                    <input
+                      type="number"
+                      className="input-field"
+                      value={formData.inventory_count}
+                      readOnly
+                      aria-readonly="true"
+                      style={{ opacity: 0.7, cursor: 'not-allowed' }}
+                    />
+                    <p style={{ fontSize: '11px', color: 'var(--color-tide-pool)', margin: '6px 0 0' }}>
+                      This product has options, so this is their total. Set each
+                      option&apos;s stock in the Options panel below.
+                    </p>
+                  </>
+                ) : (
+                  <input
+                    type="number"
+                    min="0"
+                    className="input-field"
+                    value={formData.inventory_count}
+                    onChange={(e) => setFormData({ ...formData, inventory_count: e.target.value })}
+                    required
+                  />
+                )}
               </div>
 
               <button

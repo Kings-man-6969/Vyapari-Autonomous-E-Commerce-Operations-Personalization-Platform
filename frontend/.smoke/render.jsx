@@ -28,6 +28,9 @@ import { ResetPasswordPage } from '../src/pages/ResetPasswordPage';
 import { LoginPage } from '../src/pages/LoginPage';
 import { evaluatePassword } from '../src/lib/passwordPolicy';
 import VariantPicker, { resolveChoice } from '../src/components/VariantPicker';
+import {
+  findOptionClash, optionAttributes, optionKey, optionLabel, parseOptionLines
+} from '../src/lib/optionLines';
 
 const CDN = 'https://picsum.photos/seed';
 
@@ -392,6 +395,122 @@ const bareHtml = squashed(
   renderToString(<VariantPicker axes={[]} variants={[{ id: 'x', attributes: {}, stock_qty: 3, in_stock: true }]} />)
 );
 check('renders nothing at all, not an empty control', bareHtml.trim() === '', JSON.stringify(bareHtml.slice(0, 60)));
+
+// ── the seller's option text ─────────────────────────────────────────────────
+//
+// The create form and the edit page's "add an option" box both take free text
+// typed as "axis: value" lines, and both send the parsed object to the server,
+// whose duplicate check compares attribute sets for equality. So the parsing has
+// to normalise, and it has to be the same function in both places -- which is
+// exactly the kind of rule that quietly diverges when it is written twice.
+
+console.log('\noption text: parsing');
+
+check('a single axis parses',
+  JSON.stringify(parseOptionLines('size: XL').attributes) === '{"size":"XL"}',
+  JSON.stringify(parseOptionLines('size: XL')));
+
+check('several axes, one per line',
+  JSON.stringify(parseOptionLines('size: XL\ncolour: Indigo').attributes)
+    === '{"size":"XL","colour":"Indigo"}');
+
+// The key is normalised; the value is not. Both halves matter, for opposite
+// reasons. "Size : XL" has to become {size: ...} or the same option typed two
+// ways is two rows. But the value has to keep its capitalisation, because "xl"
+// on a size pill looks broken and "XL" is what the seller meant.
+check('the axis name is normalised',
+  parseOptionLines('Size :  XL').attributes.size === 'XL',
+  JSON.stringify(parseOptionLines('Size :  XL').attributes));
+
+check('the value keeps the capitalisation the seller typed',
+  parseOptionLines('size: xl').attributes.size === 'xl'
+    && parseOptionLines('size: XL').attributes.size === 'XL',
+  JSON.stringify(parseOptionLines('size: xl').attributes));
+
+check('a multi-word axis becomes one underscored key',
+  parseOptionLines('Sleeve Length: 42').attributes.sleeve_length === '42',
+  JSON.stringify(parseOptionLines('Sleeve Length: 42').attributes));
+
+// A value may contain a colon -- "12:30 lining" -- so only the first one
+// separates.
+check('only the first colon separates axis from value',
+  parseOptionLines('wash: 12:30 cold').attributes.wash === '12:30 cold',
+  JSON.stringify(parseOptionLines('wash: 12:30 cold').attributes));
+
+// Free text in a textarea gets prose. Silently dropping it would mean the seller
+// typed three lines, saw no error, and created one option from the fourth.
+check('a line that is not "axis: value" is reported, not swallowed',
+  parseOptionLines('size: XL\nIndigo').bad.length === 1
+    && parseOptionLines('size: XL\nIndigo').bad[0] === 'Indigo',
+  JSON.stringify(parseOptionLines('size: XL\nIndigo')));
+
+check('a missing value is reported too',
+  parseOptionLines('size:').bad.length === 1, JSON.stringify(parseOptionLines('size:')));
+
+check('a leading colon is not an axis named nothing',
+  parseOptionLines(': XL').bad.length === 1, JSON.stringify(parseOptionLines(': XL')));
+
+check('blank lines are not errors',
+  parseOptionLines('\n\nsize: XL\n   \n').bad.length === 0);
+
+check('empty input parses to nothing and complains about nothing',
+  JSON.stringify(parseOptionLines('').attributes) === '{}'
+    && parseOptionLines('').bad.length === 0);
+
+check('a missing input is treated as empty rather than throwing',
+  JSON.stringify(parseOptionLines(undefined).attributes) === '{}'
+    && JSON.stringify(parseOptionLines(null).attributes) === '{}');
+
+console.log('\noption text: labelling');
+
+// The seller sees this in the editor row; the customer sees the backend's
+// describe_attributes in the bag. If the two disagree, the same option is
+// labelled two ways depending on the screen, which reads as a different product.
+check('the label is the values, joined',
+  optionLabel({ size: 'XL', colour: 'Indigo' }) === 'XL / Indigo',
+  optionLabel({ size: 'XL', colour: 'Indigo' }));
+
+check('no axis names, because the picker already showed them',
+  !optionLabel({ size: 'XL' }).includes('size'));
+
+check('an empty set labels as empty, not as a stray separator',
+  optionLabel({}) === '' && optionLabel({ size: '   ' }) === '' && optionLabel(undefined) === '');
+
+console.log('\noption text: spotting a repeat');
+
+// This is the gap the above leaves open. jsonb equality is case-sensitive, so
+// {size: "XL"} and {size: "xl"} are two different rows that both satisfy the
+// unique index -- and the customer gets two pills reading XL and xl and no way to
+// know they are the same size. The stored value has to keep its capitalisation,
+// so the clash check has to fold case itself.
+const RUN2 = [
+  { id: 'a', attributes: { size: 'XL', colour: 'Indigo' } },
+  { id: 'b', attributes: { size: 'M' } },
+];
+
+check('a different size is not a clash',
+  findOptionClash(RUN2, { size: 'S', colour: 'Indigo' }) === null);
+
+check('the same size and colour is', findOptionClash(RUN2, { size: 'XL', colour: 'Indigo' })?.id === 'a');
+
+check('case and padding do not hide a repeat',
+  findOptionClash(RUN2, { size: ' xl ', colour: 'INDIGO' })?.id === 'a',
+  JSON.stringify(findOptionClash(RUN2, { size: ' xl ', colour: 'INDIGO' })));
+
+check('the axis set has to match on every axis, not just one',
+  findOptionClash(RUN2, { size: 'XL' }) === null && findOptionClash(RUN2, { size: 'XL', colour: 'Madder' }) === null);
+
+// An option being edited is not a clash with itself. Without the exclusion,
+// saving an unchanged row would report the row as its own duplicate and no row
+// could ever be edited.
+check('an option is not a clash with itself',
+  findOptionClash(RUN2, { size: 'XL', colour: 'Indigo' }, 'a') === null);
+
+check('an empty attribute set clashes with nothing', findOptionClash(RUN2, {}) === null);
+check('a missing list clashes with nothing', findOptionClash(undefined, { size: 'XL' }) === null);
+
+check('the canonical key sorts the axes, so order does not matter',
+  optionKey({ colour: 'Indigo', size: 'XL' }) === optionKey({ size: 'XL', colour: 'Indigo' }));
 
 console.log(`\n${failed === 0 ? 'PASS' : `FAIL (${failed} check${failed === 1 ? '' : 's'})`}`);
 if (failed > 0) {
