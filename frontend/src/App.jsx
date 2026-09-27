@@ -69,6 +69,9 @@ const SellerAiListingPage = lazyPage(() => import('./pages/SellerAiListingPage')
 const SellerAiChatPage = lazyPage(() => import('./pages/SellerAiChatPage'), 'SellerAiChatPage');
 const SellerSettingsPage = lazyPage(() => import('./pages/SellerSettingsPage'), 'SellerSettingsPage');
 const SellerReviewsPage = lazyPage(() => import('./pages/SellerReviewsPage'), 'SellerReviewsPage');
+// K1. The editor for the showcase page at /store/:handle. It was the one seller
+// route with no screen, and three links pointed at it.
+const SellerPageEditorPage = lazyPage(() => import('./pages/SellerPageEditorPage'), 'SellerPageEditorPage');
 
 // The admin console, likewise.
 const AdminDashboardPage = lazyPage(() => import('./pages/AdminDashboardPage'), 'AdminDashboardPage');
@@ -249,6 +252,7 @@ export const App = () => {
             <Route path="/seller/products/:id/edit" element={<SellerRoute><SellerLayout><SellerProductEditPage /></SellerLayout></SellerRoute>} />
             <Route path="/seller/orders" element={<SellerRoute><SellerLayout><SellerOrdersPage /></SellerLayout></SellerRoute>} />
             <Route path="/seller/reviews" element={<SellerRoute><SellerLayout><SellerReviewsPage /></SellerLayout></SellerRoute>} />
+            <Route path="/seller/page" element={<SellerRoute><SellerLayout><SellerPageEditorPage /></SellerLayout></SellerRoute>} />
             <Route path="/seller/inventory" element={<SellerRoute><SellerLayout><SellerInventoryPage /></SellerLayout></SellerRoute>} />
             <Route path="/seller/ai/listing" element={<SellerRoute><SellerLayout><SellerAiListingPage /></SellerLayout></SellerRoute>} />
             <Route path="/seller/ai" element={<SellerRoute><SellerLayout><SellerAiChatPage /></SellerLayout></SellerRoute>} />

@@ -147,6 +147,12 @@ export async function deleteImageFile(objectKey) {
  * @param {string} [props.label]
  * @param {string} [props.hint]
  * @param {string} [props.aspect]       CSS aspect-ratio for the preview tiles
+ * @param {Function} [props.onUploaded] called with the full upload result
+ *        (`public_url`, `object_key`, `width`, `height`, `variant_widths`) for
+ *        each file that lands. The seller page editor needs `object_key` as its
+ *        `storage_id`, and it is the only consumer that does -- so it is a
+ *        callback rather than a change to the `value` contract every other
+ *        caller already depends on.
  */
 export const ImageUploader = ({
   value = [],
@@ -154,7 +160,8 @@ export const ImageUploader = ({
   max = 6,
   label = 'Product images',
   hint = 'JPEG, PNG, WebP, GIF or AVIF. Up to 5 MB each. The first image is the one shown in the catalogue.',
-  aspect = '1 / 1'
+  aspect = '1 / 1',
+  onUploaded
 }) => {
   const urls = Array.isArray(value) ? value : [];
   const [busy, setBusy] = useState(0);
@@ -206,6 +213,7 @@ export const ImageUploader = ({
             setProgress((prev) => ({ ...prev, [marker]: fraction }));
           });
           uploadedKeys.current.set(stored.public_url, stored.object_key);
+          if (onUploaded) onUploaded(stored);
           onChange([...urlsRef.current, stored.public_url]);
         } catch (err) {
           // The server's own message where there is one: "Uploads are limited to

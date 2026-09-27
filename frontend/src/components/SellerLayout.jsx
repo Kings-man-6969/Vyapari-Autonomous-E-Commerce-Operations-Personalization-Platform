@@ -28,6 +28,7 @@ export const SellerLayout = ({ children }) => {
     { to: '/seller/products/new', label: 'Add Product', icon: PlusCircle },
     { to: '/seller/orders', label: 'Orders to Fulfill', icon: Package },
     { to: '/seller/reviews', label: 'Customer Reviews', icon: Star },
+    { to: '/seller/page', label: 'Store Page', icon: Store },
     { to: '/seller/inventory', label: 'Inventory Velocity', icon: TrendingUp },
     { to: '/seller/ai/listing', label: 'AI Listing Studio', icon: Sparkles },
     { to: '/seller/ai', label: 'AI Operations Chat', icon: MessageSquare },

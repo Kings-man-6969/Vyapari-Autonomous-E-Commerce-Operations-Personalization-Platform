@@ -51,6 +51,7 @@ import {
 import {
   shouldCountView, viewKey, trackInteraction
 } from '../src/lib/interactions';
+import { SellerPageEditorPage } from '../src/pages/SellerPageEditorPage';
 
 const CDN = 'https://picsum.photos/seed';
 
@@ -1293,11 +1294,57 @@ async function runAnalyticsChecks() {
     (await trackInteraction('p1', 'purchase')) === false);
 }
 
+// ── the seller page editor (K1) ─────────────────────────────────────────────
+//
+// This screen is the one the whole seller_pages feature exists for, and it was
+// missing: fifteen owner routes with no caller, and three links pointing at a
+// route that did not exist. A 404 is not something a component test can catch,
+// so the route's existence is asserted from the same files React reads.
+
+function runSellerPageEditorChecks() {
+  console.log('── seller page editor ──');
+
+  const app = fs.readFileSync(`${__dirname}/../src/App.jsx`, 'utf8');
+  const layout = fs.readFileSync(`${__dirname}/../src/components/SellerLayout.jsx`, 'utf8');
+
+  check('the /seller/page route exists',
+    /path="\/seller\/page"/.test(app), 'this is the 404 the feature shipped with');
+  check('and it renders the editor',
+    app.includes('SellerPageEditorPage'));
+  check('and it is lazy, so shoppers do not download it',
+    /lazyPage\(\(\) => import\('\.\/pages\/SellerPageEditorPage'\)/.test(app));
+  check('and the seller sidebar links to it',
+    layout.includes("to: '/seller/page'"), 'three links pointed at a route nobody could reach');
+
+  // The editor reads its media and sections from the public store endpoint,
+  // because the owner read does not return them.
+  const editor = fs.readFileSync(
+    `${__dirname}/../src/pages/SellerPageEditorPage.jsx`, 'utf8'
+  );
+  check('it reads the page through the owner route',
+    editor.includes("api.get('/seller-pages/mine')"));
+  check('and the gallery through the public store route',
+    editor.includes('/public/stores/'));
+  check('it does not invent a storage_id for library media',
+    editor.includes('pending.current.object_key'),
+    'storage_id cannot be derived from a URL, so only a fresh upload can supply one');
+
+  // Rendering it with no API must not throw: the first paint is a skeleton, and
+  // renderToString never runs effects, so this is the pre-fetch state.
+  const html = squashed(renderToString(
+    <MemoryRouter>
+      <SellerPageEditorPage />
+    </MemoryRouter>
+  ));
+  check('it renders its loading state without a backend', html.includes('skeleton'));
+}
+
 runPaymentChecks().then(async () => {
   runContentChecks();
   runEnquiryChecks();
   runCmsEditorChecks();
   await runAnalyticsChecks();
+  runSellerPageEditorChecks();
   console.log(`\n${failed === 0 ? 'PASS' : `FAIL (${failed} check${failed === 1 ? '' : 's'})`}`);
 if (failed > 0) {
   fs.writeFileSync('.smoke/rendered.html', pro);

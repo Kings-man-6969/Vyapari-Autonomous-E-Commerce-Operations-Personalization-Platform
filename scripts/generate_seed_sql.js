@@ -225,6 +225,35 @@ let sql = `-- ==================================================================
 -- VYAPARI PLATFORM DEMO SEED DATA
 -- Default password for all seed accounts: Password@123
 -- ============================================================================
+--
+-- !! READ THIS BEFORE LOADING THIS FILE ON A DATABASE YOU CARE ABOUT !!
+--
+-- The TRUNCATE below ends in CASCADE, and CASCADE does not mean "these tables"
+-- -- it means every table with a foreign key pointing at them, transitively.
+-- That list grows every time a migration adds a table referencing \`users\` or
+-- \`products\`, and this file does not know about them:
+--
+--     cms_content.updated_by          the homepage headline, subcopy, trust bar
+--     cms_content_revisions.changed_by
+--     banners.created_by
+--     leads.seller_id
+--     lead_notes.author_id
+--     seller_pages.seller_id
+--
+-- Loading this seed therefore empties all of the above, silently. The symptom is
+-- a homepage that renders the copy compiled into the bundle instead of the copy
+-- in the database, an admin Content screen with no keys, and an empty
+-- best-sellers list -- none of which looks like "the seed wiped my content".
+--
+-- On a throwaway demo database that is exactly what you want. On one you care
+-- about, re-apply the migration-seeded rows afterwards:
+--
+--     DATABASE_URL=... python scripts/reseed_content.py
+--
+-- This warning is hand-written. It is the only part of this file that is: the
+-- rest is generated. If you edit the generator (scripts/generate_seed_sql.js),
+-- keep this block -- see its header for why it cannot be inferred.
+-- ============================================================================
 
 -- Clean existing seed data
 TRUNCATE TABLE 
