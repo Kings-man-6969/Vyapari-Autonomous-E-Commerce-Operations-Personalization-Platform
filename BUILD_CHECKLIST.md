@@ -161,9 +161,32 @@ Still missing from the console: a create/edit form for `AdminProductsPage` again
 
 ## J. Performance
 
-- [ ] **J1. Code splitting** — 0 `React.lazy`/`Suspense`. Single ~657 kB chunk.
-- [ ] **J2. Bundle analysis + budget** — CI assertion on chunk size.
-- [ ] **J3. Query optimization** — index review against real query plans.
+- [x] **J1. Code splitting** — `App.jsx` lazy-loads every route except `HomePage`, behind one `Suspense` boundary around the route tree. **The initial payload went from 185 kB gzip (one 789 kB chunk) to 103.5 kB gzip** — a 44% cut to first paint. 44 dynamic imports.
+  - **`HomePage` stays eager, deliberately.** It is the storefront's landing page and what a first-time visitor sees; putting it behind a dynamic import trades a real first paint for a tidier chunk list. Every other route is reached by a navigation, and a navigation is allowed to cost a fetch.
+  - **The split that matters most is the two consoles.** Before this, every shopper downloaded the seller product form (35 kB), the admin catalogue (45 kB), the admin order book and the seller showcase page whether or not they would ever open them.
+  - `lazyPage` exists because every page is a *named* export and `React.lazy` wants a `default`. Writing the `.then((m) => ({ default: m.X }))` forty times is forty chances to typo a name the bundler cannot check.
+  - **One boundary, not one per route.** A per-route boundary can only show its own fallback, so navigating between two lazy routes unmounts one skeleton and mounts another; one boundary around the tree keeps the header, footer and shell on screen while the page arrives. The fallback is a full-height skeleton rather than a small centred spinner, because a lazy chunk resolves in tens of milliseconds and a spinner that appears and vanishes in that time reads as a flicker.
+- [x] **J2. Bundle analysis + budget** — `frontend/scripts/check-bundle.mjs`, run by `npm run budget` and wired into the `build-frontend` CI job immediately after the build. `npm run verify` chains build → budget → smoke.
+  - **It reads Vite's manifest, not `dist/assets`.** Summing every file measures the deploy; the number the visitor waits on is the *closure* of the entry — the entry chunk plus everything it statically imports, transitively. The manifest's `imports` arrays describe exactly that, and its `dynamicImports` are deliberately not followed.
+  - **gzip, not raw bytes.** Every host in play serves gzipped JavaScript; a raw budget would be met by shortening identifiers and broken by adding a long string, and neither is a user-visible change.
+  - Three budgets with deliberate and uneven headroom: initial 130 kB (measured 103.5), largest lazy chunk 40 kB (measured 7.1 — 5x, because the thing worth catching is a *dependency* rather than a page growing), total 400 kB (measured 236.1). Overridable by env var, which is how the check was verified to actually fail — a budget that cannot fail is a comment.
+  - **It also asserts the route tree is still split**: at least 20 dynamic imports in the manifest. Reverting `App.jsx` to static imports drops that to zero, and no size budget would necessarily catch it.
+- [x] **J3. Query optimization against real query plans** — V14. The test database is empty, so every plan against it is a trivial scan on nothing and proves nothing. A scratch database was built at the scale the seeded catalogue claims — 10,000 products, 60,000 interactions, 6,000 orders, 3,000 order items, a full month of `product_stats_daily` — and thirteen hot queries were measured with `EXPLAIN (ANALYZE, BUFFERS)`. Four index changes came out of it, and one measurement was misleading enough that it changed what the index is *for*.
+
+  | Query | Before | After |
+  |---|---|---|
+  | Catalogue, default sort (the hottest query in the storefront) | 12.87 ms, 436 buffers, seq scan + top-N heapsort | **0.35 ms, 91 buffers**, index scan |
+  | Autocomplete, a term that hits | 12.85 ms, 431 buffers, seq scan | **0.13 ms, 22 buffers** |
+  | Autocomplete, a term that matches nothing | 7.21 ms, 431 buffers | **0.39 ms, 24 buffers** |
+  | Admin order book, first page | — | already 0.30 ms (index scan + memoized lookups) |
+
+  - **The catalogue's ordering index is the win.** `WHERE status = 'active' ORDER BY created_at DESC LIMIT 24` had no usable index. `idx_products_status` did not help, and that is the interesting part: 97% of the table is `active`, so on selectivity alone the index loses to a scan and the planner correctly ignores it. What makes the difference is not filtering but *ordering* — `(status, created_at DESC)` supplies the sort, so the scan walks backwards from the newest row and stops after 24. The query stops being O(catalogue) and becomes O(page). The column order is load-bearing and there is a test on it.
+  - **The trigram index is justified by the opposite of the obvious case.** After the ordering index, a term that *hits* is fast without it — the planner stops early. A term that matches *nothing* cannot stop early, so the ordered scan walks every active row: 7.2 ms and 431 buffers, degrading linearly with the catalogue. Through the trigram index the same query is 0.39 ms and 24 buffers and does not grow. The first version of V14's comment claimed the generic "a btree cannot serve a leading wildcard" reason; the measurement says the ordering index does that work and this one covers the miss. The comment was corrected rather than left plausible.
+  - **Four redundant indexes dropped** — `idx_products_status`, `idx_orders_status`, `idx_orders_rzp_order`, `idx_interactions_product_time`. Each is covered by another index with the same leading column, so the planner keeps using the survivor and the dropped one only costs writes on the schema's two append-heaviest tables. `idx_orders_rzp_order` is covered by V10's partial index: every query filtering on that column is an equality lookup (and an equality predicate lets the planner use a partial `IS NOT NULL` index); the one query containing `IS NULL` filters by `id` first and never touches it.
+  - **Two plans were checked and deliberately left alone.** The rating sort (`ORDER BY COALESCE((attributes->>'rating')::numeric, sp.rating_avg, 0) DESC`, 6.8 ms) cannot be served by an expression index, because the COALESCE spans two tables. The catalogue count is a 5.7 ms seq scan, which is what a count is. Both are recorded rather than "optimised" into something that does not help.
+  - **`tests/test_index_review.py` asserts both directions** — that the two added indexes exist with the right column order, and that the four dropped ones stay dropped. Nothing else in the suite would notice either regression: the answers stay correct and only the cost changes, and a test suite does not measure cost.
+
+**Section J is complete.** 4 new backend tests in `tests/test_index_review.py`.
 
 ## K. Seller showcase pages (from the earlier brief)
 
@@ -186,7 +209,8 @@ Every item must pass before it is marked `[x]`:
 |---|---|
 | Migrations | `python scripts/migrate.py status` — all applied, checksums match |
 | Backend, no database | `python -m pytest -q` — **133 passed, 243 skipped** (the skips are the database suites, gated on `TEST_DATABASE_URL`) |
-| Backend, full | `TEST_DATABASE_URL=... python -m pytest -q` — **605 passed, 0 failed**. Use the Docker test database: `postgresql://vyapari_admin:vyapari_secure_password@127.0.0.1:54329/sellerpages_test`. Without this variable the suite reports a pass that is missing 64% of itself. |
+| Backend, full | `TEST_DATABASE_URL=... python -m pytest -q` — **609 passed, 0 failed**. Use the Docker test database: `postgresql://vyapari_admin:vyapari_secure_password@127.0.0.1:54329/sellerpages_test`. Without this variable the suite reports a pass that is missing 64% of itself. |
 | Frontend | `npm run build` — clean compile |
+| Frontend bundle | `npm run budget` — **initial 103.5 kB gzip**, budgets 130/40/400 kB, 44 dynamic imports |
 | Frontend render | `npm run smoke` — **257 checks** |
 | CI | 4 jobs green |

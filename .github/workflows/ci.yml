@@ -352,6 +352,15 @@ jobs:
         working-directory: ./frontend
         run: npm run build
 
+      # Section J2. Asserts the bytes a first-time visitor must download, the
+      # largest chunk a navigation can cost, and that the route tree is still
+      # split -- reading Vite's manifest so it measures the entry's real static
+      # closure rather than every file in dist. A budget that nobody enforces is
+      # a comment.
+      - name: Bundle budget
+        working-directory: ./frontend
+        run: npm run budget
+
       # Renders components to a string and asserts on the markup. Catches
       # render-time failures a successful bundle cannot, with no browser, no
       # backend and no database.

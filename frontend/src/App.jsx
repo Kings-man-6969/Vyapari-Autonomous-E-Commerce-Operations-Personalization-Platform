@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
@@ -9,58 +9,81 @@ import { GlobalErrorBoundary } from './components/GlobalErrorBoundary';
 import { applyUploadConfig } from './lib/imageUrl';
 import { trackPageView } from './lib/analytics';
 
-// Public & Customer Pages
+/**
+ * Section J1 — code splitting.
+ *
+ * `HomePage` is the only eager page, deliberately: it is the storefront's landing
+ * page, it is what a first-time visitor sees, and putting it behind a dynamic
+ * import would trade a real first paint for a tidier chunk list. Every other
+ * route is reached by a navigation, and a navigation is allowed to cost a fetch.
+ *
+ * The split that matters most is the two consoles. Before this, every shopper
+ * downloaded the seller product form (35 kB), the admin catalogue (45 kB), the
+ * admin order book and the seller showcase page whether or not they would ever
+ * open them.
+ *
+ * `lazyPage` exists because every page is a *named* export and `React.lazy` wants
+ * a module whose `default` is the component. Writing
+ * `lazy(() => import('./pages/X').then((m) => ({ default: m.XPage })))` forty
+ * times is forty chances to typo a name the bundler cannot check.
+ */
+const lazyPage = (loader, name) =>
+  lazy(() => loader().then((mod) => ({ default: mod[name] })));
+
+// Public & customer pages.
+const ExplorePage = lazyPage(() => import('./pages/ExplorePage'), 'ExplorePage');
+const ProductDetailPage = lazyPage(() => import('./pages/ProductDetailPage'), 'ProductDetailPage');
+const CartPage = lazyPage(() => import('./pages/CartPage'), 'CartPage');
+const CheckoutPage = lazyPage(() => import('./pages/CheckoutPage'), 'CheckoutPage');
+const OrdersPage = lazyPage(() => import('./pages/OrdersPage'), 'OrdersPage');
+const OrderDetailPage = lazyPage(() => import('./pages/OrderDetailPage'), 'OrderDetailPage');
+const LoginPage = lazyPage(() => import('./pages/LoginPage'), 'LoginPage');
+const RegisterPage = lazyPage(() => import('./pages/RegisterPage'), 'RegisterPage');
+const ForgotPasswordPage = lazyPage(() => import('./pages/ForgotPasswordPage'), 'ForgotPasswordPage');
+const ResetPasswordPage = lazyPage(() => import('./pages/ResetPasswordPage'), 'ResetPasswordPage');
+const WishlistPage = lazyPage(() => import('./pages/WishlistPage'), 'WishlistPage');
+const AccountPage = lazyPage(() => import('./pages/AccountPage'), 'AccountPage');
+const AddressesPage = lazyPage(() => import('./pages/AddressesPage'), 'AddressesPage');
+const NotificationsPage = lazyPage(() => import('./pages/NotificationsPage'), 'NotificationsPage');
+const StoreFrontPage = lazyPage(() => import('./pages/StoreFrontPage'), 'StoreFrontPage');
+const SellerShowcasePage = lazyPage(() => import('./pages/SellerShowcasePage'), 'SellerShowcasePage');
+
+// Informational pages.
+const AboutPage = lazyPage(() => import('./pages/AboutPage'), 'AboutPage');
+const HelpPage = lazyPage(() => import('./pages/HelpPage'), 'HelpPage');
+const TermsPage = lazyPage(() => import('./pages/TermsPage'), 'TermsPage');
+const PrivacyPage = lazyPage(() => import('./pages/PrivacyPage'), 'PrivacyPage');
+const ReturnsPage = lazyPage(() => import('./pages/ReturnsPage'), 'ReturnsPage');
+const ContactPage = lazyPage(() => import('./pages/ContactPage'), 'ContactPage');
+
+// The seller console. A shopper should never download any of it.
+const SellerDashboardPage = lazyPage(() => import('./pages/SellerDashboardPage'), 'SellerDashboardPage');
+const SellerApprovalsPage = lazyPage(() => import('./pages/SellerApprovalsPage'), 'SellerApprovalsPage');
+const SellerOnboardingPage = lazyPage(() => import('./pages/SellerOnboardingPage'), 'SellerOnboardingPage');
+const SellerProductsPage = lazyPage(() => import('./pages/SellerProductsPage'), 'SellerProductsPage');
+const SellerProductCreatePage = lazyPage(() => import('./pages/SellerProductCreatePage'), 'SellerProductCreatePage');
+const SellerProductEditPage = lazyPage(() => import('./pages/SellerProductEditPage'), 'SellerProductEditPage');
+const SellerOrdersPage = lazyPage(() => import('./pages/SellerOrdersPage'), 'SellerOrdersPage');
+const SellerInventoryPage = lazyPage(() => import('./pages/SellerInventoryPage'), 'SellerInventoryPage');
+const SellerAiListingPage = lazyPage(() => import('./pages/SellerAiListingPage'), 'SellerAiListingPage');
+const SellerAiChatPage = lazyPage(() => import('./pages/SellerAiChatPage'), 'SellerAiChatPage');
+const SellerSettingsPage = lazyPage(() => import('./pages/SellerSettingsPage'), 'SellerSettingsPage');
+const SellerReviewsPage = lazyPage(() => import('./pages/SellerReviewsPage'), 'SellerReviewsPage');
+
+// The admin console, likewise.
+const AdminDashboardPage = lazyPage(() => import('./pages/AdminDashboardPage'), 'AdminDashboardPage');
+const AdminUsersPage = lazyPage(() => import('./pages/AdminUsersPage'), 'AdminUsersPage');
+const AdminSellersPage = lazyPage(() => import('./pages/AdminSellersPage'), 'AdminSellersPage');
+const AdminProductsPage = lazyPage(() => import('./pages/AdminProductsPage'), 'AdminProductsPage');
+const AdminCategoriesPage = lazyPage(() => import('./pages/AdminCategoriesPage'), 'AdminCategoriesPage');
+const AdminSystemPage = lazyPage(() => import('./pages/AdminSystemPage'), 'AdminSystemPage');
+const AdminOrdersPage = lazyPage(() => import('./pages/AdminOrdersPage'), 'AdminOrdersPage');
+const AdminLeadsPage = lazyPage(() => import('./pages/AdminLeadsPage'), 'AdminLeadsPage');
+const AdminContentPage = lazyPage(() => import('./pages/AdminContentPage'), 'AdminContentPage');
+const AdminAnalyticsPage = lazyPage(() => import('./pages/AdminAnalyticsPage'), 'AdminAnalyticsPage');
+
+// The one page that must not cost a fetch.
 import { HomePage } from './pages/HomePage';
-import { ExplorePage } from './pages/ExplorePage';
-import { ProductDetailPage } from './pages/ProductDetailPage';
-import { CartPage } from './pages/CartPage';
-import { CheckoutPage } from './pages/CheckoutPage';
-import { OrdersPage } from './pages/OrdersPage';
-import { OrderDetailPage } from './pages/OrderDetailPage';
-import { LoginPage } from './pages/LoginPage';
-import { RegisterPage } from './pages/RegisterPage';
-import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
-import { ResetPasswordPage } from './pages/ResetPasswordPage';
-import { WishlistPage } from './pages/WishlistPage';
-import { AccountPage } from './pages/AccountPage';
-import { AddressesPage } from './pages/AddressesPage';
-import { NotificationsPage } from './pages/NotificationsPage';
-import { StoreFrontPage } from './pages/StoreFrontPage';
-import { SellerShowcasePage } from './pages/SellerShowcasePage';
-
-// Informational Pages
-import { AboutPage } from './pages/AboutPage';
-import { HelpPage } from './pages/HelpPage';
-import { TermsPage } from './pages/TermsPage';
-import { PrivacyPage } from './pages/PrivacyPage';
-import { ReturnsPage } from './pages/ReturnsPage';
-import { ContactPage } from './pages/ContactPage';
-
-// Seller Console Pages
-import { SellerDashboardPage } from './pages/SellerDashboardPage';
-import { SellerApprovalsPage } from './pages/SellerApprovalsPage';
-import { SellerOnboardingPage } from './pages/SellerOnboardingPage';
-import { SellerProductsPage } from './pages/SellerProductsPage';
-import { SellerProductCreatePage } from './pages/SellerProductCreatePage';
-import { SellerProductEditPage } from './pages/SellerProductEditPage';
-import { SellerOrdersPage } from './pages/SellerOrdersPage';
-import { SellerInventoryPage } from './pages/SellerInventoryPage';
-import { SellerAiListingPage } from './pages/SellerAiListingPage';
-import { SellerAiChatPage } from './pages/SellerAiChatPage';
-import { SellerSettingsPage } from './pages/SellerSettingsPage';
-import { SellerReviewsPage } from './pages/SellerReviewsPage';
-
-// Admin Governance Pages
-import { AdminDashboardPage } from './pages/AdminDashboardPage';
-import { AdminUsersPage } from './pages/AdminUsersPage';
-import { AdminSellersPage } from './pages/AdminSellersPage';
-import { AdminProductsPage } from './pages/AdminProductsPage';
-import { AdminCategoriesPage } from './pages/AdminCategoriesPage';
-import { AdminSystemPage } from './pages/AdminSystemPage';
-import { AdminOrdersPage } from './pages/AdminOrdersPage';
-import { AdminLeadsPage } from './pages/AdminLeadsPage';
-import { AdminContentPage } from './pages/AdminContentPage';
-import { AdminAnalyticsPage } from './pages/AdminAnalyticsPage';
 
 /**
  * One GA4 page view per client-side navigation.
@@ -80,8 +103,42 @@ const RouteAnalytics = () => {
   return null;
 };
 
+/* eslint-disable-next-line */
+/**
+ * The fallback shown while a route's chunk is fetching.
+ *
+ * Deliberately a skeleton rather than a spinner, and deliberately tall: a lazy
+ * chunk resolves in tens of milliseconds on a warm connection, and a small
+ * centred spinner that appears and vanishes in that time reads as a flicker. A
+ * full-height block holds the footer down and looks like a page that is arriving.
+ */
+const RouteLoading = () => (
+  <div className="container" style={{ padding: '48px 24px', minHeight: '60vh' }} role="status" aria-live="polite">
+    <span
+      style={{
+        position: 'absolute',
+        width: '1px',
+        height: '1px',
+        overflow: 'hidden',
+        clip: 'rect(0 0 0 0)',
+        whiteSpace: 'nowrap'
+      }}
+    >
+      Loading
+    </span>
+    <div className="skeleton" style={{ height: '34px', width: '38%', borderRadius: '6px', marginBottom: '18px' }} />
+    <div className="skeleton" style={{ height: '16px', width: '62%', borderRadius: '6px', marginBottom: '32px' }} />
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '20px' }}>
+      {[1, 2, 3, 4].map((n) => (
+        <div key={n} className="skeleton" style={{ height: '320px', borderRadius: '12px' }} />
+      ))}
+    </div>
+  </div>
+);
+
 // Allows any authenticated user (customer, seller, admin)
-const AuthRoute = ({ children }) => {  const { isAuthenticated, loading } = useAuth();
+const AuthRoute = ({ children }) => {
+  const { isAuthenticated, loading } = useAuth();
   if (loading) return null;
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -138,7 +195,13 @@ export const App = () => {
         <Header />
         <main style={{ flex: 1 }}>
           <RouteAnalytics />
-          <Routes>
+          {/* One boundary for the whole route tree rather than one per route. A
+              per-route boundary can only show its own fallback, so navigating
+              between two lazy routes unmounts one skeleton and mounts another;
+              one boundary around the tree keeps the shell, the header and the
+              footer on screen while the page it is fetching arrives. */}
+          <Suspense fallback={<RouteLoading />}>
+            <Routes>
             {/* Public Routes */}
             <Route path="/" element={<HomePage />} />
             <Route path="/explore" element={<ExplorePage />} />
@@ -215,7 +278,8 @@ export const App = () => {
                 <a href="/" className="btn-primary">Return to Marketplace</a>
               </div>
             } />
-          </Routes>
+            </Routes>
+          </Suspense>
         </main>
         <Footer />
       </div>

@@ -70,6 +70,40 @@ const cspForProduction = () => ({
 
 export default defineConfig({
   plugins: [react(), cspForProduction()],
+  build: {
+    // The manifest is what `scripts/check-bundle.mjs` reads to work out which
+    // chunks actually load on first paint. It lists each chunk's static
+    // `imports` and its `dynamicImports` separately, so the budget check can
+    // follow the real dependency graph instead of guessing from filenames --
+    // guessing is how a budget check ends up measuring a chunk nobody requests.
+    manifest: true,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        /**
+         * Section J2's prerequisite: the vendor code is split out so it can be
+         * cached across deploys.
+         *
+         * Without this, every change to any page changes the hash of the one
+         * bundle, and a returning visitor re-downloads React, the router, axios
+         * and lucide for a copy tweak. With it, an app-code change invalidates
+         * only the app chunks.
+         *
+         * React and the router are one chunk on purpose: the router is a
+         * dependency of React's render path, so splitting them produces two
+         * chunks that are always requested together and can never be cached
+         * apart.
+         */
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom|@remix-run)[\\/]/.test(id)) {
+            return 'vendor-react';
+          }
+          return 'vendor';
+        }
+      }
+    }
+  },
   server: {
     port: 3000,
     host: '0.0.0.0',
