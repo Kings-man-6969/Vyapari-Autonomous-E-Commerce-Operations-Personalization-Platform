@@ -44,6 +44,13 @@ import { BannerSlot } from '../src/components/BannerSlot';
 import { DEFAULT_COPY, BANNER_PLACEMENTS } from '../src/lib/content';
 import { EnquiryForm, looksLikeEmail } from '../src/components/EnquiryForm';
 import { ValueEditor, move, emptyLike } from '../src/pages/AdminContentPage';
+import {
+  measurementId, isConfigured, installGtag, trackPageView, trackEvent,
+  REQUIRED_CSP_ORIGINS, initAnalytics
+} from '../src/lib/analytics';
+import {
+  shouldCountView, viewKey, trackInteraction
+} from '../src/lib/interactions';
 
 const CDN = 'https://picsum.photos/seed';
 
@@ -1168,10 +1175,129 @@ function runCmsEditorChecks() {
   check('a new scalar list item is an empty string', emptyLike('x') === '');
 }
 
-runPaymentChecks().then(() => {
+// ── analytics (I6) and instrumentation (I7) ─────────────────────────────────
+//
+// The risk here is not a crash. It is a tag that loads and reports nothing, or a
+// view counted twice, and both are invisible from the outside -- the first
+// produces no error anywhere, the second produces a conversion figure whose
+// denominator is wrong.
+
+async function runAnalyticsChecks() {
+  console.log('── analytics & instrumentation ──');
+
+  // The configuration gate. An unset id must mean *no tag*, not a tag pointed at
+  // a placeholder: a placeholder still reports into somebody's property.
+  check('an unset measurement id is not configured',
+    measurementId({}) === null && !isConfigured({}));
+  check('a blank measurement id is not configured',
+    measurementId({ VITE_GA4_MEASUREMENT_ID: '   ' }) === null);
+  check('a real id is configured',
+    measurementId({ VITE_GA4_MEASUREMENT_ID: 'G-ABC123' }) === 'G-ABC123');
+  check('the id is trimmed', measurementId({ VITE_GA4_MEASUREMENT_ID: ' G-X ' }) === 'G-X');
+
+  // The build ships with no id, so this is the path the suite actually runs on.
+  check('the shipped bundle has no analytics id', !isConfigured());
+
+  // The shim. gtag.js inspects the `arguments` object, so pushing an array is a
+  // subtle break that reports nothing while looking correct.
+  const fake = { dataLayer: [] };
+  const gtag = installGtag(fake);
+  check('installGtag creates a dataLayer', Array.isArray(fake.dataLayer));
+  check('and a gtag function', typeof gtag === 'function');
+  gtag('event', 'x', { a: 1 });
+  check('gtag pushes the arguments object, not an array',
+    fake.dataLayer.length === 1 && !Array.isArray(fake.dataLayer[0]));
+  check('and the call survives as an array-like',
+    fake.dataLayer[0][0] === 'event' && fake.dataLayer[0][2].a === 1);
+
+  // Calling it twice must not replace an existing dataLayer: gtag.js may already
+  // have created one and queued its own work into it.
+  const kept = { dataLayer: [{ keep: true }] };
+  installGtag(kept);
+  check('an existing dataLayer is not replaced',
+    kept.dataLayer.length === 1 && kept.dataLayer[0].keep === true);
+
+  // Tracking is a no-op with no id, which is the shipped state.
+  check('a page view with no id sends nothing', trackPageView('/explore') === false);
+  check('an event with no id sends nothing', trackEvent('add_to_cart') === false);
+
+  // With a gtag present but no configured id, nothing is reported. This is the
+  // shipped state, and the gate is deliberately the *id* rather than the
+  // presence of a gtag: another script on the page can define one, and a tag
+  // pointed at nothing still files page views into somebody's property.
+  const w = globalThis.window || (globalThis.window = {});
+  const originalGtag = w.gtag;
+  const seen = [];
+  w.gtag = (...args) => seen.push(args);
+  try {
+    check('a page view is not sent when no id is configured, even with a gtag present',
+      trackPageView('/explore?q=kettle', 'Explore') === false && seen.length === 0);
+    check('and neither is a custom event',
+      trackEvent('add_to_cart', { product_id: 'p1' }) === false && seen.length === 0);
+  } finally {
+    w.gtag = originalGtag;
+  }
+
+  // The CSP invariant. This is the check that matters most: naming the script
+  // origin but not the beacon origin loads the tag and then drops every event,
+  // with no symptom a page can observe.
+  //
+  // Read from disk rather than duplicated here, because a copy of the policy in
+  // the test would agree with itself and disagree with the application. Paths are
+  // relative to this bundle's directory (`.smoke/`), not to the working
+  // directory, so the check does not depend on where it was run from.
+  const viteConfig = fs.readFileSync(`${__dirname}/../vite.config.js`, 'utf8');
+  const apiMain = fs.readFileSync(
+    `${__dirname}/../../backend-core-py/app/main.py`, 'utf8'
+  );
+
+  for (const origin of REQUIRED_CSP_ORIGINS.script) {
+    check(`the SPA's CSP allows the script origin ${origin}`, viteConfig.includes(origin));
+    check(`the API's CSP allows the script origin ${origin}`, apiMain.includes(origin));
+  }
+  for (const origin of REQUIRED_CSP_ORIGINS.connect) {
+    check(`the SPA's CSP allows the beacon origin ${origin}`, viteConfig.includes(origin));
+    check(`the API's CSP allows the beacon origin ${origin}`, apiMain.includes(origin));
+  }
+  // And the inline-script half of Google's snippet must not be smuggled in by
+  // adding 'unsafe-inline' to script-src, which would undo the policy for every
+  // other script on the page.
+  const scriptSrc = (text) => (text.match(/script-src[^;"']*/) || [''])[0];
+  check("the SPA's script-src does not carry 'unsafe-inline'",
+    !scriptSrc(viteConfig).includes('unsafe-inline'));
+  check("the API's script-src does not carry 'unsafe-inline'",
+    !scriptSrc(apiMain).includes('unsafe-inline'));
+
+  // initAnalytics with no id must not touch the DOM at all.
+  check('initAnalytics with no id loads nothing', initAnalytics({}) === null);
+
+  // ── the view guard ──
+  const store = new Map();
+  const fakeStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, v)
+  };
+  check('the first view of a product counts', shouldCountView(fakeStorage, 'p1'));
+  fakeStorage.setItem(viewKey('p1'), '1');
+  check('the second does not -- React 18 runs effects twice in dev',
+    !shouldCountView(fakeStorage, 'p1'));
+  check('a different product still counts', shouldCountView(fakeStorage, 'p2'));
+  check('no product id, no count', !shouldCountView(fakeStorage, null));
+  check('no storage, no count', !shouldCountView(null, 'p1'));
+  check('the view key is namespaced per product', viewKey('p1') !== viewKey('p2'));
+
+  // ── the refused event ──
+  // Awaited, because this is an async function returning `false` and an
+  // un-awaited promise is truthy -- the test would pass whatever it returned.
+  check('a purchase is never sent by the client',
+    (await trackInteraction('p1', 'purchase')) === false);
+}
+
+runPaymentChecks().then(async () => {
   runContentChecks();
   runEnquiryChecks();
   runCmsEditorChecks();
+  await runAnalyticsChecks();
   console.log(`\n${failed === 0 ? 'PASS' : `FAIL (${failed} check${failed === 1 ? '' : 's'})`}`);
 if (failed > 0) {
   fs.writeFileSync('.smoke/rendered.html', pro);

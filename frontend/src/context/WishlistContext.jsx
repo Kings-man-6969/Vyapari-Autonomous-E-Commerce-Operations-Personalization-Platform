@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
 import { useAuth } from './AuthContext';
+import { trackWishlist } from '../lib/interactions';
 
 const WishlistContext = createContext();
 
@@ -64,6 +65,12 @@ export const WishlistProvider = ({ children }) => {
           ...prev
         ]);
         await api.post('/wishlist', { product_id: productId });
+        // Section I7, at the context rather than at each caller: adding to the
+        // wishlist is a stronger signal than a click, and it happens from the
+        // card, the product page and the wishlist page. Instrumenting the one
+        // place every caller funnels through is what stops the third caller
+        // being forgotten. Only on add -- a removal is not interest.
+        trackWishlist(productId);
       }
       return !exists;
     } catch (err) {

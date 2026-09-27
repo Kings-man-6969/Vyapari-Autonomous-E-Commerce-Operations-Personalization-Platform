@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
 import { useAuth } from './AuthContext';
+import { trackAddToCart } from '../lib/interactions';
 
 const CartContext = createContext(null);
 
@@ -56,6 +57,17 @@ export const CartProvider = ({ children }) => {
     if (variantId) body.variant_id = variantId;
     await api.post('/cart/items', body);
     await fetchCart();
+    // Section I7, at the context rather than at each caller: the product card,
+    // the product page and the wishlist page all add through here, and
+    // instrumenting the one funnel is what stops the third caller being
+    // forgotten. Fired after the POST, so it records a line that exists --
+    // an `add_to_cart` event for a request the server rejected is worse than
+    // no event at all.
+    trackAddToCart(resolvedId, {
+      quantity,
+      variant_id: variantId || null,
+      source: typeof productId === 'object' ? 'listing' : 'context'
+    });
   };
 
   const updateQuantity = async (cartItemId, quantity) => {

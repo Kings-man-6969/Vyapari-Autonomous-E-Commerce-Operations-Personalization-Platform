@@ -19,33 +19,35 @@ import api from '../services/api';
  * and one of them would eventually be wrong.
  */
 
+// Mirrors the `orders.status` CHECK constraint in V1, which is the vocabulary
+// `PUT /api/admin/orders/:id/status` validates against. There is no `created` or
+// `pending_payment` here -- an unpaid order is `pending` -- and no `refunded`,
+// because a refund is a row in `refunds` against a payment that stays `paid`.
+// The first version of this file offered `created` and `pending_payment` as
+// filter chips, and the API answered both with a 400 naming the real list.
 const STATUS_ORDER = [
   'paid', 'processing', 'shipped', 'out_for_delivery', 'delivered',
-  'pending_payment', 'created', 'cancelled', 'refunded'
+  'pending', 'cancelled'
 ];
 
 const STATUS_LABEL = {
-  created: 'Created',
-  pending_payment: 'Awaiting payment',
+  pending: 'Awaiting payment',
   paid: 'Paid',
   processing: 'Processing',
   shipped: 'Shipped',
   out_for_delivery: 'Out for delivery',
   delivered: 'Delivered',
-  cancelled: 'Cancelled',
-  refunded: 'Refunded'
+  cancelled: 'Cancelled'
 };
 
 const STATUS_PILL = {
-  created: 'draft',
-  pending_payment: 'pending_payment',
+  pending: 'pending',
   paid: 'paid',
   processing: 'processing',
   shipped: 'shipped',
   out_for_delivery: 'out_for_delivery',
   delivered: 'delivered',
-  cancelled: 'cancelled',
-  refunded: 'rejected'
+  cancelled: 'cancelled'
 };
 
 const money = (n) =>

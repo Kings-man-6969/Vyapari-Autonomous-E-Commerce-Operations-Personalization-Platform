@@ -542,6 +542,11 @@ export const ExplorePage = () => {
               }}
             >
               <option value="newest">Featured & Newest</option>
+              {/* Real, from the I1 rollup: units sold over the last 30 days.
+                  When the rollup has nothing in its window the API says so in
+                  `data.ranking.stats_available`, and the ordering falls back to
+                  newest -- which is why the label says what it is measuring. */}
+              <option value="best_selling">Best Selling</option>
               <option value="rating_desc">Avg. Customer Review</option>
               <option value="price_asc">Price: Low to High</option>
               <option value="price_desc">Price: High to Low</option>

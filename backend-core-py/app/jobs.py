@@ -28,6 +28,11 @@ a loop with a sleep in it is not worth a dependency.
 
 RUN_ORDER_SWEEP turns it off, which the test suite does -- a background loop
 writing to the same rows a test is asserting on is a race nobody wants to debug.
+
+The second job is the analytics rollup (section I1), and it shares that property
+for the same reason: it recomputes a day from source rather than counting up, so
+two workers racing on the same day produce the same table rather than a
+double-count. See app/analytics.py.
 """
 import asyncio
 import logging
@@ -135,3 +140,67 @@ async def order_sweep_loop() -> None:
             # makes "it was working yesterday" true. Logged at error, retried on
             # the next tick.
             logger.exception("Abandoned-order sweep failed; will retry on the next tick")
+
+
+async def run_stats_rollup() -> dict:
+    """
+    One pass of the analytics rollup: every day in the window that has no
+    successful run.
+
+    Driven by the run log rather than by "did the last tick succeed", so a process
+    that was down for two days comes back and fills both instead of only the day
+    it woke up on. A day at a time, because that is the unit of
+    `product_stats_daily` and it keeps each transaction small.
+    """
+    from app.analytics import missing_days, rollup_day
+
+    pool = get_pool()
+    if pool is None:
+        return {"rolled": 0, "errors": 0, "reason": "no pool"}
+
+    window = max(1, int(settings.STATS_ROLLUP_WINDOW_DAYS))
+
+    async with pool.acquire() as db:
+        pending = await missing_days(db, window)
+        rolled = 0
+        errors = 0
+        for day in pending:
+            try:
+                await rollup_day(db, day)
+                rolled += 1
+            except Exception:
+                # One bad day must not stop the rest -- a single malformed row is
+                # not a reason to leave the week unrolled. `rollup_day` has
+                # already recorded the failure in `analytics_rollup_runs`, so it
+                # is visible from the admin screen, not only in this log.
+                errors += 1
+                logger.exception("Rollup failed for %s; continuing", day)
+
+    if rolled:
+        logger.info("Rolled up %d analytics day(s), %d failed", rolled, errors)
+    else:
+        logger.debug("Analytics rollup: nothing missing")
+
+    return {"rolled": rolled, "errors": errors}
+
+
+async def stats_rollup_loop() -> None:
+    """
+    Runs the analytics rollup forever, with the first run one interval in.
+
+    Delayed for the same reason as the order sweep: a process that has just
+    started has a database connection it has not yet used, and the first thing it
+    does should not be a cold grouped scan over a month of interactions.
+    """
+    interval = max(60, int(settings.STATS_ROLLUP_INTERVAL_SECONDS))
+    logger.info("Analytics rollup running every %ds", interval)
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            await run_stats_rollup()
+        except asyncio.CancelledError:
+            logger.info("Analytics rollup stopping")
+            raise
+        except Exception:
+            logger.exception("Analytics rollup failed; will retry on the next tick")
+

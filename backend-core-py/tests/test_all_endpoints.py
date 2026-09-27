@@ -68,6 +68,18 @@ class TestAllVyapariEndpoints(unittest.TestCase):
                 return [{"brand": "FabIndia"}, {"brand": "Biba"}]
 
             # Admin fetchval scalars
+            #
+            # The dashboard's paid/unpaid split (section I5) is one `fetchrow`
+            # returning three columns, because the old `SUM(total_amount) WHERE
+            # status != 'cancelled'` counted abandoned checkouts as revenue. These
+            # three branches must stay above the generic `from orders` handler
+            # further down, which is what they used to be answered by.
+            if "as orders_all" in q:
+                return {"paid_orders": 2100, "revenue": 5400000.0, "orders_all": 3400}
+            if "from refunds where status = 'processed'" in q:
+                return 120000.0
+            if "from orders where created_at >= current_date - interval '30 days'" in q:
+                return {"paid_orders": 300, "revenue": 900000.0}
             if "coalesce(sum(total_amount), 0) from orders" in q:
                 return 5400000.0
             if "count(*) from users where role = 'customer'" in q:
@@ -865,7 +877,17 @@ class TestAllVyapariEndpoints(unittest.TestCase):
         r_met = self.client.get("/api/admin/metrics", headers=admin_headers)
         self.assertEqual(r_met.status_code, 200)
         self.assertTrue(r_met.json()["success"])
-        self.assertIn("total_revenue", r_met.json()["data"])
+        metrics = r_met.json()["data"]
+        self.assertIn("total_revenue", metrics)
+        # Section I5's derived figures, asserted here so the mock cannot drift
+        # from the handler again -- the failure this test caught was a KeyError
+        # inside a route that answered 200 to the mock's old canned row.
+        self.assertEqual(metrics["paid_orders"], 2100)
+        self.assertEqual(metrics["unpaid_orders"], 3400 - 2100)
+        self.assertEqual(metrics["refunds_total"], 120000.0)
+        self.assertEqual(metrics["net_revenue"], 5400000.0 - 120000.0)
+        self.assertAlmostEqual(metrics["aov"], round(5400000.0 / 2100, 2))
+        self.assertEqual(metrics["last_30_days"]["revenue"], 900000.0)
 
         # System Health
         r_sys = self.client.get("/api/admin/system/health", headers=admin_headers)

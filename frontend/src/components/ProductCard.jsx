@@ -4,6 +4,7 @@ import { ShoppingBag, Star, Heart } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useAuth } from '../context/AuthContext';
+import { trackClick } from '../lib/interactions';
 import {
   FALLBACK_IMAGE,
   imageList,
@@ -128,7 +129,7 @@ export const ProductCard = ({ product, priority = false }) => {
       )}
 
       {/* Image Container with Dark Obsidian Backdrop */}
-      <Link to={`/products/${product.id}`} style={{ 
+      <Link to={`/products/${product.id}`} onClick={() => trackClick(product.id, { source: 'card_image' })} style={{ 
         display: 'block', 
         position: 'relative', 
         overflow: 'hidden', 

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
@@ -7,6 +7,7 @@ import { SellerLayout } from './components/SellerLayout';
 import { AdminLayout } from './components/AdminLayout';
 import { GlobalErrorBoundary } from './components/GlobalErrorBoundary';
 import { applyUploadConfig } from './lib/imageUrl';
+import { trackPageView } from './lib/analytics';
 
 // Public & Customer Pages
 import { HomePage } from './pages/HomePage';
@@ -59,10 +60,28 @@ import { AdminSystemPage } from './pages/AdminSystemPage';
 import { AdminOrdersPage } from './pages/AdminOrdersPage';
 import { AdminLeadsPage } from './pages/AdminLeadsPage';
 import { AdminContentPage } from './pages/AdminContentPage';
+import { AdminAnalyticsPage } from './pages/AdminAnalyticsPage';
+
+/**
+ * One GA4 page view per client-side navigation.
+ *
+ * GA4 is configured with `send_page_view: false` (see `lib/analytics.js`) because
+ * a single-page app that lets the tag send its own views reports exactly one --
+ * the initial load -- and then nothing for the rest of the session. This is the
+ * half that makes the route changes visible.
+ *
+ * A no-op when GA4 is not configured, and it renders nothing either way.
+ */
+const RouteAnalytics = () => {
+  const location = useLocation();
+  useEffect(() => {
+    trackPageView(`${location.pathname}${location.search}`);
+  }, [location.pathname, location.search]);
+  return null;
+};
 
 // Allows any authenticated user (customer, seller, admin)
-const AuthRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+const AuthRoute = ({ children }) => {  const { isAuthenticated, loading } = useAuth();
   if (loading) return null;
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -118,6 +137,7 @@ export const App = () => {
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <Header />
         <main style={{ flex: 1 }}>
+          <RouteAnalytics />
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<HomePage />} />
@@ -183,6 +203,7 @@ export const App = () => {
             <Route path="/admin/orders" element={<AdminRoute><AdminLayout><AdminOrdersPage /></AdminLayout></AdminRoute>} />
             <Route path="/admin/leads" element={<AdminRoute><AdminLayout><AdminLeadsPage /></AdminLayout></AdminRoute>} />
             <Route path="/admin/content" element={<AdminRoute><AdminLayout><AdminContentPage /></AdminLayout></AdminRoute>} />
+            <Route path="/admin/analytics" element={<AdminRoute><AdminLayout><AdminAnalyticsPage /></AdminLayout></AdminRoute>} />
 
             {/* 404 Fallback */}
             <Route path="*" element={

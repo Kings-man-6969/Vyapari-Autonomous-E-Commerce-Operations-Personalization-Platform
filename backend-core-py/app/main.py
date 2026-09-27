@@ -17,10 +17,11 @@ from starlette.responses import Response
 from app.auth.router import router as auth_router
 from app.config import settings
 from app.db import close_pool, init_pool
-from app.jobs import order_sweep_loop
+from app.jobs import order_sweep_loop, stats_rollup_loop
 from app.redis_client import close_redis, init_redis
 from app.routers.admin import router as admin_router
 from app.routers.admin_catalogue import router as admin_catalogue_router
+from app.routers.admin_analytics import router as admin_analytics_router
 from app.routers.admin_content import router as admin_content_router
 from app.routers.admin_leads import router as admin_leads_router
 from app.routers.admin_orders import router as admin_orders_router
@@ -77,15 +78,26 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Abandoned-order sweep disabled (RUN_ORDER_SWEEP is off)")
 
+    # The analytics rollup. Separate from the sweep because it answers a different
+    # question and fails independently: a stalled rollup breaks the best-sellers
+    # list, and a stalled sweep strands inventory, and neither should take the
+    # other down with it. Same cancellation discipline.
+    rollup_task = None
+    if settings.RUN_STATS_ROLLUP:
+        rollup_task = asyncio.create_task(stats_rollup_loop(), name="stats-rollup")
+    else:
+        logger.info("Analytics rollup disabled (RUN_STATS_ROLLUP is off)")
+
     try:
         yield
     finally:
-        if sweep_task:
-            sweep_task.cancel()
-            try:
-                await sweep_task
-            except asyncio.CancelledError:
-                pass
+        for task in (sweep_task, rollup_task):
+            if task:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
         logger.info("Closing database and Redis connections...")
         await close_pool()
         await close_redis()
@@ -116,13 +128,22 @@ UUID_REGEX = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-
 #   -- no error, no console message on our side, just an empty box.
 # checkout.razorpay.com in frame-src: the newer hosted page is framed from here
 #   rather than api.razorpay.com depending on the integration mode.
+# www.googletagmanager.com in script-src and google-analytics.com in connect-src:
+#   GA4 (section I6). Both, in the same change -- naming only the script origin
+#   loads the tag and then silently drops every beacon, which is the failure this
+#   policy's own history warns about. `region1.google-analytics.com` is what
+#   Google resolves to across most of the world.
+# GA4's inline config snippet is deliberately absent: 'unsafe-inline' is not in
+#   script-src, so the snippet's second half would be blocked. The equivalent
+#   call is made from the bundle -- see frontend/src/lib/analytics.js.
 CSP_DIRECTIVES = (
     "default-src 'self'; "
-    "script-src 'self' https://checkout.razorpay.com; "
+    "script-src 'self' https://checkout.razorpay.com https://www.googletagmanager.com; "
     "style-src 'self' 'unsafe-inline' https://checkout.razorpay.com; "
     "img-src 'self' https: data: blob:; "
     "connect-src 'self' https://api.vyapari.live http://api.vyapari.live https://api.vyapari.com "
-    "https://api.razorpay.com https://lumberjack.razorpay.com; "
+    "https://api.razorpay.com https://lumberjack.razorpay.com "
+    "https://www.google-analytics.com https://region1.google-analytics.com; "
     "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com; "
     "font-src 'self' https: data:; "
     "object-src 'none'; "
@@ -361,6 +382,7 @@ app.include_router(admin_catalogue_router, prefix="/api/admin")
 app.include_router(admin_orders_router, prefix="/api/admin")
 app.include_router(admin_content_router, prefix="/api/admin")
 app.include_router(admin_leads_router, prefix="/api/admin")
+app.include_router(admin_analytics_router, prefix="/api/admin")
 app.include_router(leads_router, prefix="/api/leads")
 app.include_router(reviews_router, prefix="/api/reviews")
 # Seller showcase pages. Kept under /api/public/ rather than extending

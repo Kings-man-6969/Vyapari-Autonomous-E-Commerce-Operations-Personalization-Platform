@@ -7,6 +7,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from app.analytics import PAID_ORDER_STATUSES
 from app.auth.dependencies import require_role
 from app.config import settings
 from app.db import get_db
@@ -20,9 +21,33 @@ _admin_guard = Depends(require_role("admin"))
 # 1. METRICS & DASHBOARD
 # ----------------------------------------------------------------------------
 async def _get_metrics_handler(db) -> dict:
-    gmv = await db.fetchval(
-        "SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE status != 'cancelled'"
+    # `total_revenue` used to be `SUM(total_amount) WHERE status != 'cancelled'`,
+    # which swept in every `created` and `pending_payment` order -- so the
+    # dashboard's headline figure included every cart that was abandoned at the
+    # payment step. Revenue now means money actually taken.
+    totals = await db.fetchrow(
+        """
+        SELECT
+          COUNT(*) FILTER (WHERE status = ANY($1::text[]))                          AS paid_orders,
+          COALESCE(SUM(total_amount) FILTER (WHERE status = ANY($1::text[])), 0)    AS revenue,
+          COUNT(*)                                                                  AS orders_all
+        FROM orders
+        """,
+        list(PAID_ORDER_STATUSES),
     )
+    refunds_total = await db.fetchval(
+        "SELECT COALESCE(SUM(amount), 0) FROM refunds WHERE status = 'processed'"
+    )
+    window = await db.fetchrow(
+        """
+        SELECT COUNT(*) FILTER (WHERE status = ANY($1::text[]))                        AS paid_orders,
+               COALESCE(SUM(total_amount) FILTER (WHERE status = ANY($1::text[])), 0)  AS revenue
+          FROM orders
+         WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+        """,
+        list(PAID_ORDER_STATUSES),
+    )
+
     users_count = await db.fetchval(
         "SELECT COUNT(*) FROM users WHERE role = 'customer'"
     )
@@ -37,15 +62,32 @@ async def _get_metrics_handler(db) -> dict:
         "SELECT COUNT(*) FROM seller_profiles WHERE is_verified = false OR (business_info->>'onboarding_status' = 'submitted')"
     )
 
+    revenue = float(totals["revenue"] or 0)
+    refunded = float(refunds_total or 0)
+    paid_orders = int(totals["paid_orders"] or 0)
+
     return {
         "success": True,
         "data": {
-            "total_revenue": float(gmv or 0),
+            # The six figures the existing dashboard renders. Kept as-is so the
+            # page does not break, with `total_revenue` corrected underneath it.
+            "total_revenue": round(revenue, 2),
             "total_customers": int(users_count or 0),
             "active_sellers": int(sellers_count or 0),
             "total_orders": int(orders_count or 0),
             "total_products": int(products_count or 0),
             "pending_kyc": int(pending_kyc or 0),
+            # The rest of what section I5 asked for. AOV is per paid order; the
+            # refund figure is money actually repaid, not money requested.
+            "paid_orders": paid_orders,
+            "aov": round(revenue / paid_orders, 2) if paid_orders else None,
+            "refunds_total": round(refunded, 2),
+            "net_revenue": round(revenue - refunded, 2),
+            "unpaid_orders": int(totals["orders_all"] or 0) - paid_orders,
+            "last_30_days": {
+                "paid_orders": int(window["paid_orders"] or 0),
+                "revenue": round(float(window["revenue"] or 0), 2),
+            },
         },
     }
 

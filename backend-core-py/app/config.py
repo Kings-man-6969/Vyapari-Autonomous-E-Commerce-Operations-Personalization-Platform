@@ -53,6 +53,23 @@ class Settings(BaseSettings):
     RUN_ORDER_SWEEP: bool = True
     ORDER_SWEEP_INTERVAL_SECONDS: int = 300
 
+    # The analytics rollup (section I1). `product_stats_daily` is recomputed from
+    # `user_interactions` and `order_items` rather than incremented, so the job is
+    # idempotent and a gap is filled by running it again -- which is why the loop
+    # is driven by "which days are missing" rather than "has the last tick run".
+    #
+    # 15 minutes rather than a nightly batch: the best-sellers list and the
+    # product-performance screen read this table, and a figure that is a day old
+    # makes "trending today" unanswerable. The work per tick is a handful of
+    # grouped scans over one day's rows.
+    RUN_STATS_ROLLUP: bool = True
+    STATS_ROLLUP_INTERVAL_SECONDS: int = 900
+
+    # How much history the loop will catch up on. Bounded because a first boot on
+    # an empty database has nothing to recompute, and an unbounded walk would
+    # query for every day since the schema was created.
+    STATS_ROLLUP_WINDOW_DAYS: int = 30
+
     # ------------------------------------------------------------------
     # Media storage
     # ------------------------------------------------------------------

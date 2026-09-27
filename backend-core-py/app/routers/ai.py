@@ -2,11 +2,11 @@ import hashlib
 import json
 import logging
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.auth.dependencies import require_role
+from app.auth.dependencies import optional_auth, require_role
 from app.config import settings
 from app.db import get_db
 from app.rate_limit import limit_for, rate_limit
@@ -77,7 +77,7 @@ async def get_similar_products(
             if not result:
                 fallback_rows = await db.fetch(
                     """SELECT p.id, p.title, p.price, p.compare_at_price, p.images, p.stock_qty, p.status,
-                              0.75 AS similarity, 'popular_fallback' AS reason
+                              0.75 AS similarity, 'newest_fallback' AS reason
                        FROM products p
                        WHERE p.status = 'active'
                        ORDER BY p.created_at DESC LIMIT $1""",
@@ -95,44 +95,98 @@ async def get_similar_products(
 @router.get("/popular")
 async def get_popular_products(
     limit: int = Query(8),
+    days: int = Query(30, ge=1, le=365),
     db=Depends(get_db),
 ) -> dict:
-    cache_key = f"products:popular:{limit}"
+    """
+    Most-viewed, most-bought products in the window, from our own rollup.
+
+    This used to call the recommendation service and, when that was unreachable
+    -- which is always, since it is not deployed -- fall back to
+    `ORDER BY created_at DESC` and label the result `popular_db_fallback`. It was
+    a newest-first list wearing the word "popular", and the label was the only
+    thing that said so.
+
+    Now it reads `product_stats_daily`, which section I1 writes. When the window
+    genuinely has no stats -- a fresh install, or a rollup that has never run --
+    the response says `basis: "newest"` rather than pretending. A client can tell
+    the two apart, which it could not before.
+    """
+    cache_key = f"products:popular:{limit}:{days}"
     cached = await cache.get_json(cache_key)
     if cached:
         return cached
 
-    result: dict | None = None
+    rows = await db.fetch(
+        """
+        SELECT p.id, p.title, p.slug, p.price, p.compare_at_price, p.images,
+               p.stock_qty, p.status,
+               COALESCE(SUM(s.views), 0)     AS views,
+               COALESCE(SUM(s.purchases), 0) AS purchases,
+               COALESCE(SUM(s.revenue), 0)   AS revenue
+          FROM products p
+          JOIN product_stats_daily s ON s.product_id = p.id
+         WHERE p.status = 'active'
+           AND s.stat_date >= CURRENT_DATE - ($2::int - 1) * INTERVAL '1 day'
+         GROUP BY p.id
+        HAVING COALESCE(SUM(s.views), 0) > 0 OR COALESCE(SUM(s.purchases), 0) > 0
+         -- Purchases first, then views: a sale is a stronger signal than a look,
+         -- and a product viewed 10,000 times and bought twice should not outrank
+         -- one bought forty times.
+         ORDER BY COALESCE(SUM(s.purchases), 0) DESC, COALESCE(SUM(s.views), 0) DESC
+         LIMIT $1
+        """,
+        limit,
+        days,
+    )
 
-    try:
-        async with httpx.AsyncClient(timeout=4.0) as client:
-            resp = await client.get(
-                f"{settings.RECOMMENDATION_SERVICE_URL}/popular?limit={limit}"
-            )
-            if not resp.is_error and resp.status_code == 200:
-                data = resp.json()
-                if isinstance(data, list) and len(data) > 0:
-                    result = {"success": True, "data": {"popular": data}}
-    except Exception as exc:
-        logger.warning(f"Recommendation service /popular error: {exc}. Falling back to DB.")
-
-    if not result:
-        try:
-            rows = await db.fetch(
-                """SELECT p.id, p.title, p.price, p.compare_at_price, p.images, p.stock_qty, p.status,
-                          1.0 AS similarity, 'popular_db_fallback' AS reason
-                   FROM products p
-                   WHERE p.status = 'active' AND p.stock_qty > 0
-                   ORDER BY p.created_at DESC LIMIT $1""",
-                limit,
-            )
-            result = {"success": True, "data": {"popular": [dict(r) for r in rows]}}
-        except Exception as exc:
-            logger.error(f"Fallback popular query failed: {exc}")
-            result = {"success": True, "data": {"popular": []}}
+    if rows:
+        result = {
+            "success": True,
+            "data": {
+                "popular": [_product_row(r, "popular") for r in rows],
+                "basis": "stats",
+                "window_days": days,
+            },
+        }
+    else:
+        newest = await db.fetch(
+            """SELECT p.id, p.title, p.slug, p.price, p.compare_at_price, p.images,
+                      p.stock_qty, p.status,
+                      0 AS views, 0 AS purchases, 0 AS revenue
+                 FROM products p
+                WHERE p.status = 'active'
+                ORDER BY p.created_at DESC LIMIT $1""",
+            limit,
+        )
+        result = {
+            "success": True,
+            "data": {
+                "popular": [_product_row(r, "newest") for r in newest],
+                # Said out loud. The frontend renders this list either way, and
+                # an operator reading the payload can see the ranking has no
+                # activity behind it.
+                "basis": "newest",
+                "window_days": days,
+            },
+        }
 
     await cache.set_json(cache_key, result, ex=TTL_POPULAR)
     return result
+
+
+def _product_row(row, reason: str) -> dict:
+    d = dict(row)
+    d["id"] = str(d["id"])
+    d["price"] = float(d["price"]) if d["price"] is not None else None
+    d["compare_at_price"] = (
+        float(d["compare_at_price"]) if d.get("compare_at_price") is not None else None
+    )
+    d["views"] = int(d.get("views") or 0)
+    d["purchases"] = int(d.get("purchases") or 0)
+    d["revenue"] = float(d.get("revenue") or 0)
+    d["reason"] = reason
+    return d
 
 
 @router.get("/search")
@@ -230,42 +284,129 @@ async def get_home_recommendations(
 
 
 class InteractionBody(BaseModel):
-    user_id: str | None = None
+    # `user_id` is deliberately absent. It used to be taken from the body, which
+    # let any caller attribute an interaction to any account -- and the
+    # recommender's notion of what a person likes is built from exactly this
+    # table. The identity now comes from the access token when there is one.
     session_id: str | None = None
     product_id: str
     event_type: str
     metadata: dict | None = None
 
 
+#: The `user_interactions.event_type` CHECK constraint.
+ALL_EVENT_TYPES = ("view", "click", "add_to_cart", "purchase", "wishlist")
+
+#: What a client may report. `purchase` is excluded: a purchase is something the
+#: platform knows from `order_items`, and a client that can post one can inflate
+#: its own product's numbers. The rollup reads sales from the order, not from
+#: here, so this closes a hole rather than changing a figure.
+CLIENT_EVENT_TYPES = ("view", "click", "add_to_cart", "wishlist")
+
+
 @router.post("/interactions")
 async def record_interaction(
     body: InteractionBody,
+    request: Request,
+    user: dict | None = Depends(optional_auth),
     _rl=Depends(rate_limit("ai.interactions", *limit_for("ai.interactions"))),
     db=Depends(get_db),
 ) -> dict:
+    """
+    Record one product interaction.
+
+    Three things the previous version got wrong, all of which made this endpoint
+    worse than useless in a way nothing could detect:
+
+      * **It returned early on a successful forward.** The platform's own table
+        was written only when the recommendation service was unreachable -- which
+        is always, since it is not deployed. So the one copy of this data we own
+        was the fallback for a service that never answered. The local write now
+        always happens; the forward is a side effect that is reported, not a
+        gate.
+
+      * **Every failure was swallowed.** A `product_id` that was not a UUID took
+        the `if p_uuid:` branch and wrote nothing; an `event_type` outside the
+        CHECK constraint raised and was caught; both returned `{"logged": true}`.
+        The caller, and anyone reading the frontend's network tab, saw success.
+
+      * **The subject was whatever the client said.** See `InteractionBody`.
+    """
+    if body.event_type not in CLIENT_EVENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "UNKNOWN_EVENT_TYPE",
+                "message": f"event_type must be one of: {', '.join(CLIENT_EVENT_TYPES)}.",
+                "data": {"allowed": list(CLIENT_EVENT_TYPES)},
+            },
+        )
+
+    product_id = to_valid_uuid(body.product_id)
+    if not product_id:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "VALIDATION_ERROR",
+                "message": "'product_id' must be a valid UUID.",
+                "data": {"field": "product_id"},
+            },
+        )
+
+    user_id = user.get("id") if isinstance(user, dict) else None
+
+    # An interaction with no subject cannot personalise anything. Anonymous
+    # traffic is the majority, so this is why `session_id` exists -- but a row
+    # with neither is unattributable and is not worth the write.
+    if not user_id and not (body.session_id or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "SESSION_REQUIRED",
+                "message": "A session_id is required when not signed in.",
+                "data": {"field": "session_id"},
+            },
+        )
+
+    exists = await db.fetchval(
+        "SELECT 1 FROM products WHERE id = $1::uuid", product_id
+    )
+    if not exists:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "PRODUCT_NOT_FOUND", "message": "That product does not exist."},
+        )
+
+    await db.execute(
+        """INSERT INTO user_interactions (user_id, session_id, product_id, event_type, metadata)
+           VALUES ($1::uuid, $2, $3::uuid, $4, $5::jsonb)""",
+        user_id,
+        (body.session_id or "").strip() or None,
+        product_id,
+        body.event_type,
+        json.dumps(body.metadata or {}),
+    )
+
+    # Best effort, and reported rather than assumed. The local row is already
+    # written, so a cold or absent recommender costs nothing but the flag.
+    forwarded = False
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
+        async with httpx.AsyncClient(timeout=1.5) as client:
             resp = await client.post(
                 f"{settings.RECOMMENDATION_SERVICE_URL}/interactions",
-                json=body.dict()
+                json={
+                    "user_id": user_id,
+                    "session_id": body.session_id,
+                    "product_id": product_id,
+                    "event_type": body.event_type,
+                    "metadata": body.metadata or {},
+                },
             )
-            if not resp.is_error:
-                return {"success": True, "data": resp.json()}
-    except Exception:
-        pass
+            forwarded = not resp.is_error
+    except Exception as exc:  # noqa: BLE001 - the local write already succeeded
+        logger.debug(f"Interaction forward skipped: {exc}")
 
-    try:
-        p_uuid = to_valid_uuid(body.product_id)
-        u_uuid = to_valid_uuid(body.user_id) if body.user_id else None
-        if p_uuid:
-            await db.execute(
-                """INSERT INTO user_interactions (user_id, session_id, product_id, event_type, metadata)
-                   VALUES ($1, $2, $3, $4, $5::jsonb)""",
-                u_uuid, body.session_id, p_uuid, body.event_type, json.dumps(body.metadata or {})
-            )
-    except Exception:
-        pass
-    return {"success": True, "data": {"logged": True}}
+    return {"success": True, "data": {"logged": True, "user_id": user_id, "forwarded": forwarded}}
 
 
 # ----------------------------------------------------------------------------

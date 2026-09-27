@@ -10,7 +10,8 @@ import {
   LayoutDashboard,
   Receipt,
   Inbox,
-  Megaphone
+  Megaphone,
+  BarChart3
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -20,6 +21,7 @@ export const AdminLayout = ({ children }) => {
   const navItems = [
     { to: '/admin', label: 'Platform Overview', icon: LayoutDashboard },
     { to: '/admin/orders', label: 'Order Book', icon: Receipt },
+    { to: '/admin/analytics', label: 'Sales Analytics', icon: BarChart3 },
     { to: '/admin/leads', label: 'Enquiries', icon: Inbox },
     { to: '/admin/users', label: 'User Governance', icon: Users },
     { to: '/admin/sellers', label: 'Seller KYC Desk', icon: FileCheck2 },

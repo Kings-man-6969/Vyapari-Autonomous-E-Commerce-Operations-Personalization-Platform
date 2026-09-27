@@ -432,6 +432,12 @@ async def list_products(
                 )
 
     # Order by
+    #
+    # `stats_join` is empty for every sort except `best_selling`, so the join is
+    # only paid for when it is asked for. It cannot go in `count_sql`'s
+    # where_clause, because `order_by` is the only thing that references it.
+    stats_join = ""
+    ranking = None
     if semantic_product_ids and not sort:
         vec_idx = next(
             (i + 1 for i, pv in enumerate(params) if pv is semantic_product_ids), None
@@ -443,6 +449,30 @@ async def list_products(
         order_by = "p.price DESC"
     elif effective_sort == "rating_desc":
         order_by = "COALESCE((p.attributes->>'rating')::numeric, sp.rating_avg, 0) DESC"
+    elif effective_sort == "best_selling":
+        # A real ranking from `product_stats_daily`, which section I1 writes.
+        # Before this, "best selling" was `created_at DESC` under a different
+        # name -- the catalogue had four sort orders and two of them were the
+        # same query.
+        #
+        # Units before views: a sale is a stronger signal than a look, and a
+        # product viewed ten thousand times and bought twice should not outrank
+        # one bought forty times.
+        stats_join = """
+            LEFT JOIN (
+                SELECT product_id,
+                       SUM(purchases) AS units,
+                       SUM(views)     AS views,
+                       SUM(revenue)   AS revenue
+                  FROM product_stats_daily
+                 WHERE stat_date >= CURRENT_DATE - INTERVAL '30 days'
+                 GROUP BY product_id
+            ) ps ON ps.product_id = p.id
+        """
+        order_by = (
+            "COALESCE(ps.units, 0) DESC, COALESCE(ps.views, 0) DESC, p.created_at DESC"
+        )
+        ranking = {"basis": "units_sold", "window_days": 30}
     else:
         order_by = "p.created_at DESC"
 
@@ -460,6 +490,7 @@ async def list_products(
         FROM products p
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN seller_profiles sp ON p.seller_id = sp.user_id
+        {stats_join}
         WHERE {where_clause}
         ORDER BY {order_by}
         LIMIT {limit_param} OFFSET {offset_param}
@@ -480,6 +511,19 @@ async def list_products(
     count_row = await db.fetchrow(count_sql, *params[:-2])
 
     total = int(count_row["total"])
+
+    if ranking is not None:
+        # Said out loud, because a best-sellers list over an empty rollup is a
+        # newest-first list, and the caller cannot tell the difference from the
+        # rows alone. One extra count, only on the sort that needs it.
+        ranking["stat_rows"] = int(
+            await db.fetchval(
+                "SELECT COUNT(*) FROM product_stats_daily "
+                "WHERE stat_date >= CURRENT_DATE - INTERVAL '30 days'"
+            )
+            or 0
+        )
+        ranking["stats_available"] = ranking["stat_rows"] > 0
 
     nl_info = None
     if nl_analysis and nl_analysis["hasIntent"]:
@@ -507,6 +551,7 @@ async def list_products(
                 "pages": -(-total // limit),  # ceil division
             },
             "nl_analysis": nl_info,
+            "ranking": ranking,
         },
     }
     await cache.set_json(cache_key, result, ex=TTL_SEARCH)

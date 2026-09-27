@@ -27,6 +27,7 @@ import { useAuth } from '../context/AuthContext';
 import { ProductCard } from '../components/ProductCard';
 import { BannerSlot } from '../components/BannerSlot';
 import { EnquiryForm } from '../components/EnquiryForm';
+import { trackView } from '../lib/interactions';
 import {
   FALLBACK_IMAGE,
   imageList,
@@ -152,11 +153,24 @@ export const ProductDetailPage = () => {
     }, 350);
   };
 
+  // Section I7. One view per product per session -- the guard lives in the
+  // module, because React 18's development build runs this effect twice on
+  // purpose and a double-count here is wrong in the denominator of the
+  // conversion figure the analytics screen computes.
+  useEffect(() => {
+    if (product?.id) trackView(product.id);
+  }, [product?.id]);
+
   const handleAddToCart = async () => {
     // The option id goes with the line, not just the quantity. Omitting it would
     // let the server fall back to the default option, and a customer who picked
     // Large would receive Medium -- a bag that does not match what they clicked
     // is worse than an error, because nothing looks wrong.
+    //
+    // The `add_to_cart` interaction is recorded by the cart context, which every
+    // add funnels through -- see `context/CartContext.jsx`. Sending it here as
+    // well would double every add, and the count would then disagree with the
+    // order lines beside it.
     await addToCart(product.id, quantity, selectedVariant?.id || null);
     setAddedNotice(true);
     setTimeout(() => setAddedNotice(false), 3000);

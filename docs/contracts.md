@@ -336,24 +336,36 @@ When marking an order shipped, sellers select from:
 
 ## 10. Platform-Wide Gaps Register
 
-Summarized here so contracts are not read as capabilities. The full register with evidence locations lives in `PROJECT_DOCUMENTATION.md` §15.
+Summarized here so contracts are not read as capabilities. The full register with evidence locations lives in `PROJECT_DOCUMENTATION.md` §15, and the working checklist with every item's status is `BUILD_CHECKLIST.md`.
 
-**Missing entirely**
-- Order cancellation, refunds, and stock restoration
-- Forgot / reset password (no route, no token table)
-- Product variants
-- Rate limiting (`TTL_RATE_LIMIT` is defined in `redis_client.py:34` and never used)
-- Code splitting (zero `React.lazy`; single ~657 kB chunk)
-- Best-sellers ranking, leads/enquiries, ad banners, GA4 (no `gtag`; CSP `script-src 'self'` would block it)
+This list was written as an audit of the codebase before sections A–F landed, and most of what it named is now closed. What follows is the register as it actually stands, with the closed entries recorded rather than deleted so the audit trail is not rewritten.
 
-**Hollow (present, but not what the surface implies)**
-- Image upload returns a fabricated S3 presigned URL; no bytes are ever stored
-- Payments are simulated end-to-end
-- Admin analytics is six integers computed inline
-- Popular products and "you may also like" depend on an undeployed service
-- No CMS — homepage promotions are hardcoded JSX
-- Seeded catalog embeddings are deterministic hash vectors, not `all-MiniLM-L6-v2` output
+**Closed since the audit** — each with tests in `backend-core-py/tests/`:
+- ~~Order cancellation, refunds, and stock restoration~~ — `app/routers/payments.py`, `restore_stock`, `refunds` table. Section E.
+- ~~Forgot / reset password~~ — `app/email.py`, token digest, session revocation on reset. Section B3.
+- ~~Product variants~~ — `product_variants`, variant-aware cart and order lines, PDP picker, seller and admin editors. Section C.
+- ~~Rate limiting~~ — `app/rate_limit.py`, 17 routes, `X-RateLimit-*` headers. Section B1.
+- ~~Best-sellers ranking~~ — `sort=best_selling` over `product_stats_daily`, which now has writers. Sections I1–I2.
+- ~~Leads / enquiries~~ — `leads` capture from three surfaces plus an admin inbox with notes and CSV export. Section H.
+- ~~Ad banners~~ — `banners` CRUD, four storefront slots. Section G1–G2.
+- ~~GA4~~ — loaded from the bundle rather than an inline snippet, because the CSP has no `'unsafe-inline'`; `script-src` and `connect-src` extended in the same change. Section I6.
+- ~~Image upload returns a fabricated S3 presigned URL~~ — a real provider interface with a working local implementation. Section D1.
+- ~~Payments are simulated end-to-end~~ — Razorpay v1 against test keys, signature verification, an authoritative webhook. Section E1.
+- ~~Admin analytics is six integers computed inline~~ — a daily sales series, AOV, refunds split, previous-window comparison, and the six integers corrected (the old GMV counted unpaid orders). Section I5.
+- ~~Popular products depend on an undeployed service~~ — read from `product_stats_daily`; when the window is empty the response says `basis: "newest"` instead of mislabelling it. Section I3.
+- ~~No CMS — homepage promotions are hardcoded JSX~~ — `cms_content` with an editor and a revision trail, seeded verbatim from the JSX it replaced. Section G3.
+- ~~`product_stats_daily` has no application writer~~ — `app/analytics.py`, a periodic idempotent rollup with a run log. Section I1.
+
+**Still open**
+- Code splitting — zero `React.lazy`/`Suspense`; single ~789 kB chunk. Section J1.
+- Bundle budget — no CI assertion on chunk size. Section J2.
+- Query optimization against real plans — indexes reviewed, plans not measured. Section J3.
+- The admin console has no product create/edit form, no stock editor with the movement log, no category edit/delete, and no refund action. The routes are complete and tested; the screens are missing. See *Admin console* in `BUILD_CHECKLIST.md`.
+- `/seller/page` — the seller page editor route. Section K1.
+- **Seeded catalog embeddings are deterministic hash vectors, not `all-MiniLM-L6-v2` output.** The one entry from the original audit that is still exactly as it was.
 
 **Deployment gaps**
-- `service-recommendation` and `service-seller-agent` are not deployed
-- `product_stats_daily` has no application writer (`user_interactions` does — four routes insert into it)
+- `service-recommendation` and `service-seller-agent` are not deployed. The platform no longer *depends* on the first for any ranking, but semantic search still forwards to it and falls back to keyword matching when it is absent.
+- No live Razorpay keys and no storage bucket — both are the same posture: a complete code path that refuses with 503 rather than pretending.
+- The host's own CSP, if it sets one, must carry the same origins as `vite.config.js` and `CSP_DIRECTIVES`; the stricter of the two applies.
+

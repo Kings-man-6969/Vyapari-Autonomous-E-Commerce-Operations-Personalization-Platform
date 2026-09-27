@@ -21,16 +21,24 @@ import react from '@vitejs/plugin-react';
 const CSP = [
   "default-src 'self'",
   // Vite's production bundle is a module script from our own origin. Razorpay's
-  // checkout script is the only third party allowed to execute.
-  "script-src 'self' https://checkout.razorpay.com",
+  // checkout script and the GA4 tag are the only third parties allowed to
+  // execute. Both are named rather than allowed via 'unsafe-inline' or a
+  // wildcard, and `src/lib/analytics.js` explains why the GA4 snippet's inline
+  // half had to be moved into the bundle to satisfy this.
+  "script-src 'self' https://checkout.razorpay.com https://www.googletagmanager.com",
   "style-src 'self' 'unsafe-inline' https://checkout.razorpay.com",
   // Product images come from three places: our own /media (served same-origin,
   // proxied from the API in dev), third-party catalogue CDNs over https, and
   // blob: for the local preview a seller sees before they finish uploading.
   // Narrowing this to a list of hosts would mean editing it every time a seller
   // pastes an external image URL, which is exactly the change nobody makes.
+  // GA4's image-beacon fallback also rides on the https: wildcard.
   "img-src 'self' https: data: blob:",
-  "connect-src 'self' https://api.vyapari.live https://api.vyapari.com https://api.razorpay.com",
+  // GA4 posts its beacon to google-analytics.com; the regional host is what
+  // Google actually resolves to in most of the world, and naming only the
+  // unregionalised host produces a policy violation on every event with no
+  // other symptom.
+  "connect-src 'self' https://api.vyapari.live https://api.vyapari.com https://api.razorpay.com https://www.google-analytics.com https://region1.google-analytics.com",
   "font-src 'self' https: data:",
   // The payment form is an iframe from Razorpay. Without this it renders as a
   // blank box inside a modal that otherwise looks correct.
