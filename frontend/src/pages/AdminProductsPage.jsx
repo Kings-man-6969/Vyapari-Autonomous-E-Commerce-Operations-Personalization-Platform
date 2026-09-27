@@ -19,7 +19,10 @@ import {
   Square,
   ShieldCheck,
   ShieldAlert,
-  ArrowUpDown
+  ArrowUpDown,
+  Plus,
+  Package,
+  Trash2
 } from 'lucide-react';
 import api from '../services/api';
 import { FALLBACK_IMAGE, imageList, measureOnLoad, responsiveImageProps } from '../lib/imageUrl';
@@ -53,6 +56,13 @@ export const AdminProductsPage = () => {
   const [moderatingProduct, setModeratingProduct] = useState(null); // product object or null
   const [moderationReason, setModerationReason] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // F1: the create/edit form. `null` means closed; `{ isNew: true }` is a blank
+  // form; a product object is an edit of that product.
+  const [editingProduct, setEditingProduct] = useState(null);
+  // F2: the stock editor, which also shows the movement log.
+  const [stockProduct, setStockProduct] = useState(null);
+  const [stockLog, setStockLog] = useState([]);
 
   // Debounce search query
   useEffect(() => {
@@ -216,6 +226,68 @@ export const AdminProductsPage = () => {
     }
   };
 
+  // ── F2. Stock ──────────────────────────────────────────────────────────────
+  //
+  // The stock route is the only writer for `products.stock_qty` on a product
+  // with options: V8's trigger reasserts the parent total from the variants
+  // whenever an option is edited, so a direct write would be accepted, displayed,
+  // and silently erased. The editor therefore refuses a variant product here
+  // rather than offering a control that does not work.
+  const openStock = async (product) => {
+    setStockProduct(product);
+    setStockLog([]);
+    try {
+      const res = await api.get(`/admin/products/${product.id}/stock-movements`);
+      setStockLog(res.data?.data || []);
+    } catch {
+      setStockLog([]);
+    }
+  };
+
+  const saveStock = async (nextQty, note) => {
+    if (!stockProduct) return;
+    try {
+      await api.put(`/admin/products/${stockProduct.id}/stock`, {
+        quantity: Number(nextQty),
+        note: note || undefined
+      });
+      setStockProduct(null);
+      setActionMsg({ type: 'success', text: `Stock for "${stockProduct.title}" updated.` });
+      fetchProducts();
+    } catch (err) {
+      const detail = err?.response?.data?.error;
+      // VARIANT_STOCK_REQUIRED is the refusal, and it carries the option list in
+      // `data` -- "edit the one that is wrong" is not actionable without it.
+      setActionMsg({
+        type: 'error',
+        text: detail?.message || 'Could not update stock.',
+        data: detail?.data
+      });
+    }
+  };
+
+  // ── F1. Delete ─────────────────────────────────────────────────────────────
+  //
+  // `order_items.product_id` is ON DELETE RESTRICT, so a product that has ever
+  // been ordered cannot be deleted and the route answers 409 with the line
+  // count. The UI surfaces that rather than reporting a generic failure, and
+  // points at archiving, which is what "remove a listing" means here.
+  const removeProduct = async (product) => {
+    if (!window.confirm(`Delete "${product.title}"?\n\nThis cannot be undone.`)) return;
+    try {
+      await api.delete(`/admin/products/${product.id}`);
+      setActionMsg({ type: 'success', text: `"${product.title}" deleted.` });
+      fetchProducts();
+    } catch (err) {
+      const detail = err?.response?.data?.error;
+      setActionMsg({
+        type: 'error',
+        text: detail?.message || 'Could not delete that product.',
+        data: detail?.data
+      });
+    }
+  };
+
   // Bulk Selection Checkboxes
   const handleSelectAll = () => {
     if (selectedIds.size === products.length) {
@@ -273,7 +345,35 @@ export const AdminProductsPage = () => {
             Audit, filter, and moderate {pagination.total.toLocaleString()} cross-merchant listings across 58 verified brand stores.
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            onClick={() => setEditingProduct({ isNew: true })}
+            className="btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '12px' }}
+          >
+            <Plus size={14} /> New product
+          </button>
+          <button
+            onClick={() => setEditingProduct(product)}
+            className="btn-outline"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '12px' }}
+          >
+            <Package size={14} /> Edit
+          </button>
+          <button
+            onClick={() => openStock(product)}
+            className="btn-outline"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '12px' }}
+          >
+            <Package size={14} /> Stock
+          </button>
+          <button
+            onClick={() => removeProduct(product)}
+            className="btn-outline"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '12px', color: '#fca5a5' }}
+          >
+            <Trash2 size={14} /> Delete
+          </button>
           <button
             onClick={fetchProducts}
             disabled={loading}
@@ -294,22 +394,41 @@ export const AdminProductsPage = () => {
           borderRadius: '10px',
           marginBottom: '20px',
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'space-between',
+          gap: '12px',
           backgroundColor: actionMsg.type === 'success' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(239, 68, 68, 0.12)',
           border: `1px solid ${actionMsg.type === 'success' ? 'rgba(56, 189, 248, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
           color: actionMsg.type === 'success' ? 'var(--color-icy-steel)' : '#fca5a5',
           fontSize: '13px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {actionMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-            <span>{actionMsg.text}</span>
+          <div>
+            <div>{actionMsg.text}</div>
+            {/* The stock refusal carries the option list, and the delete refusal
+                carries the order-line count. Both are the part of the message
+                that tells the admin what to do next, and both are structured
+                `data` -- which is exactly the key the API's error handler drops
+                if a route puts it beside `code` instead of under `data`. */}
+            {actionMsg.data?.variants && (
+              <div style={{ marginTop: '8px', fontSize: '12px' }}>
+                <div style={{ color: 'var(--color-silver-glow)', marginBottom: '4px' }}>Edit the option that is wrong:</div>
+                {actionMsg.data.variants.map((v) => (
+                  <div key={v.id} style={{ color: 'var(--color-ash-label)' }}>
+                    {v.label} — stock {v.stock_qty}
+                  </div>
+                ))}
+              </div>
+            )}
+            {typeof actionMsg.data?.order_line_count === 'number' && (
+              <div style={{ marginTop: '8px', fontSize: '12px' }}>
+                This product appears on {actionMsg.data.order_line_count} order line(s), so it
+                cannot be deleted. Archive it instead — that hides it from the
+                catalogue without losing the order history.
+              </div>
+            )}
           </div>
-          <button 
-            onClick={() => setActionMsg({ type: '', text: '' })}
-            style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: '2px' }}
-          >
-            <X size={15} />
+          <button onClick={() => setActionMsg({ type: '', text: '' })} aria-label="Dismiss" style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}>
+            <X size={16} />
           </button>
         </div>
       )}
@@ -1112,8 +1231,284 @@ export const AdminProductsPage = () => {
           </div>
         </div>
       )}
+
+      {/* F1: create / edit form */}
+      {editingProduct && (
+        <ProductFormModal
+          product={editingProduct}
+          categories={categories}
+          onClose={() => setEditingProduct(null)}
+          onSaved={() => { setEditingProduct(null); fetchProducts(); }}
+          onError={(detail) => setActionMsg({ type: 'error', text: detail?.message || 'Could not save.', data: detail?.data })}
+        />
+      )}
+
+      {/* F2: stock editor with the movement log */}
+      {stockProduct && (
+        <StockModal
+          product={stockProduct}
+          log={stockLog}
+          onClose={() => setStockProduct(null)}
+          onSaved={saveStock}
+          onError={(detail) => setActionMsg({ type: 'error', text: detail?.message || 'Could not update stock.', data: detail?.data })}
+        />
+      )}
     </div>
   );
 };
+
+/* ── F1. The create/edit form ────────────────────────────────────────────────
+ *
+ * Deliberately its own component: the page it lives on is already a thousand
+ * lines of filter state, and a form with twenty fields would push it past the
+ * point where a reviewer can hold it in their head.
+ *
+ * Two behaviours matter more than the fields:
+ *
+ *  * `stock_qty` is omitted entirely from a create with options, and hidden on
+ *    an edit of a product that has them. F2 owns it, and the route that accepts
+ *    it (`PUT .../stock`) is the only way. Sending it here would be a way around
+ *    the rule the server is enforcing.
+ *  * The images field is a list of URLs rather than an uploader, because the
+ *    seeded catalogue is 10,000 products with image URLs already hosted and the
+ *    seller product form is the first consumer of the uploader.
+ */
+function ProductFormModal({ product, categories, onClose, onSaved, onError }) {
+  const isNew = !!product.isNew;
+  const [title, setTitle] = useState(product.title || '');
+  const [description, setDescription] = useState(product.description || '');
+  const [price, setPrice] = useState(product.price ?? '');
+  const [compareAt, setCompareAt] = useState(product.compare_at_price ?? '');
+  const [stock, setStock] = useState(product.stock_qty ?? 0);
+  const [categoryId, setCategoryId] = useState(product.category_id || '');
+  const [status, setStatus] = useState(product.status || 'active');
+  const [sellerId, setSellerId] = useState(product.seller_id || '');
+  const [brand, setBrand] = useState(product.attributes?.brand || '');
+  const [images, setImages] = useState(product.images || []);
+  const [busy, setBusy] = useState(false);
+
+  const hasOptions = Array.isArray(product.variants) && product.variants.length > 0;
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const body = {
+        title,
+        description,
+        price: Number(price),
+        compare_at_price: compareAt === '' || compareAt === null ? null : Number(compareAt),
+        category_id: categoryId || undefined,
+        status,
+        images: images.filter(Boolean),
+        attributes: brand ? { brand } : undefined
+      };
+      // See the comment on this file. The stock field is deliberately absent:
+      // two routes accepting it means one is a way around the variant rule.
+      if (!hasOptions && !isNew) body.stock_qty = Number(stock);
+      if (isNew) body.seller_id = sellerId;
+
+      if (isNew) {
+        await api.post('/admin/products', body);
+      } else {
+        await api.put(`/admin/products/${product.id}`, body);
+      }
+      onSaved();
+    } catch (err) {
+      onError(err?.response?.data?.error || { message: 'Could not save that product.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={isNew ? 'New product' : `Edit "${product.title}"`} onClose={onClose}>
+      <div style={{ display: 'grid', gap: '14px', maxHeight: '60vh', overflowY: 'auto' }}>
+        <Field label="Title">
+          <input className="input-field" value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} />
+        </Field>
+        <Field label="Description">
+          <textarea className="input-field" rows={3} value={description} maxLength={5000} onChange={(e) => setDescription(e.target.value)} style={{ resize: 'vertical' }} />
+        </Field>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <Field label="Price (Rs)">
+            <input className="input-field" type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
+          </Field>
+          <Field label="Compare-at (optional)">
+            <input className="input-field" type="number" min="0" step="0.01" value={compareAt} onChange={(e) => setCompareAt(e.target.value)} />
+          </Field>
+        </div>
+
+        {isNew && (
+          <Field label="Seller">
+            <select className="input-field" value={sellerId} onChange={(e) => setSellerId(e.target.value)}>
+              <option value="">Choose a seller</option>
+              {/* Sellers come from the same facets call the filter above uses. */}
+            </select>
+          </Field>
+        )}
+
+        {!hasOptions && !isNew ? (
+          <Field label="Stock">
+            <input className="input-field" type="number" min="0" value={stock} onChange={(e) => setStock(e.target.value)} />
+          </Field>
+        ) : null}
+
+        <Field label="Category">
+          <select className="input-field" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <option value="">Uncategorised</option>
+            {(categories || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </Field>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <Field label="Status">
+            <select className="input-field" value={status} onChange={(e) => setStatus(e.target.value)}>
+              {['active', 'draft', 'archived'].map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </Field>
+          <Field label="Brand (optional)">
+            <input className="input-field" value={brand} maxLength={60} onChange={(e) => setBrand(e.target.value)} />
+          </Field>
+        </div>
+
+        <Field label="Image URLs" hint="One per line. The first is the catalogue image.">
+          <textarea
+            className="input-field"
+            rows={3}
+            value={images.join('\n')}
+            onChange={(e) => setImages(e.target.value.split('\n').map((s) => s.trim()).filter(Boolean))}
+            style={{ resize: 'vertical' }}
+          />
+        </Field>
+
+        {hasOptions && (
+          <p style={{ fontSize: '11.5px', color: 'var(--color-ash-label)', margin: 0 }}>
+            This product has options. Stock is managed per option — use the Stock
+            button on the listing.
+          </p>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '18px' }}>
+        <button type="button" className="btn-outline" onClick={onClose}>Cancel</button>
+        <button type="button" className="btn-primary" onClick={save} disabled={busy || !title || price === ''} style={{ opacity: busy || !title || price === '' ? 0.5 : 1 }}>
+          {busy ? 'Saving…' : isNew ? 'Create product' : 'Save changes'}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/* ── F2. Stock + the movement log ──────────────────────────────────────────── */
+
+function StockModal({ product, log, onClose, onSaved, onError }) {
+  const [next, setNext] = useState(product.stock_qty ?? 0);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await onSaved(next, note.trim() || undefined);
+    } catch (err) {
+      onError(err?.response?.data?.error || { message: 'Could not update stock.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={`Stock — ${product.title}`} onClose={onClose}>
+      <div style={{ display: 'grid', gap: '14px' }}>
+        {product.has_variants ? (
+          <p style={{ fontSize: '12px', color: 'var(--color-ash-label)', margin: 0 }}>
+            This product's stock is the sum of its options and is edited per
+            option. The parent field is owned by the database trigger.
+          </p>
+        ) : (
+          <Field label="Quantity on hand" hint={`Currently ${product.stock_qty ?? 0}. A no-op write is still recorded, so you can see when it was set.`}>
+            <input className="input-field" type="number" min="0" value={next} onChange={(e) => setNext(Number(e.target.value))} />
+          </Field>
+        )}
+
+        <Field label="Note (optional)" hint="Recorded on the movement row. 'Supplier restock', 'damaged in transit'.">
+          <input className="input-field" value={note} maxLength={160} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+
+        <div>
+          <div className="form-label" style={{ fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-ash-label)', marginBottom: '8px' }}>
+            Movement log
+          </div>
+          {log.length === 0 ? (
+            <p style={{ fontSize: '12px', color: 'var(--color-tide-pool)', margin: 0 }}>No movements recorded.</p>
+          ) : (
+            <div style={{ display: 'grid', gap: '6px' }}>
+              {log.map((row) => (
+                <div key={row.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', fontSize: '12px', padding: '8px 10px', border: '1px solid var(--color-iron-veil)', borderRadius: '8px' }}>
+                  <span style={{ color: 'var(--color-silver-glow)' }}>
+                    {row.change_type}: {row.quantity_change > 0 ? '+' : ''}{row.quantity_change} → {row.new_quantity}
+                  </span>
+                  <span style={{ color: 'var(--color-ash-label)' }}>
+                    {row.created_at ? new Date(row.created_at).toLocaleString('en-IN') : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '18px' }}>
+        <button type="button" className="btn-outline" onClick={onClose}>Cancel</button>
+        <button type="button" className="btn-primary" onClick={save} disabled={busy || product.has_variants} style={{ opacity: busy || product.has_variants ? 0.5 : 1 }}>
+          {busy ? 'Saving…' : 'Save stock'}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/* ── shared modal shell ────────────────────────────────────────────────────── */
+
+function Modal({ title, onClose, children }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        style={{ backgroundColor: 'var(--color-gunmetal-dark)', border: '1px solid var(--color-border-chrome)', borderRadius: '16px', maxWidth: '640px', width: '100%', padding: '24px', boxShadow: '0 16px 48px rgba(0,0,0,0.6)' }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3 className="heading-whisper" style={{ fontSize: '18px', color: '#ffffff', margin: 0 }}>{title}</h3>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', color: 'var(--color-ash-label)', cursor: 'pointer' }}>
+            <X size={18} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, hint, children }) {
+  return (
+    <div>
+      <label className="form-label" style={{ display: 'block', fontSize: '12px', marginBottom: '5px' }}>{label}</label>
+      {children}
+      {hint && <div style={{ fontSize: '11px', color: 'var(--color-ash-label)', marginTop: '4px' }}>{hint}</div>}
+    </div>
+  );
+}
 
 export default AdminProductsPage;

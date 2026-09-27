@@ -293,6 +293,41 @@ function OrderDrawer({ orderId, onClose, onChanged }) {
 
   const address = order?.shipping_address || {};
 
+  // F5. The refund action.
+  //
+  // The amount is checked against `totals.refundable` -- what the route will
+  // actually accept -- rather than against the order total, because a partially
+  // refunded order has less left than it did. The route refuses an over-refund
+  // with a 409 naming the remaining figure, and a generic "refund failed" here
+  // would send an admin looking at the wrong number.
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundAmount, setRefundAmount] = useState('');
+  const [refundReason, setRefundReason] = useState('customer_request');
+  const [refundBusy, setRefundBusy] = useState(false);
+
+  const submitRefund = async () => {
+    setRefundBusy(true);
+    setError(null);
+    try {
+      await api.post('/payments/refunds', {
+        order_id: orderId,
+        amount: Number(refundAmount),
+        reason: refundReason
+      });
+      setRefundOpen(false);
+      setRefundAmount('');
+      await load();
+      if (onChanged) await onChanged();
+    } catch (err) {
+      const detail = err?.response?.data?.error;
+      setError(detail?.message || 'That refund was refused.');
+    } finally {
+      setRefundBusy(false);
+    }
+  };
+
+  const refundable = order?.totals?.refundable ?? 0;
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(5, 7, 10, 0.72)', zIndex: 60, display: 'flex', justifyContent: 'flex-end' }}>
       <div
@@ -347,6 +382,19 @@ function OrderDrawer({ orderId, onClose, onChanged }) {
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--color-tide-pool)' }}>
                   <PackageCheck size={13} /> No further transitions.
                 </span>
+              )}
+              {/* F5. Refund. Offered only when something is actually left to refund,
+                  because a refund against a fully-refunded order is a 409 and the
+                  button should not be a way to produce one. */}
+              {refundable > 0 && (
+                <button
+                  type="button"
+                  className="btn-outline"
+                  onClick={() => { setRefundAmount(String(refundable)); setRefundOpen(true); }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '9px 16px', color: '#fca5a5' }}
+                >
+                  <CreditCard size={14} /> Refund {money(refundable)}
+                </button>
               )}
             </div>
 
@@ -416,6 +464,77 @@ function OrderDrawer({ orderId, onClose, onChanged }) {
           </>
         )}
       </div>
+
+      {/* F5. The refund form. */}
+      {refundOpen && order && (
+        <div
+          onClick={() => setRefundOpen(false)}
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(5, 7, 10, 0.72)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Refund this order"
+            style={{ width: 'min(460px, 100%)', backgroundColor: 'var(--color-abyssal-ink)', border: '1px solid var(--color-iron-veil)', borderRadius: '12px', padding: '24px' }}
+          >
+            <h3 className="heading-whisper" style={{ fontSize: '18px', margin: 0 }}>
+              Refund {money(order.totals?.order_total)}
+            </h3>
+            <p style={{ fontSize: '12.5px', color: 'var(--color-tide-pool)', margin: '6px 0 0' }}>
+              {money(order.totals?.refunded)} already repaid
+              {order.totals?.refund_pending > 0 ? `, ${money(order.totals.refund_pending)} pending` : ''}.
+              {' '}<strong style={{ color: '#ffffff' }}>{money(refundable)} left.</strong>
+            </p>
+
+            <div style={{ marginTop: '16px', display: 'grid', gap: '12px' }}>
+              <div>
+                <label className="form-label" style={{ fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-ash-label)' }}>
+                  Amount
+                </label>
+                <input
+                  type="number"
+                  className="input-field"
+                  min="0.01"
+                  max={refundable}
+                  step="0.01"
+                  value={refundAmount}
+                  onChange={(e) => setRefundAmount(e.target.value)}
+                  style={{ marginTop: '5px', backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-iron-veil)' }}
+                />
+              </div>
+              <div>
+                <label className="form-label" style={{ fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-ash-label)' }}>
+                  Reason
+                </label>
+                <select
+                  className="input-field"
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  style={{ marginTop: '5px', backgroundColor: 'var(--color-obsidian-graphite)', borderColor: 'var(--color-iron-veil)' }}
+                >
+                  {['customer_request', 'damaged_in_transit', 'wrong_item', 'not_as_described', 'other'].map((r) => (
+                    <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+              <button type="button" className="btn-outline" onClick={() => setRefundOpen(false)}>Cancel</button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={submitRefund}
+                disabled={refundBusy || !refundAmount || Number(refundAmount) <= 0 || Number(refundAmount) > refundable}
+                style={{ opacity: refundBusy || !refundAmount || Number(refundAmount) <= 0 || Number(refundAmount) > refundable ? 0.5 : 1 }}
+              >
+                {refundBusy ? 'Refunding…' : 'Refund'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
