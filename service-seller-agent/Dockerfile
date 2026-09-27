@@ -18,7 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Create unprivileged system user & group (UID 10001)
 RUN groupadd -g 10001 appgroup && \
-    useradd -u 10001 -g appgroup -s /bin/sh -m appuser
+    useradd -u 10001 -g appgroup -s /bin/sh -m appuser && \
+    chown -R appuser:appgroup /app
 
 # Copy application code and assign ownership
 COPY --chown=appuser:appgroup . .

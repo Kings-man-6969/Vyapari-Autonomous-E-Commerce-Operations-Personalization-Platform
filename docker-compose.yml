@@ -47,6 +47,7 @@ services:
     command: ["python", "/app/scripts/migrate.py", "apply"]
     volumes:
       - ./scripts:/app/scripts:ro
+      - ./db:/app/db:ro
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-vyapari_admin}:${POSTGRES_PASSWORD:-vyapari_secure_password}@db:5432/${POSTGRES_DB:-vyapari}
     depends_on:
@@ -80,8 +81,8 @@ services:
       dockerfile: Dockerfile
     container_name: vyapari-recommendation
     restart: unless-stopped
-    ports:
-      - "8001:8001"
+    expose:
+      - "8001"
     volumes:
       - ./service-recommendation/src:/app/src
     environment:
@@ -139,6 +140,8 @@ services:
     container_name: vyapari-seller-agent-worker
     restart: unless-stopped
     command: ["celery", "-A", "src.tasks.celery_app", "worker", "-l", "info", "-c", "2"]
+    healthcheck:
+      disable: true
     volumes:
       - ./service-seller-agent/src:/app/src
     environment:
@@ -162,7 +165,9 @@ services:
       dockerfile: Dockerfile
     container_name: vyapari-seller-agent-beat
     restart: unless-stopped
-    command: ["celery", "-A", "src.tasks.celery_app", "beat", "-l", "info"]
+    command: ["celery", "-A", "src.tasks.celery_app", "beat", "-l", "info", "-s", "/tmp/celerybeat-schedule"]
+    healthcheck:
+      disable: true
     volumes:
       - ./service-seller-agent/src:/app/src
     environment:

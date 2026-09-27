@@ -1,4 +1,5 @@
 import os
+import json
 import math
 import logging
 from typing import List, Optional, Dict, Any
@@ -429,7 +430,7 @@ async def record_interaction(req: InteractionRequest):
                 req.session_id,
                 req.product_id,
                 req.event_type,
-                req.metadata or {}
+                json.dumps(req.metadata or {})
             )
             return {"success": True, "event_type": req.event_type, "product_id": req.product_id}
     except Exception as e:

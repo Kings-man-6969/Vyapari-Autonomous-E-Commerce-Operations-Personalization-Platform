@@ -32,6 +32,7 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
+    beat_schedule_filename=os.getenv("CELERYBEAT_SCHEDULE_FILENAME", "/tmp/celerybeat-schedule"),
     beat_schedule={
         "scan-inventory-every-6-hours": {
             "task": "src.tasks.periodic_inventory_scan",

@@ -49,7 +49,7 @@ except ImportError:  # pragma: no cover
     sys.exit("asyncpg is required. pip install asyncpg")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MIGRATIONS_DIR = REPO_ROOT / "db" / "migrations"
+MIGRATIONS_DIR = Path(os.getenv("MIGRATIONS_DIR", REPO_ROOT / "db" / "migrations"))
 
 # Distinguishes our lock from any other advisory-lock user.
 ADVISORY_LOCK_KEY = 8_713_402_119_455_331
