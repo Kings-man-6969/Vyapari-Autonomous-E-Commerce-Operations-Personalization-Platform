@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import mimetypes
 import re
 import uuid
 from contextlib import asynccontextmanager
@@ -398,6 +399,21 @@ app.include_router(public_pages_router, prefix="/api/public/stores")
 # Only mounted for STORAGE_PROVIDER=local; with s3 the bytes live in a bucket and
 # a CDN fronts them, and mounting an empty directory here would just invite
 # someone to point the app at it.
+# The slim image ships no /etc/mime.types, so Python's mimetypes cannot resolve
+# .webp and Starlette's StaticFiles falls back to text/plain. nosniff is already
+# on every response below, and a rendition the browser refuses to render is
+# indistinguishable from a broken upload -- so register the types we serve.
+for _ext, _mime in {
+    ".webp": "image/webp",
+    ".avif": "image/avif",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+}.items():
+    mimetypes.add_type(_mime, _ext)
+
+
 class ImmutableStaticFiles(StaticFiles):
     """
     Static files that can never change, served as such.

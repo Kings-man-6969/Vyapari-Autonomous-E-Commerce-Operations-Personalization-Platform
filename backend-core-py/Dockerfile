@@ -10,8 +10,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 FROM base AS runtime
+# /app/media must exist and be owned by vyapari *before* the named volume mounts.
+# A named volume mounted at a path absent from the image is created root-owned,
+# and the local storage provider writes there as uid 1001 -- so every upload
+# would fail with EACCES. Creating it here lets the volume inherit the ownership.
 RUN useradd -r -u 1001 -s /bin/false vyapari && \
-    mkdir -p /app && \
+    mkdir -p /app/media && \
     chown -R vyapari:vyapari /app
 
 COPY --chown=vyapari:vyapari app/ ./app/

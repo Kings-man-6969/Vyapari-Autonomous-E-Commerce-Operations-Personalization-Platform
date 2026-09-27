@@ -1150,7 +1150,11 @@ def export_to_sql_file(data: Dict[str, Any], filepath: str):
             f.write("INSERT INTO product_embeddings (product_id, embedding, model_version) VALUES\n")
             rows = []
             for em in chunk:
-                rows.append(f"({escape_sql(em['product_id'])}, '{em['embedding']}'::vector, 'all-MiniLM-L6-v2')")
+                # Labelled as what these are, not as what someone wishes they
+                # were: a deterministic hash of the text, not a sentence
+                # transform. Run service-recommendation's batch_embed after
+                # loading to replace them with real all-MiniLM-L6-v2 vectors.
+                rows.append(f"({escape_sql(em['product_id'])}, '{em['embedding']}'::vector, 'deterministic-hash')")
             f.write(",\n".join(rows))
             f.write("\nON CONFLICT (product_id) DO NOTHING;\n\n")
 
@@ -1236,7 +1240,10 @@ async def direct_db_insert(data: Dict[str, Any], db_url: str):
             for i in range(0, len(embeddings), batch_size):
                 batch = embeddings[i:i + batch_size]
                 records = [
-                    (uuid.UUID(em["product_id"]), em["embedding"], "all-MiniLM-L6-v2")
+                    # 'deterministic-hash', not 'all-MiniLM-L6-v2': these are a
+                    # hash of the text. See the writer above for why, and run
+                    # batch_embed after loading to get real vectors.
+                    (uuid.UUID(em["product_id"]), em["embedding"], "deterministic-hash")
                     for em in batch
                 ]
                 await conn.executemany(
