@@ -43,6 +43,7 @@ import { rejectReason, ImageUploader } from '../src/components/ImageUploader';
 import { BannerSlot } from '../src/components/BannerSlot';
 import { DEFAULT_COPY, BANNER_PLACEMENTS } from '../src/lib/content';
 import { EnquiryForm, looksLikeEmail } from '../src/components/EnquiryForm';
+import { ValueEditor, move, emptyLike } from '../src/pages/AdminContentPage';
 
 const CDN = 'https://picsum.photos/seed';
 
@@ -1094,9 +1095,83 @@ function runEnquiryChecks() {
   check('a domain with nothing after the last dot is refused', !looksLikeEmail('a@b.'));
 }
 
+// ── the CMS editor ──────────────────────────────────────────────────────────
+//
+// The content screen renders inputs from the *shape* of the stored value, which
+// is what makes `cms_content` worth having: adding a field to `home.hero` is an
+// edit in the admin, not a deploy. That genericity is also the risk -- the
+// renderer has to produce the right control for a string, a nested object and a
+// repeatable list, and a wrong guess is a field nobody can edit.
+
+function runCmsEditorChecks() {
+  console.log('── CMS editor ──');
+
+  const nested = squashed(renderToString(
+    <ValueEditor
+      value={{ eyebrow: 'Sale', cta: { label: 'Go', to: '/explore' } }}
+      onChange={() => {}}
+    />
+  ));
+  check('a nested object becomes a field per key',
+    nested.includes('eyebrow') && nested.includes('cta') &&
+    nested.includes('label') && nested.includes('to'));
+  check('and the values are the stored ones',
+    nested.includes('value="Sale"') && nested.includes('value="/explore"'));
+
+  // `home.trust_bar` and `home.categories.cards` are arrays of objects. The
+  // repeatable rows are how a fifth trust badge gets added without a deploy.
+  const list = squashed(renderToString(
+    <ValueEditor
+      value={[{ icon: 'truck', title: 'Free' }, { icon: 'card', title: 'Secure' }]}
+      onChange={() => {}}
+    />
+  ));
+  check('a list of objects renders one row per item',
+    list.includes('value="truck"') && list.includes('value="card"'));
+  check('each row is removable', list.includes('aria-label="Remove item 1"') &&
+    list.includes('aria-label="Remove item 2"'));
+  check('and reorderable, with the ends pinned',
+    list.includes('aria-label="Move up"') && list.includes('aria-label="Move down"'));
+  check('a fifth badge is one click away', list.includes('Add item'));
+
+  // A long string needs a textarea, not a one-line input: the hero subcopy is
+  // two sentences and would be unusable in an input.
+  const prose = renderToString(
+    <ValueEditor value={'A sentence long enough to wrap. '.repeat(5)} onChange={() => {}} />
+  );
+  check('a long string gets a textarea rather than a one-line input',
+    prose.includes('<textarea'));
+
+  const short = renderToString(<ValueEditor value="Free" onChange={() => {}} />);
+  check('a short string stays a one-line input', !short.includes('<textarea'));
+
+  const flag = renderToString(<ValueEditor value={true} onChange={() => {}} />);
+  check('a boolean becomes a checkbox', flag.includes('type="checkbox"'));
+
+  // The reorder primitive. An off-by-one here silently reorders a merchant's
+  // banner list, which is the kind of bug nobody reports.
+  check('moving an item up swaps it with its neighbour',
+    JSON.stringify(move(['a', 'b', 'c'], 2, 1)) === JSON.stringify(['a', 'c', 'b']));
+  check('moving an item down swaps it with its neighbour',
+    JSON.stringify(move(['a', 'b', 'c'], 0, 1)) === JSON.stringify(['b', 'a', 'c']));
+  check('move does not mutate its input', (() => {
+    const original = ['a', 'b'];
+    move(original, 0, 1);
+    return JSON.stringify(original) === JSON.stringify(['a', 'b']);
+  })());
+
+  // A new row must have the same keys as the existing ones, or the API stores an
+  // object the storefront cannot render and the field is silently absent.
+  check('a new list item copies the field names of an existing one',
+    JSON.stringify(emptyLike({ icon: 'truck', title: 'Free', pinned: true })) ===
+      JSON.stringify({ icon: '', title: '', pinned: false }));
+  check('a new scalar list item is an empty string', emptyLike('x') === '');
+}
+
 runPaymentChecks().then(() => {
   runContentChecks();
   runEnquiryChecks();
+  runCmsEditorChecks();
   console.log(`\n${failed === 0 ? 'PASS' : `FAIL (${failed} check${failed === 1 ? '' : 's'})`}`);
 if (failed > 0) {
   fs.writeFileSync('.smoke/rendered.html', pro);

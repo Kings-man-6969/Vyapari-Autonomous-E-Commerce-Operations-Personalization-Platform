@@ -7,7 +7,10 @@ import {
   Boxes, 
   FolderTree, 
   Cpu, 
-  LayoutDashboard
+  LayoutDashboard,
+  Receipt,
+  Inbox,
+  Megaphone
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -16,10 +19,13 @@ export const AdminLayout = ({ children }) => {
 
   const navItems = [
     { to: '/admin', label: 'Platform Overview', icon: LayoutDashboard },
+    { to: '/admin/orders', label: 'Order Book', icon: Receipt },
+    { to: '/admin/leads', label: 'Enquiries', icon: Inbox },
     { to: '/admin/users', label: 'User Governance', icon: Users },
     { to: '/admin/sellers', label: 'Seller KYC Desk', icon: FileCheck2 },
     { to: '/admin/products', label: 'Catalog Moderation', icon: Boxes },
     { to: '/admin/categories', label: 'Category Hierarchy', icon: FolderTree },
+    { to: '/admin/content', label: 'Banners & Copy', icon: Megaphone },
     { to: '/admin/system', label: 'System & AI Health', icon: Cpu },
   ];
 

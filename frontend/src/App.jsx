@@ -56,6 +56,9 @@ import { AdminSellersPage } from './pages/AdminSellersPage';
 import { AdminProductsPage } from './pages/AdminProductsPage';
 import { AdminCategoriesPage } from './pages/AdminCategoriesPage';
 import { AdminSystemPage } from './pages/AdminSystemPage';
+import { AdminOrdersPage } from './pages/AdminOrdersPage';
+import { AdminLeadsPage } from './pages/AdminLeadsPage';
+import { AdminContentPage } from './pages/AdminContentPage';
 
 // Allows any authenticated user (customer, seller, admin)
 const AuthRoute = ({ children }) => {
@@ -177,6 +180,9 @@ export const App = () => {
             <Route path="/admin/products" element={<AdminRoute><AdminLayout><AdminProductsPage /></AdminLayout></AdminRoute>} />
             <Route path="/admin/categories" element={<AdminRoute><AdminLayout><AdminCategoriesPage /></AdminLayout></AdminRoute>} />
             <Route path="/admin/system" element={<AdminRoute><AdminLayout><AdminSystemPage /></AdminLayout></AdminRoute>} />
+            <Route path="/admin/orders" element={<AdminRoute><AdminLayout><AdminOrdersPage /></AdminLayout></AdminRoute>} />
+            <Route path="/admin/leads" element={<AdminRoute><AdminLayout><AdminLeadsPage /></AdminLayout></AdminRoute>} />
+            <Route path="/admin/content" element={<AdminRoute><AdminLayout><AdminContentPage /></AdminLayout></AdminRoute>} />
 
             {/* 404 Fallback */}
             <Route path="*" element={
