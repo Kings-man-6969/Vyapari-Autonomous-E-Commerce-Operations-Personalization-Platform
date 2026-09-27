@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { ProductCard } from '../components/ProductCard';
+import { BannerSlot } from '../components/BannerSlot';
 import { 
   SlidersHorizontal, 
   Search, 
@@ -547,6 +548,15 @@ export const ExplorePage = () => {
             </select>
           </div>
         </div>
+
+        {/* Category top strip. Empty unless someone has scheduled a campaign
+            for it, in which case it renders nothing and the grid moves up. */}
+        <BannerSlot
+          placement="category_top"
+          variant="strip"
+          className=""
+          style={{ marginBottom: '20px' }}
+        />
 
         {/* AI Natural Language Query Intent Banner */}
         {nlAnalysis && nlAnalysis.is_natural_language && (

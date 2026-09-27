@@ -21,11 +21,13 @@ from app.jobs import order_sweep_loop
 from app.redis_client import close_redis, init_redis
 from app.routers.admin import router as admin_router
 from app.routers.admin_catalogue import router as admin_catalogue_router
+from app.routers.admin_content import router as admin_content_router
 from app.routers.admin_orders import router as admin_orders_router
 from app.routers.ai import router as ai_router
 from app.routers.approvals import router as approvals_router
 from app.routers.cart import router as cart_router
 from app.routers.categories import router as categories_router
+from app.routers.content import router as content_router
 from app.routers.health import router as health_router
 from app.routers.notifications import router as notifications_router
 from app.routers.orders import router as orders_router
@@ -333,6 +335,7 @@ app.include_router(health_router, prefix="/health")
 app.include_router(health_router, prefix="/api/health")
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(categories_router, prefix="/api/categories")
+app.include_router(content_router, prefix="/api/content")
 app.include_router(products_router, prefix="/api/products")
 # Declared after products_router: its /{product_id}/variants routes must not be
 # captured by a products_router /{id} pattern. Starlette matches in registration
@@ -354,6 +357,7 @@ app.include_router(telemetry_router, prefix="/api/telemetry")
 app.include_router(admin_router, prefix="/api/admin")
 app.include_router(admin_catalogue_router, prefix="/api/admin")
 app.include_router(admin_orders_router, prefix="/api/admin")
+app.include_router(admin_content_router, prefix="/api/admin")
 app.include_router(reviews_router, prefix="/api/reviews")
 # Seller showcase pages. Kept under /api/public/ rather than extending
 # /api/stores/ so the handle-based public pages never collide with the existing

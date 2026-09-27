@@ -40,6 +40,8 @@ import {
   measuredSize, responsiveImageProps, currentVariantWidths, applyUploadConfig, FALLBACK_IMAGE
 } from '../src/lib/imageUrl';
 import { rejectReason, ImageUploader } from '../src/components/ImageUploader';
+import { BannerSlot } from '../src/components/BannerSlot';
+import { DEFAULT_COPY, BANNER_PLACEMENTS } from '../src/lib/content';
 
 const CDN = 'https://picsum.photos/seed';
 
@@ -915,8 +917,141 @@ function runUploadChecks() {
 }
 
 
+// ── storefront content ──────────────────────────────────────────────────────
+//
+// The CMS is the half of section G that the backend tests cannot reach. Two
+// things matter here and neither is visible from the API: that an empty slot
+// renders *nothing* rather than a placeholder, and that the compiled-in copy is
+// the same words as V11's seed. The backend test asserts the seed against
+// literals; this asserts the bundle against the same literals. Together they pin
+// the two sides of an invariant that nothing at runtime would notice breaking.
+
+function runContentChecks() {
+  console.log('── storefront content ──');
+
+  // The five slots the API accepts. A slot name the frontend invents is a 400,
+  // and an empty slot looks identical to a typo.
+  check('the five slots match the API vocabulary',
+    BANNER_PLACEMENTS.join(',') ===
+      'homepage_hero,homepage_strip,category_top,pdp_promo,seller_page',
+    BANNER_PLACEMENTS.join(','));
+
+  // The fallback copy, field by field, against V11's seed.
+  const hero = DEFAULT_COPY['home.hero'];
+  check('the fallback hero headline is the seeded one',
+    hero.headline === 'Great Deals on Everything You Love', hero.headline);
+  check('and the fallback CTAs point where the seed points',
+    hero.primary_cta.to === '/explore' && hero.secondary_cta.to === '/explore?sort=rating');
+
+  check('the fallback trust bar is the seeded four, in order',
+    DEFAULT_COPY['home.trust_bar']
+      .map((i) => `${i.icon}:${i.title}`)
+      .join('|') ===
+      'truck:Free Fast Delivery|rotate-ccw:7-Day Easy Returns|shield:100% Genuine Products|card:Secure Payments',
+    DEFAULT_COPY['home.trust_bar'].map((i) => i.title).join('|'));
+
+  check('the fallback category cards are the seeded four, in order',
+    DEFAULT_COPY['home.categories'].cards.map((c) => c.title).join('|') ===
+      'Electronics & Audio|Fashion & Apparel|Home & Living|Best Sellers');
+
+  check('every fallback card carries a destination and a label',
+    DEFAULT_COPY['home.categories'].cards.every((c) => c.to && c.cta_label));
+
+  check('the fallback copy is frozen, so one render cannot leak into the next',
+    Object.isFrozen(DEFAULT_COPY) &&
+      Object.isFrozen(DEFAULT_COPY['home.hero']) &&
+      Object.isFrozen(DEFAULT_COPY['home.trust_bar']));
+
+  // A slot with nothing to show must render nothing at all. A placeholder box is
+  // a worse homepage than no box, and every slot is empty on a fresh install.
+  const empty = renderToString(
+    <MemoryRouter>
+      <BannerSlot placement="homepage_hero" banners={[]} />
+    </MemoryRouter>
+  );
+  check('an empty slot renders nothing, not a placeholder', empty === '', JSON.stringify(empty));
+
+  const BANNER = {
+    id: 'b1',
+    title: 'Monsoon Edit',
+    subtitle: 'Up to 40% off',
+    media_type: 'image',
+    url: 'https://cdn.dummyjson.com/product-images/beauty/1.webp',
+    thumbnail_url: null,
+    cta_label: 'Shop now',
+    target_url: '/explore'
+  };
+
+  const filled = squashed(renderToString(
+    <MemoryRouter>
+      <BannerSlot placement="homepage_hero" banners={[BANNER]} />
+    </MemoryRouter>
+  ));
+  check('a populated slot renders its copy', filled.includes('Monsoon Edit') &&
+    filled.includes('Up to 40% off'));
+  check('and its CTA, as a real link', filled.includes('href="/explore"'));
+  check('and marks which slot it filled', filled.includes('data-banner-slot="homepage_hero"'));
+
+  // Defence in depth. The API refuses `javascript:` at the write boundary, so
+  // this only fires for a row that got in another way -- a seeded INSERT, a
+  // hand-run UPDATE, or a future route that forgets the validator. react-router
+  // renders `<Link to="javascript:...">` as a working XSS gadget, which is why
+  // the component has to refuse it independently.
+  const xss = squashed(renderToString(
+    <MemoryRouter>
+      <BannerSlot
+        placement="homepage_hero"
+        banners={[{ ...BANNER, target_url: 'javascript:alert(1)' }]}
+      />
+    </MemoryRouter>
+  ));
+  check('a javascript: target renders no link at all', !xss.includes('javascript:'));
+  check('but the rest of the banner still renders', xss.includes('Monsoon Edit'));
+
+  const external = squashed(renderToString(
+    <MemoryRouter>
+      <BannerSlot
+        placement="homepage_hero"
+        banners={[{ ...BANNER, target_url: 'https://example.com/sale' }]}
+      />
+    </MemoryRouter>
+  ));
+  check('an off-site target gets rel="noopener noreferrer"',
+    external.includes('rel="noopener noreferrer"') &&
+    external.includes('href="https://example.com/sale"'));
+
+  // A video with no poster paints black. Rendering nothing but the copy is the
+  // smaller lie.
+  const posterless = renderToString(
+    <MemoryRouter>
+      <BannerSlot
+        placement="pdp_promo"
+        variant="rail"
+        banners={[{
+          ...BANNER, media_type: 'video', url: '/media/v.mp4', thumbnail_url: null
+        }]}
+      />
+    </MemoryRouter>
+  );
+  check('a video with no poster is not rendered as a black rectangle',
+    !posterless.includes('<video'));
+
+  const strip = squashed(renderToString(
+    <MemoryRouter>
+      <BannerSlot
+        placement="category_top"
+        variant="strip"
+        banners={[BANNER, { ...BANNER, id: 'b2', title: 'Second' }]}
+      />
+    </MemoryRouter>
+  ));
+  check('a strip renders every banner it is given',
+    strip.includes('Monsoon Edit') && strip.includes('Second'));
+}
+
 runPaymentChecks().then(() => {
-console.log(`\n${failed === 0 ? 'PASS' : `FAIL (${failed} check${failed === 1 ? '' : 's'})`}`);
+  runContentChecks();
+  console.log(`\n${failed === 0 ? 'PASS' : `FAIL (${failed} check${failed === 1 ? '' : 's'})`}`);
 if (failed > 0) {
   fs.writeFileSync('.smoke/rendered.html', pro);
   fs.writeFileSync('.smoke/rendered-reset.html', resetWithToken);

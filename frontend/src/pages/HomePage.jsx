@@ -18,24 +18,36 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { ProductCard } from '../components/ProductCard';
+import { BannerSlot } from '../components/BannerSlot';
+import { fetchAllCms, DEFAULT_COPY } from '../lib/content';
 
 export const HomePage = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Seeded with the compiled-in copy, so the first paint has real words in it
+  // and the CMS round trip only ever *replaces* them. An empty object here would
+  // render an empty hero for one frame, which is the single most visible thing
+  // on the site.
+  const [copy, setCopy] = useState(DEFAULT_COPY);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [prodRes, catRes] = await Promise.all([
+        const [prodRes, catRes, cms] = await Promise.all([
           api.get('/products?limit=8'),
-          api.get('/categories')
+          api.get('/categories'),
+          // Never rejects: `fetchAllCms` resolves to the compiled-in copy when
+          // the API is unhappy, so a content outage cannot take the homepage
+          // down with it.
+          fetchAllCms()
         ]);
         if (prodRes.data?.success) setProducts(prodRes.data.data.products || []);
         if (catRes.data?.success) {
           const list = catRes.data?.data?.categories || catRes.data?.categories || (Array.isArray(catRes.data?.data) ? catRes.data.data : []);
           setCategories(list);
         }
+        setCopy(cms);
       } catch (err) {
         console.error('Error fetching homepage data:', err);
       } finally {
@@ -53,6 +65,21 @@ export const HomePage = () => {
     { name: 'Home & Kitchen', icon: <Home size={15} />, link: '/explore?category=3' },
     { name: 'Books & More', icon: <BookOpen size={15} />, link: '/explore?q=book' },
   ];
+
+  // The editable sections, each already merged over its compiled-in default by
+  // `fetchAllCms`. Read once here rather than inline in the JSX so a missing key
+  // is a single `?? {}` at the edge instead of an optional chain on every field.
+  const hero = copy['home.hero'] ?? {};
+  const trustBar = Array.isArray(copy['home.trust_bar']) ? copy['home.trust_bar'] : [];
+  const trending = copy['home.trending'] ?? {};
+  const categoriesCopy = copy['home.categories'] ?? {};
+  const sellerCta = copy['home.seller_cta'] ?? {};
+
+  // Icon names are data, so the CMS stores a string and this maps it to a
+  // component. An unknown name falls back rather than throwing -- a typo in an
+  // admin form must not blank a whole section of the homepage.
+  const TRUST_ICONS = { truck: Truck, 'rotate-ccw': RotateCcw, shield: ShieldCheck, card: CreditCard };
+  const CATEGORY_ICONS = { tv: Tv, shirt: Shirt, home: Home, sparkles: Sparkles };
 
   return (
     <div style={{ backgroundColor: 'var(--color-obsidian-graphite)', color: '#ffffff', minHeight: '100vh' }}>
@@ -142,7 +169,7 @@ export const HomePage = () => {
           }}>
             <Tag size={13} color="var(--color-icy-steel)" />
             <span style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-brushed-aluminum)' }}>
-              Mega Savings • Limited Time Deals
+              {hero.eyebrow}
             </span>
           </div>
 
@@ -154,7 +181,7 @@ export const HomePage = () => {
             marginBottom: '16px',
             color: '#ffffff'
           }}>
-            Great Deals on Everything You Love
+            {hero.headline}
           </h1>
 
           <p style={{
@@ -165,19 +192,33 @@ export const HomePage = () => {
             margin: '0 auto 32px auto',
             fontWeight: 400
           }}>
-            Discover top-rated products from verified independent merchants. Enjoy free delivery on eligible orders, secure checkout, and easy 7-day returns.
+            {hero.subcopy}
           </p>
 
           <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }}>
-            <Link to="/explore" className="btn-primary" style={{ padding: '12px 28px', fontSize: '13px' }}>
-              Shop All Deals <ArrowRight size={14} />
-            </Link>
-            <Link to="/explore?sort=rating" className="btn-outline" style={{ padding: '12px 24px', fontSize: '13px' }}>
-              <Star size={14} color="var(--color-silver-glow)" /> Top Rated Products
-            </Link>
+            {hero.primary_cta?.label && (
+              <Link to={hero.primary_cta.to || '/explore'} className="btn-primary" style={{ padding: '12px 28px', fontSize: '13px' }}>
+                {hero.primary_cta.label} <ArrowRight size={14} />
+              </Link>
+            )}
+            {hero.secondary_cta?.label && (
+              <Link to={hero.secondary_cta.to || '/explore'} className="btn-outline" style={{ padding: '12px 24px', fontSize: '13px' }}>
+                <Star size={14} color="var(--color-silver-glow)" /> {hero.secondary_cta.label}
+              </Link>
+            )}
           </div>
         </div>
       </section>
+
+      {/* The homepage hero slot. Empty on a fresh install, in which case this
+          renders nothing at all and the section above stands on its own. */}
+      <BannerSlot
+        placement="homepage_hero"
+        variant="hero"
+        eager
+        sizes="(max-width: 1024px) 100vw, 1120px"
+        style={{ paddingTop: '32px' }}
+      />
 
       {/* 3. Value Proposition Bar (Amazon/Flipkart Style Trust Badges) */}
       <section style={{
@@ -191,92 +232,45 @@ export const HomePage = () => {
             gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
             gap: '20px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '8px',
-                backgroundColor: 'var(--color-titanium-brushed)',
-                border: '1px solid var(--color-border-steel)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--color-icy-steel)',
-                flexShrink: 0
-              }}>
-                <Truck size={20} />
-              </div>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: '#ffffff' }}>Free Fast Delivery</div>
-                <div style={{ fontSize: '11px', color: 'var(--color-steel-mist)' }}>On orders over ₹499</div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '8px',
-                backgroundColor: 'var(--color-titanium-brushed)',
-                border: '1px solid var(--color-border-steel)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--color-icy-steel)',
-                flexShrink: 0
-              }}>
-                <RotateCcw size={20} />
-              </div>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: '#ffffff' }}>7-Day Easy Returns</div>
-                <div style={{ fontSize: '11px', color: 'var(--color-steel-mist)' }}>Hassle-free replacement or refund</div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '8px',
-                backgroundColor: 'var(--color-titanium-brushed)',
-                border: '1px solid var(--color-border-steel)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--color-icy-steel)',
-                flexShrink: 0
-              }}>
-                <ShieldCheck size={20} />
-              </div>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: '#ffffff' }}>100% Genuine Products</div>
-                <div style={{ fontSize: '11px', color: 'var(--color-steel-mist)' }}>From verified sellers</div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '8px',
-                backgroundColor: 'var(--color-titanium-brushed)',
-                border: '1px solid var(--color-border-steel)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--color-icy-steel)',
-                flexShrink: 0
-              }}>
-                <CreditCard size={20} />
-              </div>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: '#ffffff' }}>Secure Payments</div>
-                <div style={{ fontSize: '11px', color: 'var(--color-steel-mist)' }}>Cards, UPI & Net Banking</div>
-              </div>
-            </div>
+            {trustBar.map((item, index) => {
+              const Icon = TRUST_ICONS[item.icon] || ShieldCheck;
+              return (
+                <div
+                  key={`${item.title}-${index}`}
+                  style={{ display: 'flex', alignItems: 'center', gap: '14px' }}
+                >
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '8px',
+                    backgroundColor: 'var(--color-titanium-brushed)',
+                    border: '1px solid var(--color-border-steel)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--color-icy-steel)',
+                    flexShrink: 0
+                  }}>
+                    <Icon size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#ffffff' }}>{item.title}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-steel-mist)' }}>{item.body}</div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
+
+      {/* Second homepage slot, between the trust bar and the grid. Renders
+          nothing unless a campaign targets `homepage_strip`. */}
+      <BannerSlot
+        placement="homepage_strip"
+        variant="strip"
+        style={{ paddingTop: '32px' }}
+      />
 
       {/* 4. Trending Deals Product Grid */}
       <section style={{ padding: '48px 0', borderBottom: '1px solid var(--color-border-steel)' }}>
@@ -284,15 +278,17 @@ export const HomePage = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
             <div>
               <h2 style={{ fontSize: '24px', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', margin: 0 }}>
-                Trending Deals of the Day
+                {trending.headline}
               </h2>
               <p style={{ fontSize: '13px', color: 'var(--color-steel-mist)', marginTop: '4px' }}>
-                Handpicked top offers with special price reductions
+                {trending.subcopy}
               </p>
             </div>
-            <Link to="/explore" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-icy-steel)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-              See all deals <ArrowRight size={14} />
-            </Link>
+            {trending.cta?.label && (
+              <Link to={trending.cta.to || '/explore'} style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-icy-steel)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                {trending.cta.label} <ArrowRight size={14} />
+              </Link>
+            )}
           </div>
 
           {loading ? (
@@ -315,7 +311,7 @@ export const HomePage = () => {
       <section style={{ padding: '48px 0', borderBottom: '1px solid var(--color-border-steel)' }}>
         <div className="container">
           <h2 style={{ fontSize: '24px', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginBottom: '24px' }}>
-            Explore Popular Categories
+            {categoriesCopy.headline}
           </h2>
 
           <div style={{
@@ -323,109 +319,37 @@ export const HomePage = () => {
             gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
             gap: '20px'
           }}>
-            <Link
-              to="/explore?category=1"
-              style={{
-                display: 'block',
-                padding: '24px',
-                borderRadius: '12px',
-                backgroundColor: 'var(--color-gunmetal-dark)',
-                border: '1px solid var(--color-border-steel)',
-                textDecoration: 'none',
-                transition: 'border-color 0.2s ease'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--color-border-chrome)'}
-              onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--color-border-steel)'}
-            >
-              <div style={{ width: '42px', height: '42px', borderRadius: '10px', backgroundColor: 'var(--color-titanium-brushed)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--color-icy-steel)' }}>
-                <Tv size={22} />
-              </div>
-              <h3 style={{ fontSize: '17px', fontWeight: 500, color: '#ffffff', marginBottom: '6px' }}>Electronics & Audio</h3>
-              <p style={{ fontSize: '12px', color: 'var(--color-steel-mist)', lineHeight: 1.5, marginBottom: '14px' }}>
-                Headphones, speakers, smart watches and premium gadgets.
-              </p>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-icy-steel)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                Shop Electronics <ArrowRight size={12} />
-              </span>
-            </Link>
-
-            <Link
-              to="/explore?category=2"
-              style={{
-                display: 'block',
-                padding: '24px',
-                borderRadius: '12px',
-                backgroundColor: 'var(--color-gunmetal-dark)',
-                border: '1px solid var(--color-border-steel)',
-                textDecoration: 'none',
-                transition: 'border-color 0.2s ease'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--color-border-chrome)'}
-              onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--color-border-steel)'}
-            >
-              <div style={{ width: '42px', height: '42px', borderRadius: '10px', backgroundColor: 'var(--color-titanium-brushed)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--color-icy-steel)' }}>
-                <Shirt size={22} />
-              </div>
-              <h3 style={{ fontSize: '17px', fontWeight: 500, color: '#ffffff', marginBottom: '6px' }}>Fashion & Apparel</h3>
-              <p style={{ fontSize: '12px', color: 'var(--color-steel-mist)', lineHeight: 1.5, marginBottom: '14px' }}>
-                Designer apparel, handcrafted streetwear and accessories.
-              </p>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-icy-steel)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                Shop Fashion <ArrowRight size={12} />
-              </span>
-            </Link>
-
-            <Link
-              to="/explore?category=3"
-              style={{
-                display: 'block',
-                padding: '24px',
-                borderRadius: '12px',
-                backgroundColor: 'var(--color-gunmetal-dark)',
-                border: '1px solid var(--color-border-steel)',
-                textDecoration: 'none',
-                transition: 'border-color 0.2s ease'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--color-border-chrome)'}
-              onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--color-border-steel)'}
-            >
-              <div style={{ width: '42px', height: '42px', borderRadius: '10px', backgroundColor: 'var(--color-titanium-brushed)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--color-icy-steel)' }}>
-                <Home size={22} />
-              </div>
-              <h3 style={{ fontSize: '17px', fontWeight: 500, color: '#ffffff', marginBottom: '6px' }}>Home & Living</h3>
-              <p style={{ fontSize: '12px', color: 'var(--color-steel-mist)', lineHeight: 1.5, marginBottom: '14px' }}>
-                Minimalist ceramics, cookware and modern decor.
-              </p>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-icy-steel)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                Shop Home <ArrowRight size={12} />
-              </span>
-            </Link>
-
-            <Link
-              to="/explore?sort=rating"
-              style={{
-                display: 'block',
-                padding: '24px',
-                borderRadius: '12px',
-                backgroundColor: 'var(--color-gunmetal-dark)',
-                border: '1px solid var(--color-border-steel)',
-                textDecoration: 'none',
-                transition: 'border-color 0.2s ease'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--color-border-chrome)'}
-              onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--color-border-steel)'}
-            >
-              <div style={{ width: '42px', height: '42px', borderRadius: '10px', backgroundColor: 'var(--color-titanium-brushed)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--color-icy-steel)' }}>
-                <Sparkles size={22} />
-              </div>
-              <h3 style={{ fontSize: '17px', fontWeight: 500, color: '#ffffff', marginBottom: '6px' }}>Best Sellers</h3>
-              <p style={{ fontSize: '12px', color: 'var(--color-steel-mist)', lineHeight: 1.5, marginBottom: '14px' }}>
-                Highest-rated customer favorites and verified bestsellers.
-              </p>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-icy-steel)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                Explore Best Sellers <ArrowRight size={12} />
-              </span>
-            </Link>
+            {(categoriesCopy.cards || []).map((card, index) => {
+              const Icon = CATEGORY_ICONS[card.icon] || Tag;
+              return (
+                <Link
+                  key={`${card.title}-${index}`}
+                  to={card.to || '/explore'}
+                  style={{
+                    display: 'block',
+                    padding: '24px',
+                    borderRadius: '12px',
+                    backgroundColor: 'var(--color-gunmetal-dark)',
+                    border: '1px solid var(--color-border-steel)',
+                    textDecoration: 'none',
+                    transition: 'border-color 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--color-border-chrome)'}
+                  onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--color-border-steel)'}
+                >
+                  <div style={{ width: '42px', height: '42px', borderRadius: '10px', backgroundColor: 'var(--color-titanium-brushed)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', color: 'var(--color-icy-steel)' }}>
+                    <Icon size={22} />
+                  </div>
+                  <h3 style={{ fontSize: '17px', fontWeight: 500, color: '#ffffff', marginBottom: '6px' }}>{card.title}</h3>
+                  <p style={{ fontSize: '12px', color: 'var(--color-steel-mist)', lineHeight: 1.5, marginBottom: '14px' }}>
+                    {card.body}
+                  </p>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-icy-steel)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    {card.cta_label} <ArrowRight size={12} />
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -446,18 +370,20 @@ export const HomePage = () => {
           }}>
             <div>
               <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-icy-steel)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Merchant Marketplace
+                {sellerCta.eyebrow}
               </span>
               <h3 style={{ fontSize: '22px', fontWeight: 330, letterSpacing: '0.015em', color: '#ffffff', marginTop: '6px', marginBottom: '8px' }}>
-                Sell on Vyapari & Grow Your Business
+                {sellerCta.headline}
               </h3>
               <p style={{ fontSize: '13px', color: 'var(--color-steel-mist)', margin: 0, maxWidth: '560px', lineHeight: 1.6 }}>
-                Reach customers nationwide. List products with AI assistance, manage your orders seamlessly, and receive fast, guaranteed payouts.
+                {sellerCta.subcopy}
               </p>
             </div>
-            <Link to="/seller/onboarding" className="btn-primary" style={{ padding: '12px 28px', fontSize: '13px' }}>
-              Become a Seller <ArrowRight size={14} />
-            </Link>
+            {sellerCta.cta?.label && (
+              <Link to={sellerCta.cta.to || '/seller/onboarding'} className="btn-primary" style={{ padding: '12px 28px', fontSize: '13px' }}>
+                {sellerCta.cta.label} <ArrowRight size={14} />
+              </Link>
+            )}
           </div>
         </div>
       </section>

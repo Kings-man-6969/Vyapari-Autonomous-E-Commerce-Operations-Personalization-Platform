@@ -25,6 +25,7 @@ import api from '../services/api';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { ProductCard } from '../components/ProductCard';
+import { BannerSlot } from '../components/BannerSlot';
 import {
   FALLBACK_IMAGE,
   imageList,
@@ -705,6 +706,15 @@ export const ProductDetailPage = () => {
             </div>
           </div>
         </div>
+
+        {/* Promo rail. Sits between the buy box and the recommendation grid so
+            it is read while the buyer is still deciding, not after. Renders
+            nothing at all when no campaign targets `pdp_promo`. */}
+        <BannerSlot
+          placement="pdp_promo"
+          variant="rail"
+          style={{ marginTop: '56px' }}
+        />
 
         {/* Similar Products Section */}
         {similarProducts.length > 0 && (
