@@ -137,7 +137,7 @@ jobs:
 
           # Partial unique indexes: SKU is nullable, so a plain UNIQUE(sku)
           # would permit only one NULL row per product.
-          test "$(q "SELECT count(*) FROM pg_indexes WHERE indexname='uq_product_variants_sku' AND indexdef LIKE '%WHERE sku IS NOT NULL%'")" = "1" \
+          test "$(q "SELECT count(*) FROM pg_indexes WHERE indexname='uq_product_variants_sku' AND indexdef LIKE '%sku IS NOT NULL%'")" = "1" \
             || { echo "SKU uniqueness is not partial"; exit 1; }
 
           # updated_at triggers for the five new/extended tables

@@ -29,3 +29,9 @@ redisdata/
 Thumbs.db
 .vscode/
 .idea/
+
+# Testing & Cache
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
