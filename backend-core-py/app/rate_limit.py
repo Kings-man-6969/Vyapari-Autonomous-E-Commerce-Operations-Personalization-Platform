@@ -192,6 +192,11 @@ LIMITS = {
     "payments.refund": (30, 3600),   # 30 per hour: money leaving, admin only
     "cart.write": (60, 60),
     "reviews.create": (5, 3600),    # 5 per hour: review spam
+    # The least-trusted write in the app: unauthenticated, and it puts a
+    # stranger's text in a table an admin reads. One person uses a contact form a
+    # handful of times a year, so a tight limit costs a legitimate sender a
+    # second attempt and costs a script almost everything.
+    "leads.create": (5, 3600),      # 5 per hour per identity
     # Infra.
     "uploads.presign": (30, 60),    # each call mints storage credentials
     # Bytes actually written. Tighter per minute than presign because this is the

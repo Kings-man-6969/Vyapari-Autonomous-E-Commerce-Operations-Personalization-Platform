@@ -166,6 +166,7 @@ export const Footer = () => {
             </h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px', color: 'var(--color-steel-mist)' }}>
               <Link to="/help" style={{ transition: 'color 0.15s' }}>Help & FAQs</Link>
+              <Link to="/contact" style={{ transition: 'color 0.15s' }}>Contact us</Link>
               <Link to="/returns" style={{ transition: 'color 0.15s' }}>Returns & Refunds</Link>
               <Link to="/privacy" style={{ transition: 'color 0.15s' }}>Privacy Policy</Link>
               <Link to="/terms" style={{ transition: 'color 0.15s' }}>Terms of Service</Link>

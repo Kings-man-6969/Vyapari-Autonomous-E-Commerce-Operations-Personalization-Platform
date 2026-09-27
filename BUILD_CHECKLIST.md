@@ -94,8 +94,23 @@ No cache invalidation on the order routes. Orders are read live everywhere; ther
 
 ## H. Leads & enquiries
 
-- [ ] **H1. `leads` table + capture** — depends on A2. Contact form, product enquiry, seller page enquiry.
-- [ ] **H2. Admin leads inbox** — list, filter, status, notes, export.
+- [x] **H1. `leads` table + capture** — the table has existed since V8 and this is its first writer. `app/routers/leads.py`, `POST /api/leads`, unauthenticated by design, plus `components/EnquiryForm.jsx` wired to three capture points: a new `/contact` page (linked from the footer), an "Ask about this product" disclosure in the PDP buy box, and "Message this store" on `/store/:handle`. 33 tests, 15 smoke checks.
+  - **The source is not the client's to choose freely.** V8's enum has five values and two of them (`checkout_abandon`, `manual`) are statements only the platform can truthfully make — a public form that could claim one would file a lead that looks like the platform's own analysis. The public route accepts three and refuses the rest with a 400 naming the allowed values.
+  - **The routing fields are derived, not trusted.** A product enquiry is routed to the product's seller by reading the product, not by believing a `seller_id` the browser sent. A client that lies, or is merely stale, would otherwise file the enquiry against a merchant who has nothing to do with it while the merchant who should reply never sees it. `test_a_clients_claim_about_the_seller_is_ignored` sends the *wrong* seller and asserts the lead went to the right one.
+  - **A lead with no reply address is a 400, not a 500.** V8's `chk_lead_contactable` would catch it as a constraint violation; a lead with no email *and* no phone is the caller's mistake and reads like one. Email and phone are shape-checked (loosely — the job is to reject "not an address", not to adjudicate RFC 5322, because a strict pattern loses real enquiries).
+  - **The honeypot answers exactly like a real submission and stores nothing.** A bot that is told it failed retries with the field cleared. Off-screen rather than `display: none`, because some scrapers skip hidden elements.
+  - **The response does not echo the enquiry back.** The row is the customer's; a body that repeats it lands in browser history and in whatever page was open.
+  - **5/hour per identity.** The cost of a false positive is a second attempt; the cost of no limit is an open text field into an admin's queue.
+- [x] **H2. Admin leads inbox** — `app/routers/admin_leads.py`, 7 routes: list (filter by status, source, assignee, seller, product, unassigned, date range, free-text search; sortable both ways; paginated), summary counts, CSV export, manual entry, detail with a note log, update, and append-note. 40 tests.
+  - **Notes append; they do not overwrite.** `leads.notes` is a single TEXT column and a column cannot hold a history — two admins working one enquiry would silently erase each other, and the note that said "call after 6pm" would be gone with no trace of who removed it. V12 adds `lead_notes`; `leads.notes` keeps the latest body so the list view needs no join per row, and both are written in one transaction so they cannot drift.
+  - **A status change writes a note**, or the trail says an enquiry is `won` and nothing says who decided that or when. Re-setting the same status writes nothing, and the note route is separate from PUT so the detail view's note box does not re-fire the status event on every save.
+  - **The CSV export neutralises spreadsheet formulas.** A lead's name and message are attacker-controlled text, and a cell beginning `=` is executed by Excel and Sheets on open — `=HYPERLINK(...)` in a contact form is a documented way to attack the person who exports the list, and that person is the admin. A leading `'` neutralises it, and a BOM stops Excel reading Indian names as Latin-1.
+  - **The export shares the list's filter builder.** Three copies of that predicate is three chances for the export to quietly include a different set of rows than the list the admin was looking at when they clicked Export.
+  - **`/leads/export.csv` is declared before `/leads/{lead_id}`.** The other way round, `export.csv` arrives as a lead id and 404s — a bug that only shows up when someone clicks the button.
+  - **`?assigned_to=1` is a 400, not a 500.** `require_valid_uuid_param` runs as a dependency, so the malformed request is rejected before a pool connection is checked out.
+  - **`assigned_to: null` unassigns.** The first version tested truthiness, which conflates "clear this" with "the client did not mention it" — so the one action the field uniquely exists for silently did nothing and still answered 200. Fixed with `model_fields_set`, the same fix the banner PATCH needed in G.
+  - **One bug found in the new code by its own test:** `test_unassigning_writes_a_note` failed on the first run, for exactly the reason above.
+- [ ] **H2-UI. Admin leads inbox screen** — the 7 routes are complete and exercised; the React console that drives them is the same gap as F's (see *Known gaps*).
 
 ## I. Analytics
 
@@ -134,7 +149,7 @@ Every item must pass before it is marked `[x]`:
 |---|---|
 | Migrations | `python scripts/migrate.py status` — all applied, checksums match |
 | Backend, no database | `python -m pytest -q` — **133 passed, 243 skipped** (the skips are the database suites, gated on `TEST_DATABASE_URL`) |
-| Backend, full | `TEST_DATABASE_URL=... python -m pytest -q` — **480 passed, 0 failed**. Use the Docker test database: `postgresql://vyapari_admin:vyapari_secure_password@127.0.0.1:54329/sellerpages_test`. Without this variable the suite reports a pass that is missing 64% of itself. |
+| Backend, full | `TEST_DATABASE_URL=... python -m pytest -q` — **553 passed, 0 failed**. Use the Docker test database: `postgresql://vyapari_admin:vyapari_secure_password@127.0.0.1:54329/sellerpages_test`. Without this variable the suite reports a pass that is missing 64% of itself. |
 | Frontend | `npm run build` — clean compile |
-| Frontend render | `npm run smoke` — **201 checks** |
+| Frontend render | `npm run smoke` — **213 checks** |
 | CI | 4 jobs green |

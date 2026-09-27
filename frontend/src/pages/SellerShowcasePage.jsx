@@ -8,6 +8,7 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ProductCard } from '../components/ProductCard';
 import { measureOnLoad, responsiveImageProps } from '../lib/imageUrl';
+import { EnquiryForm } from '../components/EnquiryForm';
 
 const GRID_PAGE_SIZE = 24;
 
@@ -576,6 +577,43 @@ export const StoreView = ({
             </div>
           </div>
         </header>
+
+        {/* Message the store. Hidden from the owner, who would only be sending
+            themselves an email. The routing id is the page's own seller_id, so
+            the enquiry reaches this merchant and no other. */}
+        {!isOwner && (
+          <details
+            style={{
+              backgroundColor: 'var(--color-deep-canopy)',
+              border: '1px solid var(--color-border-steel)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '16px 20px',
+              marginBottom: '20px'
+            }}
+          >
+            <summary
+              style={{
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 600,
+                color: 'var(--color-icy-steel)',
+                listStyle: 'none'
+              }}
+            >
+              Message this store
+            </summary>
+            <div style={{ marginTop: '16px' }}>
+              <EnquiryForm
+                source="seller_page"
+                sellerId={page.seller_id}
+                heading={null}
+                intro={`Ask ${seller?.store_name || page.handle} a question. They will reply directly.`}
+                submitLabel="Send to store"
+                compact
+              />
+            </div>
+          </details>
+        )}
 
         {/* Hero banner block */}
         {heroBlock && (

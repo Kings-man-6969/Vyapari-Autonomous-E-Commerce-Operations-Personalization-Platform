@@ -26,6 +26,7 @@ import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { ProductCard } from '../components/ProductCard';
 import { BannerSlot } from '../components/BannerSlot';
+import { EnquiryForm } from '../components/EnquiryForm';
 import {
   FALLBACK_IMAGE,
   imageList,
@@ -704,6 +705,34 @@ export const ProductDetailPage = () => {
                 <Lock size={13} color="var(--color-ash-label)" /> Secure Transaction
               </div>
             </div>
+
+            {/* Ask the seller. Uses a native <details> disclosure rather than a
+                state flag: it needs no JS to open, so the form is reachable even
+                if hydration is slow, and it costs no re-render to toggle. The
+                enquiry is routed to the product's real owner by the server, not
+                by a seller id from this page. */}
+            <details style={{ borderTop: '1px solid var(--color-border-steel)', paddingTop: '14px', marginTop: '4px' }}>
+              <summary
+                style={{
+                  cursor: 'pointer',
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  color: 'var(--color-icy-steel)',
+                  listStyle: 'none'
+                }}
+              >
+                Ask about this product
+              </summary>
+              <div style={{ marginTop: '14px' }}>
+                <EnquiryForm
+                  source="product_enquiry"
+                  productId={product.id}
+                  heading={null}
+                  compact
+                  submitLabel="Ask the seller"
+                />
+              </div>
+            </details>
           </div>
         </div>
 

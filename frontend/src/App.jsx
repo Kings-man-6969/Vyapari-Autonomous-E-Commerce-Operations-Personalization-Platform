@@ -33,6 +33,7 @@ import { HelpPage } from './pages/HelpPage';
 import { TermsPage } from './pages/TermsPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { ReturnsPage } from './pages/ReturnsPage';
+import { ContactPage } from './pages/ContactPage';
 
 // Seller Console Pages
 import { SellerDashboardPage } from './pages/SellerDashboardPage';
@@ -140,6 +141,7 @@ export const App = () => {
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/returns" element={<ReturnsPage />} />
+            <Route path="/contact" element={<ContactPage />} />
 
             {/* Authenticated Customer-Only Routes */}
             <Route path="/cart" element={<CustomerRoute><CartPage /></CustomerRoute>} />

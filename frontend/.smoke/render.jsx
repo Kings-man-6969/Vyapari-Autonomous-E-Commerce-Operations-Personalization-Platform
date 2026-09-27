@@ -42,6 +42,7 @@ import {
 import { rejectReason, ImageUploader } from '../src/components/ImageUploader';
 import { BannerSlot } from '../src/components/BannerSlot';
 import { DEFAULT_COPY, BANNER_PLACEMENTS } from '../src/lib/content';
+import { EnquiryForm, looksLikeEmail } from '../src/components/EnquiryForm';
 
 const CDN = 'https://picsum.photos/seed';
 
@@ -1049,8 +1050,53 @@ function runContentChecks() {
     strip.includes('Monsoon Edit') && strip.includes('Second'));
 }
 
+// ── enquiries ───────────────────────────────────────────────────────────────
+//
+// Section H1's capture point. The parts worth pinning are the ones a refactor
+// would quietly drop: the honeypot, and the fact that a phone number alone is a
+// valid submission.
+
+function runEnquiryChecks() {
+  console.log('── enquiries ──');
+
+  const html = squashed(renderToString(
+    <MemoryRouter>
+      <EnquiryForm source="product_enquiry" productId="p-1" heading={null} />
+    </MemoryRouter>
+  ));
+
+  check('the form renders its three fields',
+    html.includes('type="email"') && html.includes('type="tel"') && html.includes('textarea'));
+
+  // The honeypot. `display: none` is skipped by some scrapers; an input moved
+  // off-screen is present to a bot and invisible to a person.
+  check('the honeypot field is present', html.includes('name="website"'));
+  check('and is kept off-screen rather than display:none',
+    html.includes('left:-9999px') && !html.includes('display:none'));
+  check('and is hidden from assistive tech and the tab order',
+    html.includes('aria-hidden="true"') && html.includes('tabindex="-1"'));
+
+  // A phone number alone is a valid submission -- the server requires an email
+  // *or* a phone, and `required` on the email input would make the browser block
+  // the customer before the request is ever sent.
+  check('email is not marked required, because a phone alone is valid',
+    !/type="email"[^>]*required/.test(html) && !/required[^>]*type="email"/.test(html));
+  check('the form states the email-or-phone rule, so a phone-only visitor is not put off',
+    html.includes('Email or phone'));
+
+  // The client mirror of the server's email rule. It must never be stricter than
+  // the server: a form that refuses a real address loses the enquiry entirely.
+  check('a plain address passes', looksLikeEmail('a@b.co'));
+  check('a plus tag and a subdomain pass', looksLikeEmail('a.b+tag@sub.example.co.in'));
+  check('an empty value passes, so the phone path works', looksLikeEmail('') && looksLikeEmail(undefined));
+  check('a value with no @ is refused', !looksLikeEmail('nope'));
+  check('a domain with no dot is refused', !looksLikeEmail('a@b'));
+  check('a domain with nothing after the last dot is refused', !looksLikeEmail('a@b.'));
+}
+
 runPaymentChecks().then(() => {
   runContentChecks();
+  runEnquiryChecks();
   console.log(`\n${failed === 0 ? 'PASS' : `FAIL (${failed} check${failed === 1 ? '' : 's'})`}`);
 if (failed > 0) {
   fs.writeFileSync('.smoke/rendered.html', pro);
