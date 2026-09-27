@@ -220,6 +220,6 @@ Every item must pass before it is marked `[x]`:
 | Backend, no database | `python -m pytest -q` — **133 passed, 243 skipped** (the skips are the database suites, gated on `TEST_DATABASE_URL`) |
 | Backend, full | `TEST_DATABASE_URL=... python -m pytest -q` — **609 passed, 0 failed**. Use the Docker test database: `postgresql://vyapari_admin:vyapari_secure_password@127.0.0.1:54329/sellerpages_test`. Without this variable the suite reports a pass that is missing 64% of itself. |
 | Frontend | `npm run build` — clean compile |
-| Frontend bundle | `npm run budget` — **initial 103.5 kB gzip**, budgets 130/40/400 kB, 44 dynamic imports |
+| Frontend bundle | `npm run budget` — **initial 104 kB gzip**, budgets 130/40/400 kB, 45 dynamic imports |
 | Frontend render | `npm run smoke` — **265 checks** |
 | CI | 4 jobs green |
