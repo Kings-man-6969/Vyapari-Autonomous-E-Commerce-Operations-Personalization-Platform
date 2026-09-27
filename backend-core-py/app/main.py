@@ -20,6 +20,8 @@ from app.db import close_pool, init_pool
 from app.jobs import order_sweep_loop
 from app.redis_client import close_redis, init_redis
 from app.routers.admin import router as admin_router
+from app.routers.admin_catalogue import router as admin_catalogue_router
+from app.routers.admin_orders import router as admin_orders_router
 from app.routers.ai import router as ai_router
 from app.routers.approvals import router as approvals_router
 from app.routers.cart import router as cart_router
@@ -243,6 +245,41 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     )
 
 
+def _jsonable_validation_errors(errors: list) -> list:
+    """
+    Make pydantic's error list safe to put in a JSONResponse.
+
+    When a custom `field_validator` raises, pydantic does not just record the
+    message -- it puts the exception *instance* in `ctx["error"]`. That object
+    is not JSON serialisable, so passing `exc.errors()` through untouched makes
+    the JSONResponse raise `TypeError: Object of type ValueError is not JSON
+    serializable`, which the generic handler turns into a 500.
+
+    So a validator that correctly rejected the input produced a 500 rather than
+    the intended 400: the rejection worked, the response did not. The instance
+    is replaced with its message, which is the part a client can act on, and
+    anything else unserialisable is stringified rather than dropped silently.
+    """
+    out = []
+    for error in errors:
+        item = dict(error)
+        ctx = item.get("ctx")
+        if isinstance(ctx, dict):
+            item["ctx"] = {
+                key: (str(value) if isinstance(value, BaseException) else value)
+                for key, value in ctx.items()
+            }
+        # `input` and `url` can also be arbitrary objects (a body model, a
+        # custom type). Drop `input` rather than risk the same 500 a second
+        # time -- it is the one field a client does not need echoed back.
+        if "input" in item and not isinstance(
+            item["input"], (str, int, float, bool, type(None), list, dict)
+        ):
+            item.pop("input")
+        out.append(item)
+    return out
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
@@ -252,7 +289,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "error": {
                 "code": "VALIDATION_ERROR",
                 "message": "Invalid request parameters or payload.",
-                "details": exc.errors(),
+                "details": _jsonable_validation_errors(exc.errors()),
             },
         },
     )
@@ -315,6 +352,8 @@ app.include_router(stores_router, prefix="/api/stores")
 app.include_router(uploads_router, prefix="/api/uploads")
 app.include_router(telemetry_router, prefix="/api/telemetry")
 app.include_router(admin_router, prefix="/api/admin")
+app.include_router(admin_catalogue_router, prefix="/api/admin")
+app.include_router(admin_orders_router, prefix="/api/admin")
 app.include_router(reviews_router, prefix="/api/reviews")
 # Seller showcase pages. Kept under /api/public/ rather than extending
 # /api/stores/ so the handle-based public pages never collide with the existing

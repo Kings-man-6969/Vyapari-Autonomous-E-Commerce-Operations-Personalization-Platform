@@ -552,7 +552,14 @@ class CreateCategoryBody(BaseModel):
     name: str
     slug: str | None = None
     parent_id: str | None = None
+    #: Stored as of V10. Before that this field was accepted, reported as
+    #: "Category created successfully" and never written anywhere -- the column
+    #: did not exist. The field is what an admin actually types, so the column
+    #: was added rather than the field dropped.
     description: str | None = None
+    #: Also previously unsettable. It has been a real column since V1 and is read
+    #: by the public categories route, so it was simply never writable.
+    icon_url: str | None = None
 
 
 @router.post("/categories", status_code=201)
@@ -570,16 +577,50 @@ async def create_admin_category(
     raw_slug = body.slug or body.name
     generated_slug = re.sub(r"[^a-z0-9]+", "-", raw_slug.lower()).strip("-")
 
-    parent_uuid = uuid.UUID(body.parent_id) if body.parent_id else None
+    # `uuid.UUID()` raises ValueError on a malformed id, and an unhandled
+    # ValueError in a route is a 500. A bad parent id from an admin form is a
+    # client error.
+    parent_uuid = None
+    if body.parent_id:
+        try:
+            parent_uuid = uuid.UUID(body.parent_id)
+        except (ValueError, AttributeError, TypeError):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "INVALID_PARENT_ID",
+                    "message": "The parent category id is not a valid id.",
+                },
+            )
 
-    row = await db.fetchrow(
-        """INSERT INTO categories (name, slug, parent_id)
-           VALUES ($1, $2, $3)
-           RETURNING *""",
-        body.name.strip(),
-        generated_slug,
-        parent_uuid,
-    )
+    try:
+        row = await db.fetchrow(
+            """INSERT INTO categories (name, slug, parent_id, description, icon_url)
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING *""",
+            body.name.strip(),
+            generated_slug,
+            parent_uuid,
+            (body.description or "").strip() or None,
+            (body.icon_url or "").strip() or None,
+        )
+    except Exception as exc:  # noqa: BLE001 - narrowed immediately below
+        import asyncpg
+
+        if isinstance(exc, asyncpg.UniqueViolationError):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "CATEGORY_CONFLICT",
+                    "message": "A category with that name or slug already exists.",
+                },
+            )
+        if isinstance(exc, asyncpg.ForeignKeyViolationError):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "CATEGORY_NOT_FOUND", "message": "Parent category not found."},
+            )
+        raise
 
     d = dict(row)
     d["id"] = str(d["id"])
